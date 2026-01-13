@@ -97,16 +97,18 @@ class EvaluacionState(rx.State):
 
     @rx.event(background=True)
     async def generate_ai_result(self) -> None:
-        self.ai_loading = True
-        self.ai_error = ""
-        self.ai_result = ""
-        yield
-
-        result = generate_evaluation(self.answers)
-        if result.startswith("Error al generar con IA:"):
-            self.ai_error = result
+        async with self:
+            self.ai_loading = True
+            self.ai_error = ""
             self.ai_result = ""
-        else:
-            self.ai_result = result
-        self.ai_loading = False
-        yield
+            answers_copy = dict(self.answers)
+
+        result = generate_evaluation(answers_copy)
+
+        async with self:
+            if result.startswith("Error al generar con IA:"):
+                self.ai_error = result
+                self.ai_result = ""
+            else:
+                self.ai_result = result
+            self.ai_loading = False
