@@ -18,6 +18,33 @@ class EvaluacionState(rx.State):
     def current_question(self) -> str:
         return QUESTIONS[self.current_step]["question"]
 
+    @rx.var
+    def score(self) -> int:
+        if not self.answers:
+            return 0
+
+        total_words = sum(len(answer.split()) for answer in self.answers.values())
+        avg_words = total_words / len(QUESTIONS)
+        score = int(avg_words * 10)
+        return max(0, min(100, score))
+
+    @rx.var
+    def evaluation_text(self) -> str:
+        if self.score < 40:
+            return (
+                "Tu resultado es bajo. Conviene definir objetivos mas claros "
+                "y ampliar detalles para orientar mejor la evaluacion."
+            )
+        if self.score < 70:
+            return (
+                "Tu resultado es medio. Tienes una base clara; sumar ejemplos "
+                "concretos podria fortalecer la definicion."
+            )
+        return (
+            "Tu resultado es alto. Las respuestas son consistentes y detalladas, "
+            "con buena claridad de objetivos."
+        )
+
     def start(self) -> None:
         self.current_step = 0
         self.answers = {}

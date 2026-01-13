@@ -48,6 +48,19 @@ def _finished_view() -> rx.Component:
     return rx.vstack(
         rx.heading("Completado", size="7"),
         rx.vstack(
+            rx.heading("Tu resultado", size="6"),
+            rx.text(
+                "Score: ",
+                EvaluacionState.score,
+                "/100",
+                font_weight="600",
+            ),
+            rx.text(EvaluacionState.evaluation_text),
+            spacing="2",
+            align="start",
+            width="100%",
+        ),
+        rx.vstack(
             rx.foreach(QUESTIONS, _summary_item),
             spacing="3",
             width="100%",
