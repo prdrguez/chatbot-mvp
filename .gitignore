@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.db
+
+# Secrets
+.env
+
+# Reflex build/cache
+.web/
+.states/
+
+# Assets auto
+assets/external/
