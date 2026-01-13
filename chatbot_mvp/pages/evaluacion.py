@@ -61,6 +61,37 @@ def _finished_view() -> rx.Component:
             width="100%",
         ),
         rx.vstack(
+            rx.button(
+                "Generar con IA",
+                on_click=EvaluacionState.generate_ai_result,
+                is_loading=EvaluacionState.ai_loading,
+            ),
+            rx.cond(
+                EvaluacionState.ai_loading,
+                rx.text("Generando..."),
+                rx.box(),
+            ),
+            rx.cond(
+                EvaluacionState.ai_error != "",
+                rx.text(EvaluacionState.ai_error, color="red"),
+                rx.box(),
+            ),
+            rx.cond(
+                EvaluacionState.ai_result != "",
+                rx.box(
+                    rx.text(EvaluacionState.ai_result, white_space="pre-wrap"),
+                    border="1px solid var(--gray-300)",
+                    padding="1rem",
+                    border_radius="0.5rem",
+                    width="100%",
+                ),
+                rx.box(),
+            ),
+            spacing="3",
+            align="start",
+            width="100%",
+        ),
+        rx.vstack(
             rx.foreach(QUESTIONS, _summary_item),
             spacing="3",
             width="100%",
