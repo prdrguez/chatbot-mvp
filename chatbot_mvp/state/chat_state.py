@@ -1,5 +1,7 @@
 import reflex as rx
 
+from chatbot_mvp.config.settings import is_demo_mode
+
 
 class ChatState(rx.State):
     messages: list[dict[str, str]] = []
@@ -18,7 +20,13 @@ class ChatState(rx.State):
         if "hola" in lower or "buenas" in lower:
             reply = "Hola! Contame cual es tu objetivo principal."
         elif "precio" in lower:
-            reply = "Esto es un demo. Pronto se conectara a IA para dar precios."
+            if is_demo_mode():
+                reply = "Esto es un demo. Pronto se conectara a IA para dar precios."
+            else:
+                reply = (
+                    "Aun no hay modulo de precios. Contame que necesitas "
+                    "y lo armamos."
+                )
         else:
             reply = "Entendido. Contame un poco mas para ayudarte mejor."
 

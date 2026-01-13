@@ -1,6 +1,8 @@
 import os
 from typing import Dict
 
+from chatbot_mvp.config.settings import is_demo_mode
+
 
 def _demo_text(answers: Dict[str, str]) -> str:
     answered = sum(1 for value in answers.values() if value.strip())
@@ -43,6 +45,9 @@ def _extract_output_text(response: object) -> str:
 
 
 def generate_evaluation(answers: Dict[str, str]) -> str:
+    if is_demo_mode():
+        return _demo_text(answers)
+
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         return _demo_text(answers)

@@ -1,5 +1,7 @@
 import reflex as rx
 
+from chatbot_mvp.config.settings import is_demo_mode
+
 
 def layout(content: rx.Component) -> rx.Component:
     header = rx.box(
@@ -19,7 +21,18 @@ def layout(content: rx.Component) -> rx.Component:
         border_bottom="1px solid var(--gray-200)",
     )
 
+    banner = None
+    if is_demo_mode():
+        banner = rx.box(
+            rx.text("MODO DEMO: respuestas simuladas (sin costos)."),
+            width="100%",
+            padding="0.5rem 2rem",
+            background="var(--yellow-100)",
+            border_bottom="1px solid var(--gray-200)",
+        )
+
     return rx.box(
+        banner,
         header,
         rx.box(content, padding="2rem"),
         width="100%",
