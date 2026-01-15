@@ -11,6 +11,11 @@ def layout(content: rx.Component) -> rx.Component:
                 rx.link("Inicio", href="/"),
                 rx.link("Evaluación", href="/evaluacion"),
                 rx.link("Chat", href="/chat"),
+                rx.cond(
+                    is_demo_mode(),
+                    rx.link("Admin", href="/admin", opacity="0.7"),
+                    rx.box(),
+                ),
                 spacing="4",
             ),
             justify="between",
