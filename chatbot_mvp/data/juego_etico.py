@@ -1,3 +1,28 @@
+import hashlib
+import json
+
+SCHEMA_VERSION = 1
+QUESTIONNAIRE_ID = "juego_etico"
+QUESTIONNAIRE_VERSION = 1
+SCORING_VERSION = 1
+
+
+def questions_fingerprint() -> str:
+    signature = []
+    for question in QUESTIONS:
+        item = {
+            "id": question.get("id"),
+            "prompt": question.get("prompt"),
+            "type": question.get("type"),
+            "options": question.get("options", []),
+        }
+        if "correct" in question:
+            item["correct"] = question.get("correct")
+        signature.append(item)
+    payload = json.dumps(signature, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return f"sha256:{hashlib.sha256(payload).hexdigest()}"
+
+
 QUESTIONS = [
     {
         "id": "consent_1",

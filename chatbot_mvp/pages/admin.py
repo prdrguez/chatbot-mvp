@@ -31,6 +31,8 @@ def admin() -> rx.Component:
                     on_click=AdminState.load_summary,
                     is_loading=AdminState.loading,
                 ),
+                rx.button("Export JSON", on_click=AdminState.do_export_json),
+                rx.button("Export CSV", on_click=AdminState.do_export_csv),
                 rx.cond(
                     AdminState.error != "",
                     rx.text(AdminState.error, color="red"),
@@ -38,6 +40,16 @@ def admin() -> rx.Component:
                 ),
                 spacing="3",
                 align="center",
+            ),
+            rx.cond(
+                AdminState.export_message != "",
+                rx.text(AdminState.export_message, color="green"),
+                rx.box(),
+            ),
+            rx.cond(
+                AdminState.export_error != "",
+                rx.text(AdminState.export_error, color="red"),
+                rx.box(),
             ),
             rx.cond(
                 AdminState.has_data,
