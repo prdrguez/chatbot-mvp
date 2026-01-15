@@ -93,8 +93,8 @@ def _finished_view() -> rx.Component:
     return rx.vstack(
         rx.heading("Completado", size="7"),
         rx.vstack(
-            rx.text("Score:", font_weight="600"),
-            rx.text(EvaluacionState.score),
+            rx.text("Puntaje:", font_weight="600"),
+            rx.text(EvaluacionState.correct_count, "/", EvaluacionState.total_scored),
             rx.text("Nivel:", font_weight="600"),
             rx.text(EvaluacionState.level),
             spacing="1",

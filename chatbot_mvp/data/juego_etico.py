@@ -123,7 +123,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_2",
@@ -138,7 +138,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "A",
     },
     {
         "id": "eval_3",
@@ -148,7 +148,7 @@ QUESTIONS = [
         "options": ["A) Autonomía.", "B) Justicia.", "C) Eficiencia.", "D) Innovación."],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_4",
@@ -163,7 +163,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "A",
     },
     {
         "id": "eval_5",
@@ -178,7 +178,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "A",
     },
     {
         "id": "eval_6",
@@ -193,7 +193,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_7",
@@ -208,7 +208,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_8",
@@ -223,7 +223,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_9",
@@ -238,7 +238,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_10",
@@ -253,7 +253,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_11",
@@ -268,7 +268,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_12",
@@ -283,7 +283,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "A",
     },
     {
         "id": "eval_13",
@@ -298,7 +298,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "A",
     },
     {
         "id": "eval_14",
@@ -313,7 +313,7 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "B",
     },
     {
         "id": "eval_15",
@@ -328,6 +328,6 @@ QUESTIONS = [
         ],
         "required": True,
         "scored": True,
-        "correct": None,
+        "correct": "A",
     },
 ]

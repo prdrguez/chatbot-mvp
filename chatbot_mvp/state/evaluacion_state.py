@@ -18,6 +18,9 @@ class EvaluacionState(rx.State):
     error_message: str = ""
     finished: bool = False
     score: int = 0
+    correct_count: int = 0
+    total_scored: int = 0
+    score_percent: int = 0
     level: str = ""
     ai_simulated_text: str = ""
 
@@ -79,6 +82,9 @@ class EvaluacionState(rx.State):
         self.error_message = ""
         self.finished = False
         self.score = 0
+        self.correct_count = 0
+        self.total_scored = 0
+        self.score_percent = 0
         self.level = ""
         self.ai_simulated_text = ""
 
@@ -130,18 +136,26 @@ class EvaluacionState(rx.State):
 
     def finish(self) -> None:
         score = 0
+        total_scored = 0
         for question in QUESTIONS:
             if not question.get("scored"):
                 continue
             correct = question.get("correct")
             if not correct:
                 continue
+            total_scored += 1
             response = self.responses.get(question["id"])
-            if response == correct:
+            if not isinstance(response, str):
+                continue
+            normalized = self.normalize_choice(response)
+            if normalized == correct:
                 score += 1
 
         level, ai_text = self._score_to_level(score)
         self.score = score
+        self.correct_count = score
+        self.total_scored = total_scored
+        self.score_percent = int((score / total_scored) * 100) if total_scored else 0
         self.level = level
         self.ai_simulated_text = ai_text
         self.finished = True
@@ -160,21 +174,32 @@ class EvaluacionState(rx.State):
             return isinstance(response, list) and len(response) > 0
         return response is not None
 
+    def normalize_choice(self, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            return ""
+        for letter in ("A", "B", "C", "D"):
+            if normalized.upper().startswith(letter):
+                return letter
+            if f"{letter})" in normalized or f"{letter}." in normalized:
+                return letter
+        return ""
+
     def _score_to_level(self, score: int) -> tuple[str, str]:
         if score <= 5:
-            level = "bajo"
+            level = "Bajo"
             text = (
                 "Respuesta IA simulada: Tu nivel es bajo. Te recomendamos revisar los "
                 "principios de justicia y sesgo algoritmico antes de continuar."
             )
-        elif score <= 11:
-            level = "medio"
+        elif score <= 10:
+            level = "Medio"
             text = (
                 "Respuesta IA simulada: Tu nivel es medio. Comprendes conceptos clave, "
                 "pero aun puedes profundizar en ejemplos y mecanismos de mitigacion."
             )
         else:
-            level = "alto"
+            level = "Alto"
             text = (
                 "Respuesta IA simulada: Tu nivel es alto. Demuestras buen dominio de "
                 "criterios eticos y practicas para una IA justa."
