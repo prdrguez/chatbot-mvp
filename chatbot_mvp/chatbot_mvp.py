@@ -12,6 +12,6 @@ from chatbot_mvp.state.evaluacion_state import EvaluacionState
 
 app = rx.App()
 app.add_page(home, route="/")
-app.add_page(evaluacion, route="/evaluacion", on_load=EvaluacionState.start)
+app.add_page(evaluacion, route="/evaluacion", on_load=EvaluacionState.ensure_initialized)
 app.add_page(chat, route="/chat")
 app.add_page(admin, route="/admin", on_load=AdminState.load_summary)

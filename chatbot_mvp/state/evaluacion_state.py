@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 import reflex as rx
 
 from chatbot_mvp.config.settings import is_demo_mode
 from chatbot_mvp.data.juego_etico import QUESTIONS
+from chatbot_mvp.services.submissions_store import append_submission
 
 
 class EvaluacionState(rx.State):
@@ -87,6 +84,15 @@ class EvaluacionState(rx.State):
         self.score_percent = 0
         self.level = ""
         self.ai_simulated_text = ""
+
+    def ensure_initialized(self) -> None:
+        if self.finished:
+            return
+        if self.current_index != 0:
+            return
+        if self.responses:
+            return
+        self.start()
 
     def set_current_response(self, value: Any) -> None:
         question_id = QUESTIONS[self.current_index]["id"]
@@ -207,16 +213,12 @@ class EvaluacionState(rx.State):
         return level, text
 
     def _save_submission(self) -> None:
-        base_dir = Path(__file__).resolve().parents[2]
-        data_dir = base_dir / "data"
-        data_dir.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "submission_id": str(uuid4()),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "demo_mode": is_demo_mode(),
-            "responses": self.responses,
-            "score": self.score,
-            "level": self.level,
-        }
-        with (data_dir / "submissions.jsonl").open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload) + "\n")
+        append_submission(
+            answers=self.responses,
+            score=self.score,
+            level=self.level,
+            demo_mode=is_demo_mode(),
+            correct_count=self.correct_count,
+            total_scored=self.total_scored,
+            score_percent=self.score_percent,
+        )
