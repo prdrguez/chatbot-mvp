@@ -1,6 +1,7 @@
 import reflex as rx
 
 from chatbot_mvp.config.settings import is_demo_mode
+from chatbot_mvp.ui.tokens import CONTENT_BOX_STYLE, HEADER_BOX_STYLE
 
 
 def layout(content: rx.Component) -> rx.Component:
@@ -36,12 +37,11 @@ def layout(content: rx.Component) -> rx.Component:
             align="center",
             width="100%",
         ),
-        padding="1.25rem 2rem",
-        border_bottom="1px solid var(--gray-200)",
+        **HEADER_BOX_STYLE,
     )
 
     return rx.box(
         header,
-        rx.box(content, padding="2rem"),
+        rx.box(content, **CONTENT_BOX_STYLE),
         width="100%",
     )
