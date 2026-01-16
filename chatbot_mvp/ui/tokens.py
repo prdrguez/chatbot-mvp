@@ -27,12 +27,10 @@ APP_SURFACE_STYLE = {
     "border": "var(--app-card-border)",
     "padding": "var(--app-surface-padding)",
     "border_radius": "var(--app-radius-md)",
-    "width": "100%",
 }
 
 CHAT_SURFACE_STYLE = {
     "border": "var(--chat-card-border)",
     "padding": "var(--chat-surface-padding)",
     "border_radius": "var(--chat-radius)",
-    "width": "100%",
 }

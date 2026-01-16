@@ -87,4 +87,4 @@ EVAL_CHECKBOX_STYLE = {
     "white_space": "normal",
 }
 
-EVAL_RESULT_BOX_STYLE = APP_SURFACE_STYLE
+EVAL_RESULT_BOX_STYLE = {**APP_SURFACE_STYLE, "width": "100%"}
