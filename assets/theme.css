@@ -2,4 +2,8 @@
   --app-header-padding: 1.25rem 2rem;
   --app-content-padding: 2rem;
   --app-border-bottom: 1px solid var(--gray-200);
+  --app-card-border: 1px solid var(--gray-300);
+  --app-radius-md: 0.5rem;
+  --app-surface-padding: 1rem;
+  --app-text-danger: red;
 }

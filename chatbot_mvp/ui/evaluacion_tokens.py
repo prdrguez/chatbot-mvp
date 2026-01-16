@@ -3,6 +3,7 @@ from chatbot_mvp.ui.tokens import (
     APP_PAGE_TITLE_STYLE,
     APP_PRIMARY_BUTTON_PROPS,
     APP_SECONDARY_BUTTON_PROPS,
+    APP_SURFACE_STYLE,
 )
 
 EVAL_STACK_BASE = {
@@ -68,7 +69,7 @@ EVAL_SUBTITLE_STYLE = {
 }
 
 EVAL_ERROR_TEXT_STYLE = {
-    "color": "red",
+    "color": "var(--app-text-danger)",
 }
 
 EVAL_INPUT_PROPS = {
@@ -86,9 +87,4 @@ EVAL_CHECKBOX_STYLE = {
     "white_space": "normal",
 }
 
-EVAL_RESULT_BOX_STYLE = {
-    "border": "1px solid var(--gray-300)",
-    "padding": "1rem",
-    "border_radius": "0.5rem",
-    "width": "100%",
-}
+EVAL_RESULT_BOX_STYLE = APP_SURFACE_STYLE
