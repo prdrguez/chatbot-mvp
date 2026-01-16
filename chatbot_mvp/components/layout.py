@@ -1,6 +1,7 @@
 import reflex as rx
 
 from chatbot_mvp.config.settings import is_demo_mode
+from chatbot_mvp.state.theme_state import ThemeState
 from chatbot_mvp.ui.tokens import CONTENT_BOX_STYLE, HEADER_BOX_STYLE
 
 
@@ -43,5 +44,6 @@ def layout(content: rx.Component) -> rx.Component:
     return rx.box(
         header,
         rx.box(content, **CONTENT_BOX_STYLE),
+        style=ThemeState.applied_overrides,
         width="100%",
     )

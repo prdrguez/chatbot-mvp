@@ -4,6 +4,17 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.state.admin_state import AdminState
+from chatbot_mvp.state.theme_state import ThemeState
+
+_THEME_FIELDS: list[tuple[str, str, str]] = [
+    ("Header padding", "--app-header-padding", "1.25rem 2rem"),
+    ("Content padding", "--app-content-padding", "2rem"),
+    ("Radius md", "--app-radius-md", "0.5rem"),
+    ("Card border", "--app-card-border", "1px solid var(--gray-300)"),
+    ("Text danger", "--app-text-danger", "red"),
+    ("Chat radius", "--chat-radius", "0.75rem"),
+    ("Chat card border", "--chat-card-border", "1px solid var(--gray-200)"),
+]
 
 
 def _count_list(items: list[dict[str, Any]]) -> rx.Component:
@@ -20,11 +31,69 @@ def _count_list(items: list[dict[str, Any]]) -> rx.Component:
         rx.text("Sin datos"),
     )
 
+def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
+    return rx.vstack(
+        rx.text(label, font_weight="600"),
+        rx.input(
+            value=ThemeState.overrides[var_name],
+            placeholder=placeholder,
+            on_change=ThemeState.set_var(var_name),
+            width="100%",
+        ),
+        spacing="1",
+        align="start",
+        width="100%",
+    )
+
 
 def admin() -> rx.Component:
     return layout(
         rx.vstack(
             rx.heading("Admin (Demo)", size="8"),
+            rx.card(
+                rx.vstack(
+                    rx.hstack(
+                        rx.heading("Theme Editor (MVP)", size="6"),
+                        rx.cond(
+                            ThemeState.saved,
+                            rx.badge("Guardado", variant="soft", color_scheme="green"),
+                            rx.box(),
+                        ),
+                        spacing="2",
+                        align="center",
+                        width="100%",
+                    ),
+                    rx.text(
+                        'Ejemplos: padding "1rem 2rem", border '
+                        '"1px solid var(--gray-200)", radius "0.75rem", '
+                        'color "red".',
+                        color="var(--gray-600)",
+                    ),
+                    rx.cond(
+                        ThemeState.error != "",
+                        rx.text(ThemeState.error, color="var(--app-text-danger)"),
+                        rx.box(),
+                    ),
+                    rx.vstack(
+                        *[
+                            _theme_field(label, var_name, placeholder)
+                            for (label, var_name, placeholder) in _THEME_FIELDS
+                        ],
+                        spacing="3",
+                        align="start",
+                        width="100%",
+                    ),
+                    rx.button(
+                        "Reset",
+                        on_click=ThemeState.reset_overrides,
+                        variant="outline",
+                    ),
+                    spacing="4",
+                    align="start",
+                    width="100%",
+                ),
+                width="100%",
+            ),
             rx.hstack(
                 rx.button(
                     "Refrescar",

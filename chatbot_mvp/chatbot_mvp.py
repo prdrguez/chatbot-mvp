@@ -9,10 +9,19 @@ from chatbot_mvp.pages.evaluacion import evaluacion
 from chatbot_mvp.pages.home import home
 from chatbot_mvp.state.admin_state import AdminState
 from chatbot_mvp.state.evaluacion_state import EvaluacionState
+from chatbot_mvp.state.theme_state import ThemeState
 
 
 app = rx.App(theme=APP_THEME, style=GLOBAL_STYLE, stylesheets=STYLESHEETS)
-app.add_page(home, route="/")
-app.add_page(evaluacion, route="/evaluacion", on_load=EvaluacionState.ensure_initialized)
-app.add_page(chat, route="/chat")
-app.add_page(admin, route="/admin", on_load=AdminState.load_summary)
+app.add_page(home, route="/", on_load=ThemeState.load_overrides)
+app.add_page(
+    evaluacion,
+    route="/evaluacion",
+    on_load=[ThemeState.load_overrides, EvaluacionState.ensure_initialized],
+)
+app.add_page(chat, route="/chat", on_load=ThemeState.load_overrides)
+app.add_page(
+    admin,
+    route="/admin",
+    on_load=[ThemeState.load_overrides, AdminState.load_summary],
+)
