@@ -1,0 +1,5 @@
+:root {
+  --app-header-padding: 1.25rem 2rem;
+  --app-content-padding: 2rem;
+  --app-border-bottom: 1px solid var(--gray-200);
+}
