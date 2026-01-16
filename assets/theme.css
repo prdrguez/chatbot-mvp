@@ -6,4 +6,7 @@
   --app-radius-md: 0.5rem;
   --app-surface-padding: 1rem;
   --app-text-danger: red;
+  --chat-card-border: 1px solid var(--gray-200);
+  --chat-radius: 0.75rem;
+  --chat-surface-padding: 1rem;
 }

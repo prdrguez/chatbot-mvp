@@ -2,6 +2,7 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.state.chat_state import ChatState
+from chatbot_mvp.ui.tokens import CHAT_SURFACE_STYLE
 
 
 def _message_row(message: dict[str, str]) -> rx.Component:
@@ -40,9 +41,7 @@ def chat() -> rx.Component:
                     spacing="3",
                     width="100%",
                 ),
-                border="1px solid var(--gray-200)",
-                border_radius="0.75rem",
-                padding="1rem",
+                **CHAT_SURFACE_STYLE,
                 width="100%",
                 max_width="640px",
                 min_height="320px",
