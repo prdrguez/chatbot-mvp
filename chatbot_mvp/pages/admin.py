@@ -525,23 +525,41 @@ def _admin_export_section() -> rx.Component:
 def _admin_kpis_section() -> rx.Component:
     grid = getattr(rx, "grid", None)
     recharts = getattr(rx, "recharts", None)
-    if recharts is not None and hasattr(recharts, "pie_chart"):
+    if recharts is not None and hasattr(recharts, "bar_chart"):
+        label_list = getattr(recharts, "label_list", None)
+        tooltip = getattr(recharts, "tooltip", None)
+        bar_children = []
+        if label_list is not None:
+            bar_children.append(label_list(data_key="value", position="right"))
+        bar = recharts.bar(
+            *bar_children,
+            data_key="value",
+            fill=ADMIN_CHART_FILL,
+            radius=4,
+        )
+        chart_children = [
+            recharts.cartesian_grid(stroke="var(--gray-6)", stroke_dasharray="3 3"),
+            recharts.x_axis(type_="number", hide=True),
+            recharts.y_axis(
+                data_key="name",
+                type_="category",
+                width=120,
+                stroke="var(--gray-6)",
+            ),
+            bar,
+        ]
+        if tooltip is not None:
+            chart_children.append(tooltip())
         city_card = rx.card(
             rx.vstack(
                 rx.heading("Ciudad", size="4"),
                 rx.cond(
-                    AdminState.ciudad_items,
-                    recharts.pie_chart(
-                        recharts.pie(
-                            data=AdminState.ciudad_items,
-                            data_key="value",
-                            name_key="name",
-                            inner_radius="55%",
-                            outer_radius="75%",
-                            fill=ADMIN_CHART_FILL,
-                        ),
-                        recharts.tooltip(),
-                        height=180,
+                    AdminState.ciudad_chart_items,
+                    recharts.bar_chart(
+                        *chart_children,
+                        data=AdminState.ciudad_chart,
+                        layout="vertical",
+                        height=240,
                         width="100%",
                     ),
                     rx.text("Sin datos"),
@@ -554,12 +572,13 @@ def _admin_kpis_section() -> rx.Component:
             grid_column="span 2",
         )
     else:
-        city_card = rx.box(
-            _kpi_card(
-                "Ciudad",
-                AdminState.ciudad_chart_items,
-                AdminState.ciudad_extra_count,
-                chart_data=AdminState.ciudad_chart,
+        city_card = rx.card(
+            rx.vstack(
+                rx.heading("Ciudad", size="4"),
+                rx.text("Sin datos"),
+                spacing="2",
+                align="start",
+                width="100%",
             ),
             width="100%",
             grid_column="span 2",
