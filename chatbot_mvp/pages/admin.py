@@ -7,7 +7,6 @@ from chatbot_mvp.state.admin_state import AdminState
 from chatbot_mvp.state.theme_state import ThemeState
 
 ADMIN_CHART_FILL = "var(--teal-9)"
-ADMIN_AXIS_STROKE = "var(--gray-8)"
 ADMIN_TEXT_COLOR = "var(--gray-11)"
 ADMIN_LIST_MAX_HEIGHT = "10rem"
 ADMIN_ROW_TEXT_SIZE = "2"
@@ -24,32 +23,6 @@ _THEME_FIELDS: list[tuple[str, str, str]] = [
 ]
 
 
-def _count_row(item: dict[str, Any]) -> rx.Component:
-    return rx.hstack(
-        rx.text(item["label"], size=ADMIN_ROW_TEXT_SIZE, color=ADMIN_TEXT_COLOR),
-        rx.text(item["count"], size=ADMIN_ROW_TEXT_SIZE, color=ADMIN_TEXT_COLOR),
-        spacing="2",
-        align="center",
-        width="100%",
-        justify="between",
-    )
-
-
-def _count_list(items: list[dict[str, Any]]) -> rx.Component:
-    return rx.cond(
-        items,
-        rx.vstack(
-            rx.foreach(items, _count_row),
-            spacing="1",
-            align="start",
-            width="100%",
-            max_height=ADMIN_LIST_MAX_HEIGHT,
-            overflow_y="auto",
-        ),
-        rx.text("Sin datos"),
-    )
-
-
 def _mini_bar_row(item: dict[str, Any]) -> rx.Component:
     return rx.hstack(
         rx.text(
@@ -58,68 +31,62 @@ def _mini_bar_row(item: dict[str, Any]) -> rx.Component:
             white_space="nowrap",
             overflow="hidden",
             text_overflow="ellipsis",
+            size=ADMIN_ROW_TEXT_SIZE,
+            color=ADMIN_TEXT_COLOR,
         ),
-        rx.progress(value=item["count"], max=AdminState.total, width="45%"),
-        rx.text(item["count"], width="15%", text_align="right"),
+        rx.progress(
+            value=item["count"],
+            max=AdminState.total,
+            width="45%",
+            color_scheme="teal",
+        ),
+        rx.text(
+            item["count"],
+            width="15%",
+            text_align="right",
+            size=ADMIN_ROW_TEXT_SIZE,
+            color=ADMIN_TEXT_COLOR,
+        ),
         spacing="2",
         align="center",
         width="100%",
     )
 
 
-def _mini_chart(
-    items: list[dict[str, Any]], chart_data: list[dict[str, Any]]
-) -> rx.Component:
-    recharts = getattr(rx, "recharts", None)
-    if recharts is not None and hasattr(recharts, "bar_chart"):
-        return recharts.bar_chart(
-            recharts.bar(data_key="value", fill=ADMIN_CHART_FILL),
-            recharts.x_axis(
-                data_key="name",
-                tick_line=False,
-                axis_line=False,
-                stroke=ADMIN_AXIS_STROKE,
-                tick=False,
-            ),
-            recharts.y_axis(
-                tick_line=False,
-                axis_line=False,
-                stroke=ADMIN_AXIS_STROKE,
-                tick=False,
-            ),
-            data=chart_data,
-            height=120,
-            width="100%",
-        )
+def _mini_chart(items: list[dict[str, Any]], extra_count: int) -> rx.Component:
     return rx.vstack(
         rx.foreach(items, _mini_bar_row),
+        rx.cond(
+            extra_count > 0,
+            rx.text(
+                "+",
+                extra_count,
+                " mas",
+                size=ADMIN_ROW_TEXT_SIZE,
+                color=ADMIN_TEXT_COLOR,
+            ),
+            rx.box(),
+        ),
         spacing="1",
         align="start",
         width="100%",
+        max_height=ADMIN_LIST_MAX_HEIGHT,
+        overflow_y="auto",
     )
 
 
 def _kpi_card(
     title: str,
     items: list[dict[str, Any]],
-    chart_data: list[dict[str, Any]],
     extra_count: int,
-    chart_component: rx.Component | None = None,
 ) -> rx.Component:
-    chart = chart_component if chart_component is not None else _mini_chart(items, chart_data)
     return rx.card(
         rx.vstack(
             rx.heading(title, size="4"),
             rx.cond(
                 items,
-                chart,
+                _mini_chart(items, extra_count),
                 rx.text("Sin datos"),
-            ),
-            _count_list(items),
-            rx.cond(
-                extra_count > 0,
-                rx.text("+", extra_count, " mas", size="2", color="var(--gray-600)"),
-                rx.box(),
             ),
             spacing="2",
             align="start",
@@ -127,26 +94,6 @@ def _kpi_card(
         ),
         width="100%",
     )
-
-
-def _city_chart(
-    items: list[dict[str, Any]], chart_data: list[dict[str, Any]]
-) -> rx.Component:
-    recharts = getattr(rx, "recharts", None)
-    if recharts is not None and hasattr(recharts, "pie_chart"):
-        return recharts.pie_chart(
-            recharts.pie(
-                data=chart_data,
-                data_key="value",
-                name_key="name",
-                fill=ADMIN_CHART_FILL,
-                inner_radius="45%",
-                outer_radius="70%",
-            ),
-            height=160,
-            width="100%",
-        )
-    return _mini_chart(items, chart_data)
 
 
 def _avg_gauge() -> rx.Component:
@@ -563,59 +510,46 @@ def _admin_kpis_section() -> rx.Component:
                     _kpi_card(
                         "By Level",
                         AdminState.by_level_top_items,
-                        AdminState.by_level_chart,
                         AdminState.by_level_extra_count,
                     ),
                     _kpi_card(
                         "Edad",
                         AdminState.edad_top_items,
-                        AdminState.edad_chart,
                         AdminState.edad_extra_count,
                     ),
                     _kpi_card(
                         "Genero",
                         AdminState.genero_top_items,
-                        AdminState.genero_chart,
                         AdminState.genero_extra_count,
                     ),
                     _kpi_card(
                         "Ciudad",
                         AdminState.ciudad_chart_items,
-                        AdminState.ciudad_chart,
                         AdminState.ciudad_extra_count,
-                        chart_component=_city_chart(
-                            AdminState.ciudad_chart_items,
-                            AdminState.ciudad_chart,
-                        ),
                     ),
                     _kpi_card(
                         "Frecuencia IA",
                         AdminState.frecuencia_ia_top_items,
-                        AdminState.frecuencia_ia_chart,
                         AdminState.frecuencia_ia_extra_count,
                     ),
                     _kpi_card(
                         "Nivel Educativo",
                         AdminState.nivel_educativo_top_items,
-                        AdminState.nivel_educativo_chart,
                         AdminState.nivel_educativo_extra_count,
                     ),
                     _kpi_card(
                         "Ocupacion",
                         AdminState.ocupacion_top_items,
-                        AdminState.ocupacion_chart,
                         AdminState.ocupacion_extra_count,
                     ),
                     _kpi_card(
                         "Area",
                         AdminState.area_top_items,
-                        AdminState.area_chart,
                         AdminState.area_extra_count,
                     ),
                     _kpi_card(
                         "Emociones",
                         AdminState.emociones_top_items,
-                        AdminState.emociones_chart,
                         AdminState.emociones_extra_count,
                     ),
                 ],
@@ -649,59 +583,46 @@ def _admin_kpis_section() -> rx.Component:
                     _kpi_card(
                         "By Level",
                         AdminState.by_level_top_items,
-                        AdminState.by_level_chart,
                         AdminState.by_level_extra_count,
                     ),
                     _kpi_card(
                         "Edad",
                         AdminState.edad_top_items,
-                        AdminState.edad_chart,
                         AdminState.edad_extra_count,
                     ),
                     _kpi_card(
                         "Genero",
                         AdminState.genero_top_items,
-                        AdminState.genero_chart,
                         AdminState.genero_extra_count,
                     ),
                     _kpi_card(
                         "Ciudad",
                         AdminState.ciudad_chart_items,
-                        AdminState.ciudad_chart,
                         AdminState.ciudad_extra_count,
-                        chart_component=_city_chart(
-                            AdminState.ciudad_chart_items,
-                            AdminState.ciudad_chart,
-                        ),
                     ),
                     _kpi_card(
                         "Frecuencia IA",
                         AdminState.frecuencia_ia_top_items,
-                        AdminState.frecuencia_ia_chart,
                         AdminState.frecuencia_ia_extra_count,
                     ),
                     _kpi_card(
                         "Nivel Educativo",
                         AdminState.nivel_educativo_top_items,
-                        AdminState.nivel_educativo_chart,
                         AdminState.nivel_educativo_extra_count,
                     ),
                     _kpi_card(
                         "Ocupacion",
                         AdminState.ocupacion_top_items,
-                        AdminState.ocupacion_chart,
                         AdminState.ocupacion_extra_count,
                     ),
                     _kpi_card(
                         "Area",
                         AdminState.area_top_items,
-                        AdminState.area_chart,
                         AdminState.area_extra_count,
                     ),
                     _kpi_card(
                         "Emociones",
                         AdminState.emociones_top_items,
-                        AdminState.emociones_chart,
                         AdminState.emociones_extra_count,
                     ),
                 ],
