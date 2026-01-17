@@ -17,65 +17,49 @@ _THEME_FIELDS: list[tuple[str, str, str]] = [
 ]
 
 
-def _item_label(item: dict[str, Any]) -> str:
-    return str(
-        item.get("label")
-        or item.get("name")
-        or item.get("key")
-        or item
+def _count_list(items: list[dict[str, Any]]) -> rx.Component:
+    return rx.cond(
+        items,
+        rx.vstack(
+            rx.foreach(
+                items,
+                lambda item: rx.hstack(
+                    rx.text(item["label"]),
+                    rx.text(item["count"]),
+                    spacing="2",
+                    align="center",
+                    width="100%",
+                    justify="between",
+                ),
+            ),
+            spacing="1",
+            align="start",
+            width="100%",
+        ),
+        rx.text("Sin datos"),
     )
 
 
-def _item_count(item: dict[str, Any]) -> int:
-    return int(item.get("count") or item.get("value") or 0)
-
-
-def _count_list(items: list[dict[str, Any]]) -> rx.Component:
-    if not items:
-        return rx.text("Sin datos")
-    return rx.vstack(
-        *[
-            rx.hstack(
-                rx.text(_item_label(item)),
-                rx.text(_item_count(item)),
-                spacing="2",
-                align="center",
-                width="100%",
-                justify="between",
-            )
-            for item in items
-        ],
-        spacing="1",
-        align="start",
+def _mini_bar_row(item: dict[str, Any]) -> rx.Component:
+    return rx.hstack(
+        rx.text(
+            item["label"],
+            width="40%",
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
+        ),
+        rx.progress(value=item["count"], max=AdminState.total, width="45%"),
+        rx.text(item["count"], width="15%", text_align="right"),
+        spacing="2",
+        align="center",
         width="100%",
     )
 
 
 def _mini_bar_chart(items: list[dict[str, Any]]) -> rx.Component:
-    if not items:
-        return rx.text("Sin datos")
-    counts = [_item_count(item) for item in items]
-    max_count = max(counts) if counts else 1
     return rx.vstack(
-        *[
-            rx.hstack(
-                rx.text(_item_label(item), size="2"),
-                rx.box(
-                    rx.box(
-                        height="0.35rem",
-                        width=f"{int((_item_count(item) / max_count) * 100)}%",
-                        background_color="var(--gray-600)",
-                        border_radius="999px",
-                    ),
-                    width="100%",
-                ),
-                rx.text(_item_count(item), size="2"),
-                spacing="2",
-                align="center",
-                width="100%",
-            )
-            for item in items
-        ],
+        rx.foreach(items, _mini_bar_row),
         spacing="1",
         align="start",
         width="100%",
@@ -148,7 +132,7 @@ def _preset_selector(var_name: str, options: list[str]) -> rx.Component:
     select = getattr(rx, "select", None)
     if select is not None:
         return select(
-            options=options,
+            options,
             value=ThemeState.overrides[var_name],
             on_change=ThemeState.set_var(var_name),
             width="100%",
@@ -329,7 +313,11 @@ def _admin_kpis_section() -> rx.Component:
                     _kpi_card("Area", AdminState.area_items),
                     _kpi_card("Emociones", AdminState.emociones_items),
                 ],
-                columns=["1", "2"],
+                columns=(
+                    rx.breakpoints(initial="1", sm="2")
+                    if hasattr(rx, "breakpoints")
+                    else "2"
+                ),
                 gap="3",
                 width="100%",
             )
