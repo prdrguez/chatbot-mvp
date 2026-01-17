@@ -554,11 +554,15 @@ def _admin_kpis_section() -> rx.Component:
             grid_column="span 2",
         )
     else:
-        city_card = _kpi_card(
-            "Ciudad",
-            AdminState.ciudad_chart_items,
-            AdminState.ciudad_extra_count,
-            chart_data=AdminState.ciudad_chart,
+        city_card = rx.box(
+            _kpi_card(
+                "Ciudad",
+                AdminState.ciudad_chart_items,
+                AdminState.ciudad_extra_count,
+                chart_data=AdminState.ciudad_chart,
+            ),
+            width="100%",
+            grid_column="span 2",
         )
 
     summary_card = rx.card(
@@ -647,7 +651,7 @@ def _admin_kpis_section() -> rx.Component:
                     if hasattr(rx, "breakpoints")
                     else "2"
                 ),
-                gap="5",
+                gap="6",
                 width="100%",
             )
             if grid is not None
