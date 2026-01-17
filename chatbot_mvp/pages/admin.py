@@ -110,6 +110,75 @@ def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
     )
 
 
+def _theme_preview_card() -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.heading("Preview", size="5"),
+                rx.badge("Ejemplo", variant="soft"),
+                spacing="2",
+                align="center",
+            ),
+            rx.text(
+                "Asi se veria una superficie con texto y botones usando tus valores.",
+                color="var(--gray-600)",
+            ),
+            rx.hstack(
+                rx.button("Primario", variant="solid"),
+                rx.button("Secundario", variant="outline"),
+                spacing="2",
+                align="center",
+            ),
+            rx.box(
+                rx.text("Chat surface de ejemplo", size="2"),
+                border="var(--chat-card-border)",
+                padding="var(--chat-surface-padding)",
+                border_radius="var(--chat-radius)",
+                width="100%",
+            ),
+            spacing="3",
+            align="start",
+            width="100%",
+        ),
+        width="100%",
+    )
+
+
+def _preset_selector(var_name: str, options: list[str]) -> rx.Component:
+    select = getattr(rx, "select", None)
+    if select is not None:
+        return select(
+            options=options,
+            value=ThemeState.overrides[var_name],
+            on_change=ThemeState.set_var(var_name),
+            width="100%",
+        )
+    return rx.radio_group(
+        items=options,
+        value=ThemeState.overrides[var_name],
+        on_change=ThemeState.set_var(var_name),
+        direction="column",
+        spacing="2",
+        width="100%",
+    )
+
+
+def _preset_field(label: str, var_name: str, options: list[str]) -> rx.Component:
+    return rx.vstack(
+        rx.text(label, font_weight="600"),
+        _preset_selector(var_name, options),
+        rx.input(
+            value=ThemeState.overrides[var_name],
+            placeholder="Custom",
+            on_change=ThemeState.set_var(var_name),
+            width="100%",
+        ),
+        spacing="2",
+        align="start",
+        width="100%",
+    )
+
+
 class AdminViewState(rx.State):
     section: str = "kpis"
 
@@ -142,7 +211,34 @@ def _admin_theme_section() -> rx.Component:
                 rx.text(ThemeState.error, color="var(--app-text-danger)"),
                 rx.box(),
             ),
+            _theme_preview_card(),
             rx.vstack(
+                rx.heading("Presets rapidos", size="4"),
+                _preset_field(
+                    "Radius (app)",
+                    "--app-radius-md",
+                    ["0.25rem", "0.5rem", "0.75rem", "1rem"],
+                ),
+                _preset_field(
+                    "Padding (content)",
+                    "--app-content-padding",
+                    ["1rem", "1.5rem", "2rem", "2.5rem 3rem"],
+                ),
+                _preset_field(
+                    "Border (card)",
+                    "--app-card-border",
+                    [
+                        "1px solid var(--gray-200)",
+                        "1px solid var(--gray-300)",
+                        "1px solid var(--gray-400)",
+                    ],
+                ),
+                spacing="3",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.heading("Avanzado", size="4"),
                 *[
                     _theme_field(label, var_name, placeholder)
                     for (label, var_name, placeholder) in _THEME_FIELDS
