@@ -64,6 +64,11 @@ EVAL_PROMPT_TEXT_STYLE = {
     "font_weight": "600",
 }
 
+EVAL_HELP_TEXT_STYLE = {
+    "size": "2",
+    "color": "var(--gray-600)",
+}
+
 EVAL_SUBTITLE_STYLE = {
     "font_weight": "600",
 }

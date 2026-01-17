@@ -10,6 +10,7 @@ from chatbot_mvp.ui.evaluacion_tokens import (
     EVAL_CHECKBOX_STYLE,
     EVAL_CONTAINER_STYLE,
     EVAL_ERROR_TEXT_STYLE,
+    EVAL_HELP_TEXT_STYLE,
     EVAL_INPUT_PROPS,
     EVAL_LABEL_STACK_STYLE,
     EVAL_OPTION_STACK_STYLE,
@@ -65,11 +66,16 @@ def _multi_input() -> rx.Component:
     return rx.vstack(
         rx.foreach(
             EvaluacionState.current_options,
-            lambda option: rx.checkbox(
-                option,
-                is_checked=EvaluacionState.is_checked(option),
-                on_change=lambda _: EvaluacionState.toggle_multi(option),
-                **EVAL_CHECKBOX_STYLE,
+            lambda option: rx.hstack(
+                rx.checkbox(
+                    is_checked=EvaluacionState.is_checked(option),
+                    on_change=lambda _: EvaluacionState.toggle_multi(option),
+                    **EVAL_CHECKBOX_STYLE,
+                ),
+                rx.text(option, white_space="normal"),
+                spacing="2",
+                align="start",
+                width="100%",
             ),
         ),
         **EVAL_OPTION_STACK_STYLE,
@@ -97,6 +103,14 @@ def _in_progress_view() -> rx.Component:
         rx.card(
             rx.vstack(
                 rx.text(EvaluacionState.current_prompt, **EVAL_PROMPT_TEXT_STYLE),
+                rx.cond(
+                    EvaluacionState.current_type == "multi",
+                    rx.text(
+                        "Podés elegir más de una opción.",
+                        **EVAL_HELP_TEXT_STYLE,
+                    ),
+                    rx.box(),
+                ),
                 _question_input(),
                 rx.cond(
                     EvaluacionState.error_message != "",
