@@ -33,11 +33,6 @@ EVAL_PROGRESS_STACK_STYLE = {
     "spacing": "3",
 }
 
-EVAL_OPTION_STACK_STYLE = {
-    **EVAL_STACK_BASE,
-    "spacing": "2",
-}
-
 EVAL_LABEL_STACK_STYLE = {
     **EVAL_STACK_BASE,
     "spacing": "1",
@@ -64,9 +59,41 @@ EVAL_PROMPT_TEXT_STYLE = {
     "font_weight": "600",
 }
 
-EVAL_HELP_TEXT_STYLE = {
+EVAL_MULTI_HINT_BOX_STYLE = {
+    "background_color": "var(--teal-3)",
+    "border": "1px solid var(--teal-6)",
+    "border_left": "4px solid var(--teal-9)",
+    "padding": "0.5rem 0.75rem",
+    "border_radius": "var(--app-radius-md)",
+    "width": "100%",
+}
+
+EVAL_MULTI_HINT_TEXT_STYLE = {
     "size": "2",
-    "color": "var(--gray-600)",
+    "color": "var(--teal-11)",
+    "font_style": "italic",
+    "font_weight": "600",
+}
+
+EVAL_CHOICE_GROUP_STYLE = {
+    "width": "100%",
+    "spacing": "2",
+    "align": "start",
+}
+
+EVAL_CHOICE_ITEM_STYLE = {
+    "width": "100%",
+    "variant": "surface",
+    "size": "2",
+}
+
+EVAL_MULTI_CHECKBOX_STYLE = {
+    "size": "2",
+    "white_space": "normal",
+}
+
+EVAL_OPTION_TEXT_STYLE = {
+    "white_space": "normal",
 }
 
 EVAL_SUBTITLE_STYLE = {
@@ -79,17 +106,6 @@ EVAL_ERROR_TEXT_STYLE = {
 
 EVAL_INPUT_PROPS = {
     "width": "100%",
-}
-
-EVAL_RADIO_ITEM_STYLE = {
-    "width": "100%",
-    "white_space": "normal",
-    "align_items": "flex-start",
-}
-
-EVAL_CHECKBOX_STYLE = {
-    "width": "100%",
-    "white_space": "normal",
 }
 
 EVAL_RESULT_BOX_STYLE = {**APP_SURFACE_STYLE, "width": "100%"}

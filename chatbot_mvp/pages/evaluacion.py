@@ -7,17 +7,18 @@ from chatbot_mvp.ui.evaluacion_tokens import (
     EVAL_BUTTON_ROW_STYLE,
     EVAL_CARD_HEADER_STYLE,
     EVAL_CARD_STYLE,
-    EVAL_CHECKBOX_STYLE,
+    EVAL_CHOICE_GROUP_STYLE,
+    EVAL_CHOICE_ITEM_STYLE,
     EVAL_CONTAINER_STYLE,
     EVAL_ERROR_TEXT_STYLE,
-    EVAL_HELP_TEXT_STYLE,
     EVAL_INPUT_PROPS,
     EVAL_LABEL_STACK_STYLE,
-    EVAL_OPTION_STACK_STYLE,
+    EVAL_MULTI_CHECKBOX_STYLE,
+    EVAL_MULTI_HINT_BOX_STYLE,
+    EVAL_MULTI_HINT_TEXT_STYLE,
     EVAL_PROGRESS_STACK_STYLE,
     EVAL_PRIMARY_BUTTON_PROPS,
     EVAL_PROMPT_TEXT_STYLE,
-    EVAL_RADIO_ITEM_STYLE,
     EVAL_RESULT_BOX_STYLE,
     EVAL_SECTION_STACK_STYLE,
     EVAL_SECONDARY_BUTTON_PROPS,
@@ -44,21 +45,15 @@ def _text_input() -> rx.Component:
 
 
 def _single_input() -> rx.Component:
-    return rx.radio_group.root(
-        rx.vstack(
-            rx.foreach(
-                EvaluacionState.current_options,
-                lambda option: rx.radio_group.item(
-                    option,
-                    value=option,
-                    **EVAL_RADIO_ITEM_STYLE,
-                ),
-            ),
-            **EVAL_OPTION_STACK_STYLE,
-        ),
+    return rx.radio_group(
+        items=EvaluacionState.current_options,
         value=EvaluacionState.current_single_value,
         on_change=EvaluacionState.set_current_response,
-        **EVAL_INPUT_PROPS,
+        direction="column",
+        variant=EVAL_CHOICE_ITEM_STYLE["variant"],
+        size=EVAL_CHOICE_ITEM_STYLE["size"],
+        item_style={"width": EVAL_CHOICE_ITEM_STYLE["width"]},
+        **EVAL_CHOICE_GROUP_STYLE,
     )
 
 
@@ -66,19 +61,16 @@ def _multi_input() -> rx.Component:
     return rx.vstack(
         rx.foreach(
             EvaluacionState.current_options,
-            lambda option: rx.hstack(
-                rx.checkbox(
-                    is_checked=EvaluacionState.is_checked(option),
-                    on_change=lambda _: EvaluacionState.toggle_multi(option),
-                    **EVAL_CHECKBOX_STYLE,
+            lambda option: rx.checkbox(
+                option,
+                is_checked=EvaluacionState.is_checked(option),
+                on_change=lambda checked: EvaluacionState.set_multi_option(
+                    option, checked
                 ),
-                rx.text(option, white_space="normal"),
-                spacing="2",
-                align="start",
-                width="100%",
+                **EVAL_MULTI_CHECKBOX_STYLE,
             ),
         ),
-        **EVAL_OPTION_STACK_STYLE,
+        **EVAL_CHOICE_GROUP_STYLE,
     )
 
 
@@ -105,9 +97,12 @@ def _in_progress_view() -> rx.Component:
                 rx.text(EvaluacionState.current_prompt, **EVAL_PROMPT_TEXT_STYLE),
                 rx.cond(
                     EvaluacionState.current_type == "multi",
-                    rx.text(
-                        "Podés elegir más de una opción.",
-                        **EVAL_HELP_TEXT_STYLE,
+                    rx.box(
+                        rx.text(
+                            "Podés elegir más de una opción.",
+                            **EVAL_MULTI_HINT_TEXT_STYLE,
+                        ),
+                        **EVAL_MULTI_HINT_BOX_STYLE,
                     ),
                     rx.box(),
                 ),

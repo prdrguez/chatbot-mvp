@@ -113,6 +113,19 @@ class EvaluacionState(rx.State):
         if self.error_message:
             self.error_message = ""
 
+    def set_multi_option(self, option: str, checked: bool) -> None:
+        question_id = QUESTIONS[self.current_index]["id"]
+        current = self.responses.get(question_id)
+        if not isinstance(current, list):
+            current = []
+        if checked and option not in current:
+            current = [*current, option]
+        elif not checked and option in current:
+            current = [value for value in current if value != option]
+        self.responses = {**self.responses, question_id: current}
+        if self.error_message:
+            self.error_message = ""
+
     def is_checked(self, option: str) -> bool:
         question_id = QUESTIONS[self.current_index]["id"]
         current = self.responses.get(question_id)
