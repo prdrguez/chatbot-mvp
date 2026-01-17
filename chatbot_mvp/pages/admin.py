@@ -115,6 +115,7 @@ def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
             on_change=ThemeState.set_var(var_name),
             width="100%",
         ),
+        rx.text(placeholder, size="1", color="var(--gray-600)"),
         spacing="1",
         align="start",
         width="100%",
@@ -122,35 +123,69 @@ def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
 
 
 def _theme_preview_card() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            rx.hstack(
-                rx.heading("Preview", size="5"),
-                rx.badge("Ejemplo", variant="soft"),
-                spacing="2",
-                align="center",
-            ),
-            rx.text(
-                "Asi se veria una superficie con texto y botones usando tus valores.",
-                color="var(--gray-600)",
-            ),
-            rx.hstack(
-                rx.button("Primario", variant="solid"),
-                rx.button("Secundario", variant="outline"),
-                spacing="2",
-                align="center",
-            ),
-            rx.box(
-                rx.text("Chat surface de ejemplo", size="2"),
-                border="var(--chat-card-border)",
-                padding="var(--chat-surface-padding)",
-                border_radius="var(--chat-radius)",
+    return rx.box(
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.heading("Preview", size="5"),
+                    rx.badge("Live", variant="soft"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.text(
+                    "Asi se veria una card con tus estilos actuales.",
+                    color="var(--gray-600)",
+                ),
+                rx.hstack(
+                    rx.button("Primario", variant="solid"),
+                    rx.button("Secundario", variant="outline"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.input(placeholder="Input de ejemplo"),
+                rx.box(
+                    rx.text("Chat bubble de ejemplo", size="2"),
+                    border="var(--chat-card-border)",
+                    padding="var(--chat-surface-padding)",
+                    border_radius="var(--chat-radius)",
+                    width="100%",
+                ),
+                rx.hstack(
+                    rx.box(
+                        rx.text("Card Border", size="1"),
+                        border="var(--app-card-border)",
+                        padding="0.5rem",
+                        border_radius="var(--app-radius-md)",
+                    ),
+                    rx.box(
+                        rx.text("Danger Text", size="1", color="var(--app-text-danger)"),
+                        border="1px dashed var(--app-text-danger)",
+                        padding="0.5rem",
+                        border_radius="var(--app-radius-md)",
+                    ),
+                    rx.box(
+                        rx.text("Danger Fill", size="1", color="white"),
+                        background_color="var(--app-text-danger)",
+                        padding="0.5rem",
+                        border_radius="var(--app-radius-md)",
+                    ),
+                    rx.box(
+                        rx.text("Chat Border", size="1"),
+                        border="var(--chat-card-border)",
+                        padding="0.5rem",
+                        border_radius="var(--chat-radius)",
+                    ),
+                    spacing="2",
+                    align="center",
+                    width="100%",
+                ),
+                spacing="3",
+                align="start",
                 width="100%",
             ),
-            spacing="3",
-            align="start",
             width="100%",
         ),
+        style=ThemeState.applied_overrides,
         width="100%",
     )
 
@@ -190,6 +225,53 @@ def _preset_field(label: str, var_name: str, options: list[str]) -> rx.Component
     )
 
 
+def _section_block(title: str, body: rx.Component) -> rx.Component:
+    accordion = getattr(rx, "accordion", None)
+    if (
+        accordion is not None
+        and hasattr(accordion, "root")
+        and hasattr(accordion, "item")
+        and hasattr(accordion, "trigger")
+        and hasattr(accordion, "content")
+    ):
+        return accordion.root(
+            accordion.item(
+                accordion.trigger(title),
+                accordion.content(body),
+                value=title,
+            ),
+            type="multiple",
+            collapsible=True,
+            default_value=[title],
+            width="100%",
+        )
+    return rx.card(
+        rx.vstack(
+            rx.heading(title, size="4"),
+            body,
+            spacing="2",
+            align="start",
+            width="100%",
+        ),
+        width="100%",
+    )
+
+
+def _theme_group(label: str, fields: list[tuple[str, str, str]]) -> rx.Component:
+    return _section_block(
+        label,
+        rx.vstack(
+            *[
+                _theme_field(field_label, var_name, placeholder)
+                for field_label, var_name, placeholder in fields
+            ],
+            spacing="3",
+            align="start",
+            width="100%",
+        ),
+    )
+
+
 class AdminViewState(rx.State):
     section: str = "kpis"
 
@@ -198,6 +280,21 @@ class AdminViewState(rx.State):
 
 
 def _admin_theme_section() -> rx.Component:
+    spacing_fields = [
+        ("Header padding", "--app-header-padding", "Ej: 1.25rem 2rem"),
+        ("Content padding", "--app-content-padding", "Ej: 2rem"),
+    ]
+    radius_fields = [
+        ("Radius md", "--app-radius-md", "Ej: 0.5rem"),
+        ("Chat radius", "--chat-radius", "Ej: 0.75rem"),
+    ]
+    border_fields = [
+        ("Card border", "--app-card-border", "Ej: 1px solid var(--gray-300)"),
+        ("Chat card border", "--chat-card-border", "Ej: 1px solid var(--gray-200)"),
+    ]
+    color_fields = [
+        ("Text danger", "--app-text-danger", "Ej: red"),
+    ]
     return rx.card(
         rx.vstack(
             rx.hstack(
@@ -248,14 +345,22 @@ def _admin_theme_section() -> rx.Component:
                 align="start",
                 width="100%",
             ),
-            rx.vstack(
-                rx.heading("Avanzado", size="4"),
-                *[
-                    _theme_field(label, var_name, placeholder)
-                    for (label, var_name, placeholder) in _THEME_FIELDS
-                ],
-                spacing="3",
-                align="start",
+            rx.heading("Controles", size="4"),
+            _theme_group("Spacing", spacing_fields),
+            _theme_group("Radius", radius_fields),
+            _theme_group("Borders", border_fields),
+            _theme_group("Colors", color_fields),
+            rx.card(
+                rx.vstack(
+                    rx.heading("Avanzado", size="4"),
+                    *[
+                        _theme_field(label, var_name, placeholder)
+                        for (label, var_name, placeholder) in _THEME_FIELDS
+                    ],
+                    spacing="3",
+                    align="start",
+                    width="100%",
+                ),
                 width="100%",
             ),
             rx.button(
