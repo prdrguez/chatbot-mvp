@@ -32,6 +32,17 @@ def _extra_count(data: dict[str, int], limit: int) -> int:
     return max(len(data) - limit, 0)
 
 
+def _top_with_others(data: dict[str, int], limit: int) -> list[dict[str, Any]]:
+    items = sorted(data.items(), key=lambda entry: (-entry[1], entry[0]))
+    top_items = items[:limit]
+    others_items = items[limit:]
+    result = [{"label": key, "count": value} for key, value in top_items]
+    if others_items:
+        others_total = sum(value for _, value in others_items)
+        result.append({"label": "Otros", "count": others_total})
+    return result
+
+
 class AdminState(rx.State):
     loading: bool = False
     error: str = ""
@@ -121,14 +132,19 @@ class AdminState(rx.State):
         return _dict_to_items_sorted(data, limit=5)
 
     @rx.var
+    def ciudad_chart_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("ciudad")
+        return _top_with_others(data, 6)
+
+    @rx.var
     def ciudad_extra_count(self) -> int:
         data = self._breakdown("ciudad")
-        return _extra_count(data, 5)
+        return _extra_count(data, 6)
 
     @rx.var
     def ciudad_chart(self) -> list[dict[str, Any]]:
         data = self._breakdown("ciudad")
-        items = _dict_to_items_sorted(data, limit=5)
+        items = _top_with_others(data, 6)
         return _items_to_chart(items)
 
     @rx.var

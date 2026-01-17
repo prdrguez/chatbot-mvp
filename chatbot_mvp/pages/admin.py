@@ -103,13 +103,15 @@ def _kpi_card(
     items: list[dict[str, Any]],
     chart_data: list[dict[str, Any]],
     extra_count: int,
+    chart_component: rx.Component | None = None,
 ) -> rx.Component:
+    chart = chart_component if chart_component is not None else _mini_chart(items, chart_data)
     return rx.card(
         rx.vstack(
             rx.heading(title, size="4"),
             rx.cond(
                 items,
-                _mini_chart(items, chart_data),
+                chart,
                 rx.text("Sin datos"),
             ),
             _count_list(items),
@@ -124,6 +126,26 @@ def _kpi_card(
         ),
         width="100%",
     )
+
+
+def _city_chart(
+    items: list[dict[str, Any]], chart_data: list[dict[str, Any]]
+) -> rx.Component:
+    recharts = getattr(rx, "recharts", None)
+    if recharts is not None and hasattr(recharts, "pie_chart"):
+        return recharts.pie_chart(
+            recharts.pie(
+                data=chart_data,
+                data_key="value",
+                name_key="name",
+                fill=ADMIN_CHART_FILL,
+                inner_radius="45%",
+                outer_radius="70%",
+            ),
+            height=160,
+            width="100%",
+        )
+    return _mini_chart(items, chart_data)
 
 def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
     return rx.vstack(
@@ -474,9 +496,13 @@ def _admin_kpis_section() -> rx.Component:
                     ),
                     _kpi_card(
                         "Ciudad",
-                        AdminState.ciudad_top_items,
+                        AdminState.ciudad_chart_items,
                         AdminState.ciudad_chart,
                         AdminState.ciudad_extra_count,
+                        chart_component=_city_chart(
+                            AdminState.ciudad_chart_items,
+                            AdminState.ciudad_chart,
+                        ),
                     ),
                     _kpi_card(
                         "Frecuencia IA",
@@ -555,9 +581,13 @@ def _admin_kpis_section() -> rx.Component:
                     ),
                     _kpi_card(
                         "Ciudad",
-                        AdminState.ciudad_top_items,
+                        AdminState.ciudad_chart_items,
                         AdminState.ciudad_chart,
                         AdminState.ciudad_extra_count,
+                        chart_component=_city_chart(
+                            AdminState.ciudad_chart_items,
+                            AdminState.ciudad_chart,
+                        ),
                     ),
                     _kpi_card(
                         "Frecuencia IA",
