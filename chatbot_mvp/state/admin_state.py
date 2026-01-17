@@ -44,6 +44,27 @@ def _top_with_others(data: dict[str, int], limit: int) -> list[dict[str, Any]]:
     return result
 
 
+def _top_items_with_others(
+    items: list[dict[str, Any]], limit: int
+) -> list[dict[str, Any]]:
+    sorted_items = sorted(
+        items,
+        key=lambda item: (
+            -int(item.get("count", 0)),
+            str(item.get("label", "")),
+        ),
+    )
+    top_items = sorted_items[:limit]
+    others_total = sum(int(item.get("count", 0)) for item in sorted_items[limit:])
+    result = [
+        {"label": item.get("label", ""), "count": int(item.get("count", 0))}
+        for item in top_items
+    ]
+    if others_total > 0:
+        result.append({"label": "Otros", "count": others_total})
+    return result
+
+
 class AdminState(rx.State):
     loading: bool = False
     error: str = ""
@@ -184,7 +205,8 @@ class AdminState(rx.State):
     @rx.var
     def ciudad_items(self) -> list[dict[str, Any]]:
         data = self._breakdown("ciudad")
-        items = _top_with_others(data, 6)
+        items = _dict_to_items_sorted(data)
+        items = _top_items_with_others(items, 8)
         return _items_to_chart(items)
 
     @rx.var
@@ -195,7 +217,8 @@ class AdminState(rx.State):
     @rx.var
     def ciudad_chart_items(self) -> list[dict[str, Any]]:
         data = self._breakdown("ciudad")
-        return _top_with_others(data, 6)
+        items = _dict_to_items_sorted(data)
+        return _top_items_with_others(items, 8)
 
     @rx.var
     def ciudad_extra_count(self) -> int:
@@ -204,7 +227,8 @@ class AdminState(rx.State):
     @rx.var
     def ciudad_chart(self) -> list[dict[str, Any]]:
         data = self._breakdown("ciudad")
-        items = _top_with_others(data, 6)
+        items = _dict_to_items_sorted(data)
+        items = _top_items_with_others(items, 8)
         return _items_to_chart(items)
 
     @rx.var
