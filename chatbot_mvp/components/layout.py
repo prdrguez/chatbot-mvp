@@ -29,6 +29,11 @@ def layout(content: rx.Component) -> rx.Component:
                 rx.link("Chat", href="/chat"),
                 rx.cond(
                     is_demo_mode(),
+                    rx.link("UI", href="/ui"),
+                    rx.box(),
+                ),
+                rx.cond(
+                    is_demo_mode(),
                     rx.link("Admin", href="/admin", opacity="0.7"),
                     rx.box(),
                 ),
