@@ -16,6 +16,22 @@ def _dict_to_items(data: dict[str, int]) -> list[dict[str, Any]]:
     return [{"label": key, "count": data[key]} for key in sorted(data.keys())]
 
 
+def _dict_to_items_sorted(
+    data: dict[str, int], limit: int | None = None
+) -> list[dict[str, Any]]:
+    items = sorted(data.items(), key=lambda entry: (-entry[1], entry[0]))
+    sliced = items if limit is None else items[:limit]
+    return [{"label": key, "count": value} for key, value in sliced]
+
+
+def _items_to_chart(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{"name": item["label"], "value": item["count"]} for item in items]
+
+
+def _extra_count(data: dict[str, int], limit: int) -> int:
+    return max(len(data) - limit, 0)
+
+
 class AdminState(rx.State):
     loading: bool = False
     error: str = ""
@@ -40,36 +56,180 @@ class AdminState(rx.State):
         return _dict_to_items(self.summary.get("by_level", {}))
 
     @rx.var
+    def by_level_top_items(self) -> list[dict[str, Any]]:
+        data = self.summary.get("by_level", {})
+        return _dict_to_items_sorted(data if isinstance(data, dict) else {}, limit=5)
+
+    @rx.var
+    def by_level_extra_count(self) -> int:
+        data = self.summary.get("by_level", {})
+        return _extra_count(data if isinstance(data, dict) else {}, 5)
+
+    @rx.var
+    def by_level_chart(self) -> list[dict[str, Any]]:
+        data = self.summary.get("by_level", {})
+        items = _dict_to_items_sorted(data if isinstance(data, dict) else {}, limit=5)
+        return _items_to_chart(items)
+
+    @rx.var
     def edad_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self._breakdown("edad"))
+
+    @rx.var
+    def edad_top_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("edad")
+        return _dict_to_items_sorted(data, limit=5)
+
+    @rx.var
+    def edad_extra_count(self) -> int:
+        data = self._breakdown("edad")
+        return _extra_count(data, 5)
+
+    @rx.var
+    def edad_chart(self) -> list[dict[str, Any]]:
+        data = self._breakdown("edad")
+        items = _dict_to_items_sorted(data, limit=5)
+        return _items_to_chart(items)
 
     @rx.var
     def genero_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self._breakdown("genero"))
 
     @rx.var
+    def genero_top_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("genero")
+        return _dict_to_items_sorted(data, limit=5)
+
+    @rx.var
+    def genero_extra_count(self) -> int:
+        data = self._breakdown("genero")
+        return _extra_count(data, 5)
+
+    @rx.var
+    def genero_chart(self) -> list[dict[str, Any]]:
+        data = self._breakdown("genero")
+        items = _dict_to_items_sorted(data, limit=5)
+        return _items_to_chart(items)
+
+    @rx.var
     def ciudad_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self._breakdown("ciudad"))
+
+    @rx.var
+    def ciudad_top_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("ciudad")
+        return _dict_to_items_sorted(data, limit=5)
+
+    @rx.var
+    def ciudad_extra_count(self) -> int:
+        data = self._breakdown("ciudad")
+        return _extra_count(data, 5)
+
+    @rx.var
+    def ciudad_chart(self) -> list[dict[str, Any]]:
+        data = self._breakdown("ciudad")
+        items = _dict_to_items_sorted(data, limit=5)
+        return _items_to_chart(items)
 
     @rx.var
     def frecuencia_ia_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self._breakdown("frecuencia_ia"))
 
     @rx.var
+    def frecuencia_ia_top_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("frecuencia_ia")
+        return _dict_to_items_sorted(data, limit=5)
+
+    @rx.var
+    def frecuencia_ia_extra_count(self) -> int:
+        data = self._breakdown("frecuencia_ia")
+        return _extra_count(data, 5)
+
+    @rx.var
+    def frecuencia_ia_chart(self) -> list[dict[str, Any]]:
+        data = self._breakdown("frecuencia_ia")
+        items = _dict_to_items_sorted(data, limit=5)
+        return _items_to_chart(items)
+
+    @rx.var
     def nivel_educativo_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self._breakdown("nivel_educativo"))
+
+    @rx.var
+    def nivel_educativo_top_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("nivel_educativo")
+        return _dict_to_items_sorted(data, limit=5)
+
+    @rx.var
+    def nivel_educativo_extra_count(self) -> int:
+        data = self._breakdown("nivel_educativo")
+        return _extra_count(data, 5)
+
+    @rx.var
+    def nivel_educativo_chart(self) -> list[dict[str, Any]]:
+        data = self._breakdown("nivel_educativo")
+        items = _dict_to_items_sorted(data, limit=5)
+        return _items_to_chart(items)
 
     @rx.var
     def ocupacion_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self._breakdown("ocupacion"))
 
     @rx.var
+    def ocupacion_top_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("ocupacion")
+        return _dict_to_items_sorted(data, limit=5)
+
+    @rx.var
+    def ocupacion_extra_count(self) -> int:
+        data = self._breakdown("ocupacion")
+        return _extra_count(data, 5)
+
+    @rx.var
+    def ocupacion_chart(self) -> list[dict[str, Any]]:
+        data = self._breakdown("ocupacion")
+        items = _dict_to_items_sorted(data, limit=5)
+        return _items_to_chart(items)
+
+    @rx.var
     def area_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self._breakdown("area"))
 
     @rx.var
+    def area_top_items(self) -> list[dict[str, Any]]:
+        data = self._breakdown("area")
+        return _dict_to_items_sorted(data, limit=5)
+
+    @rx.var
+    def area_extra_count(self) -> int:
+        data = self._breakdown("area")
+        return _extra_count(data, 5)
+
+    @rx.var
+    def area_chart(self) -> list[dict[str, Any]]:
+        data = self._breakdown("area")
+        items = _dict_to_items_sorted(data, limit=5)
+        return _items_to_chart(items)
+
+    @rx.var
     def emociones_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self.summary.get("emociones", {}))
+
+    @rx.var
+    def emociones_top_items(self) -> list[dict[str, Any]]:
+        data = self.summary.get("emociones", {})
+        return _dict_to_items_sorted(data if isinstance(data, dict) else {}, limit=5)
+
+    @rx.var
+    def emociones_extra_count(self) -> int:
+        data = self.summary.get("emociones", {})
+        return _extra_count(data if isinstance(data, dict) else {}, 5)
+
+    @rx.var
+    def emociones_chart(self) -> list[dict[str, Any]]:
+        data = self.summary.get("emociones", {})
+        items = _dict_to_items_sorted(data if isinstance(data, dict) else {}, limit=5)
+        return _items_to_chart(items)
 
     @rx.var
     def questionnaire_label(self) -> str:

@@ -17,21 +17,22 @@ _THEME_FIELDS: list[tuple[str, str, str]] = [
 ]
 
 
+def _count_row(item: dict[str, Any]) -> rx.Component:
+    return rx.hstack(
+        rx.text(item["label"]),
+        rx.text(item["count"]),
+        spacing="2",
+        align="center",
+        width="100%",
+        justify="between",
+    )
+
+
 def _count_list(items: list[dict[str, Any]]) -> rx.Component:
     return rx.cond(
         items,
         rx.vstack(
-            rx.foreach(
-                items,
-                lambda item: rx.hstack(
-                    rx.text(item["label"]),
-                    rx.text(item["count"]),
-                    spacing="2",
-                    align="center",
-                    width="100%",
-                    justify="between",
-                ),
-            ),
+            rx.foreach(items, _count_row),
             spacing="1",
             align="start",
             width="100%",
@@ -57,7 +58,19 @@ def _mini_bar_row(item: dict[str, Any]) -> rx.Component:
     )
 
 
-def _mini_bar_chart(items: list[dict[str, Any]]) -> rx.Component:
+def _mini_chart(
+    items: list[dict[str, Any]], chart_data: list[dict[str, Any]]
+) -> rx.Component:
+    recharts = getattr(rx, "recharts", None)
+    if recharts is not None and hasattr(recharts, "bar_chart"):
+        return recharts.bar_chart(
+            recharts.bar(data_key="value", fill="var(--gray-600)"),
+            recharts.x_axis(data_key="name"),
+            recharts.y_axis(),
+            data=chart_data,
+            height=120,
+            width="100%",
+        )
     return rx.vstack(
         rx.foreach(items, _mini_bar_row),
         spacing="1",
@@ -66,12 +79,26 @@ def _mini_bar_chart(items: list[dict[str, Any]]) -> rx.Component:
     )
 
 
-def _kpi_card(title: str, items: list[dict[str, Any]]) -> rx.Component:
+def _kpi_card(
+    title: str,
+    items: list[dict[str, Any]],
+    chart_data: list[dict[str, Any]],
+    extra_count: int,
+) -> rx.Component:
     return rx.card(
         rx.vstack(
             rx.heading(title, size="4"),
-            _mini_bar_chart(items),
+            rx.cond(
+                items,
+                _mini_chart(items, chart_data),
+                rx.text("Sin datos"),
+            ),
             _count_list(items),
+            rx.cond(
+                extra_count > 0,
+                rx.text("+", extra_count, " mas", size="2", color="var(--gray-600)"),
+                rx.box(),
+            ),
             spacing="2",
             align="start",
             width="100%",
@@ -303,15 +330,60 @@ def _admin_kpis_section() -> rx.Component:
                         ),
                         width="100%",
                     ),
-                    _kpi_card("By Level", AdminState.by_level_items),
-                    _kpi_card("Edad", AdminState.edad_items),
-                    _kpi_card("Genero", AdminState.genero_items),
-                    _kpi_card("Ciudad", AdminState.ciudad_items),
-                    _kpi_card("Frecuencia IA", AdminState.frecuencia_ia_items),
-                    _kpi_card("Nivel Educativo", AdminState.nivel_educativo_items),
-                    _kpi_card("Ocupacion", AdminState.ocupacion_items),
-                    _kpi_card("Area", AdminState.area_items),
-                    _kpi_card("Emociones", AdminState.emociones_items),
+                    _kpi_card(
+                        "By Level",
+                        AdminState.by_level_top_items,
+                        AdminState.by_level_chart,
+                        AdminState.by_level_extra_count,
+                    ),
+                    _kpi_card(
+                        "Edad",
+                        AdminState.edad_top_items,
+                        AdminState.edad_chart,
+                        AdminState.edad_extra_count,
+                    ),
+                    _kpi_card(
+                        "Genero",
+                        AdminState.genero_top_items,
+                        AdminState.genero_chart,
+                        AdminState.genero_extra_count,
+                    ),
+                    _kpi_card(
+                        "Ciudad",
+                        AdminState.ciudad_top_items,
+                        AdminState.ciudad_chart,
+                        AdminState.ciudad_extra_count,
+                    ),
+                    _kpi_card(
+                        "Frecuencia IA",
+                        AdminState.frecuencia_ia_top_items,
+                        AdminState.frecuencia_ia_chart,
+                        AdminState.frecuencia_ia_extra_count,
+                    ),
+                    _kpi_card(
+                        "Nivel Educativo",
+                        AdminState.nivel_educativo_top_items,
+                        AdminState.nivel_educativo_chart,
+                        AdminState.nivel_educativo_extra_count,
+                    ),
+                    _kpi_card(
+                        "Ocupacion",
+                        AdminState.ocupacion_top_items,
+                        AdminState.ocupacion_chart,
+                        AdminState.ocupacion_extra_count,
+                    ),
+                    _kpi_card(
+                        "Area",
+                        AdminState.area_top_items,
+                        AdminState.area_chart,
+                        AdminState.area_extra_count,
+                    ),
+                    _kpi_card(
+                        "Emociones",
+                        AdminState.emociones_top_items,
+                        AdminState.emociones_chart,
+                        AdminState.emociones_extra_count,
+                    ),
                 ],
                 columns=(
                     rx.breakpoints(initial="1", sm="2")
@@ -339,15 +411,60 @@ def _admin_kpis_section() -> rx.Component:
                         ),
                         width="100%",
                     ),
-                    _kpi_card("By Level", AdminState.by_level_items),
-                    _kpi_card("Edad", AdminState.edad_items),
-                    _kpi_card("Genero", AdminState.genero_items),
-                    _kpi_card("Ciudad", AdminState.ciudad_items),
-                    _kpi_card("Frecuencia IA", AdminState.frecuencia_ia_items),
-                    _kpi_card("Nivel Educativo", AdminState.nivel_educativo_items),
-                    _kpi_card("Ocupacion", AdminState.ocupacion_items),
-                    _kpi_card("Area", AdminState.area_items),
-                    _kpi_card("Emociones", AdminState.emociones_items),
+                    _kpi_card(
+                        "By Level",
+                        AdminState.by_level_top_items,
+                        AdminState.by_level_chart,
+                        AdminState.by_level_extra_count,
+                    ),
+                    _kpi_card(
+                        "Edad",
+                        AdminState.edad_top_items,
+                        AdminState.edad_chart,
+                        AdminState.edad_extra_count,
+                    ),
+                    _kpi_card(
+                        "Genero",
+                        AdminState.genero_top_items,
+                        AdminState.genero_chart,
+                        AdminState.genero_extra_count,
+                    ),
+                    _kpi_card(
+                        "Ciudad",
+                        AdminState.ciudad_top_items,
+                        AdminState.ciudad_chart,
+                        AdminState.ciudad_extra_count,
+                    ),
+                    _kpi_card(
+                        "Frecuencia IA",
+                        AdminState.frecuencia_ia_top_items,
+                        AdminState.frecuencia_ia_chart,
+                        AdminState.frecuencia_ia_extra_count,
+                    ),
+                    _kpi_card(
+                        "Nivel Educativo",
+                        AdminState.nivel_educativo_top_items,
+                        AdminState.nivel_educativo_chart,
+                        AdminState.nivel_educativo_extra_count,
+                    ),
+                    _kpi_card(
+                        "Ocupacion",
+                        AdminState.ocupacion_top_items,
+                        AdminState.ocupacion_chart,
+                        AdminState.ocupacion_extra_count,
+                    ),
+                    _kpi_card(
+                        "Area",
+                        AdminState.area_top_items,
+                        AdminState.area_chart,
+                        AdminState.area_extra_count,
+                    ),
+                    _kpi_card(
+                        "Emociones",
+                        AdminState.emociones_top_items,
+                        AdminState.emociones_chart,
+                        AdminState.emociones_extra_count,
+                    ),
                 ],
                 spacing="3",
                 align="start",
