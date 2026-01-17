@@ -6,6 +6,12 @@ from chatbot_mvp.components.layout import layout
 from chatbot_mvp.state.admin_state import AdminState
 from chatbot_mvp.state.theme_state import ThemeState
 
+ADMIN_CHART_FILL = "var(--teal-9)"
+ADMIN_AXIS_STROKE = "var(--gray-8)"
+ADMIN_TEXT_COLOR = "var(--gray-11)"
+ADMIN_LIST_MAX_HEIGHT = "10rem"
+ADMIN_ROW_TEXT_SIZE = "2"
+
 _THEME_FIELDS: list[tuple[str, str, str]] = [
     ("Header padding", "--app-header-padding", "1.25rem 2rem"),
     ("Content padding", "--app-content-padding", "2rem"),
@@ -19,8 +25,8 @@ _THEME_FIELDS: list[tuple[str, str, str]] = [
 
 def _count_row(item: dict[str, Any]) -> rx.Component:
     return rx.hstack(
-        rx.text(item["label"]),
-        rx.text(item["count"]),
+        rx.text(item["label"], size=ADMIN_ROW_TEXT_SIZE, color=ADMIN_TEXT_COLOR),
+        rx.text(item["count"], size=ADMIN_ROW_TEXT_SIZE, color=ADMIN_TEXT_COLOR),
         spacing="2",
         align="center",
         width="100%",
@@ -36,6 +42,8 @@ def _count_list(items: list[dict[str, Any]]) -> rx.Component:
             spacing="1",
             align="start",
             width="100%",
+            max_height=ADMIN_LIST_MAX_HEIGHT,
+            overflow_y="auto",
         ),
         rx.text("Sin datos"),
     )
@@ -64,9 +72,20 @@ def _mini_chart(
     recharts = getattr(rx, "recharts", None)
     if recharts is not None and hasattr(recharts, "bar_chart"):
         return recharts.bar_chart(
-            recharts.bar(data_key="value", fill="var(--gray-600)"),
-            recharts.x_axis(data_key="name"),
-            recharts.y_axis(),
+            recharts.bar(data_key="value", fill=ADMIN_CHART_FILL),
+            recharts.x_axis(
+                data_key="name",
+                tick_line=False,
+                axis_line=False,
+                stroke=ADMIN_AXIS_STROKE,
+                tick=False,
+            ),
+            recharts.y_axis(
+                tick_line=False,
+                axis_line=False,
+                stroke=ADMIN_AXIS_STROKE,
+                tick=False,
+            ),
             data=chart_data,
             height=120,
             width="100%",
