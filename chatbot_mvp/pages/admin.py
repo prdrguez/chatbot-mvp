@@ -17,18 +17,82 @@ _THEME_FIELDS: list[tuple[str, str, str]] = [
 ]
 
 
+def _item_label(item: dict[str, Any]) -> str:
+    return str(
+        item.get("label")
+        or item.get("name")
+        or item.get("key")
+        or item
+    )
+
+
+def _item_count(item: dict[str, Any]) -> int:
+    return int(item.get("count") or item.get("value") or 0)
+
+
 def _count_list(items: list[dict[str, Any]]) -> rx.Component:
-    return rx.cond(
-        items,
+    if not items:
+        return rx.text("Sin datos")
+    return rx.vstack(
+        *[
+            rx.hstack(
+                rx.text(_item_label(item)),
+                rx.text(_item_count(item)),
+                spacing="2",
+                align="center",
+                width="100%",
+                justify="between",
+            )
+            for item in items
+        ],
+        spacing="1",
+        align="start",
+        width="100%",
+    )
+
+
+def _mini_bar_chart(items: list[dict[str, Any]]) -> rx.Component:
+    if not items:
+        return rx.text("Sin datos")
+    counts = [_item_count(item) for item in items]
+    max_count = max(counts) if counts else 1
+    return rx.vstack(
+        *[
+            rx.hstack(
+                rx.text(_item_label(item), size="2"),
+                rx.box(
+                    rx.box(
+                        height="0.35rem",
+                        width=f"{int((_item_count(item) / max_count) * 100)}%",
+                        background_color="var(--gray-600)",
+                        border_radius="999px",
+                    ),
+                    width="100%",
+                ),
+                rx.text(_item_count(item), size="2"),
+                spacing="2",
+                align="center",
+                width="100%",
+            )
+            for item in items
+        ],
+        spacing="1",
+        align="start",
+        width="100%",
+    )
+
+
+def _kpi_card(title: str, items: list[dict[str, Any]]) -> rx.Component:
+    return rx.card(
         rx.vstack(
-            rx.foreach(
-                items,
-                lambda item: rx.text(item["label"], ": ", item["count"]),
-            ),
-            spacing="1",
+            rx.heading(title, size="4"),
+            _mini_bar_chart(items),
+            _count_list(items),
+            spacing="2",
             align="start",
+            width="100%",
         ),
-        rx.text("Sin datos"),
+        width="100%",
     )
 
 def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
@@ -138,84 +202,73 @@ def _admin_export_section() -> rx.Component:
 
 
 def _admin_kpis_section() -> rx.Component:
+    grid = getattr(rx, "simple_grid", None) or getattr(rx, "grid", None)
     return rx.cond(
         AdminState.has_data,
-        rx.vstack(
-            rx.vstack(
-                rx.text("Total:", font_weight="600"),
-                rx.text(AdminState.total),
-                rx.text("Avg %:", font_weight="600"),
-                rx.text(AdminState.avg_percent, "%"),
-                spacing="1",
-                align="start",
-            ),
-            rx.vstack(
-                rx.text("By Level", font_weight="600"),
-                _count_list(AdminState.by_level_items),
-                spacing="1",
+        (
+            grid(
+                *[
+                    rx.card(
+                        rx.vstack(
+                            rx.heading("Resumen", size="4"),
+                            rx.text("Total", size="2", color="var(--gray-600)"),
+                            rx.text(AdminState.total, size="6", font_weight="600"),
+                            rx.text("Avg %", size="2", color="var(--gray-600)"),
+                            rx.text(
+                                AdminState.avg_percent, "%", size="6", font_weight="600"
+                            ),
+                            spacing="1",
+                            align="start",
+                            width="100%",
+                        ),
+                        width="100%",
+                    ),
+                    _kpi_card("By Level", AdminState.by_level_items),
+                    _kpi_card("Edad", AdminState.edad_items),
+                    _kpi_card("Genero", AdminState.genero_items),
+                    _kpi_card("Ciudad", AdminState.ciudad_items),
+                    _kpi_card("Frecuencia IA", AdminState.frecuencia_ia_items),
+                    _kpi_card("Nivel Educativo", AdminState.nivel_educativo_items),
+                    _kpi_card("Ocupacion", AdminState.ocupacion_items),
+                    _kpi_card("Area", AdminState.area_items),
+                    _kpi_card("Emociones", AdminState.emociones_items),
+                ],
+                columns=["1", "2"],
+                gap="3",
+                width="100%",
+            )
+            if grid is not None
+            else rx.vstack(
+                *[
+                    rx.card(
+                        rx.vstack(
+                            rx.heading("Resumen", size="4"),
+                            rx.text("Total", size="2", color="var(--gray-600)"),
+                            rx.text(AdminState.total, size="6", font_weight="600"),
+                            rx.text("Avg %", size="2", color="var(--gray-600)"),
+                            rx.text(
+                                AdminState.avg_percent, "%", size="6", font_weight="600"
+                            ),
+                            spacing="1",
+                            align="start",
+                            width="100%",
+                        ),
+                        width="100%",
+                    ),
+                    _kpi_card("By Level", AdminState.by_level_items),
+                    _kpi_card("Edad", AdminState.edad_items),
+                    _kpi_card("Genero", AdminState.genero_items),
+                    _kpi_card("Ciudad", AdminState.ciudad_items),
+                    _kpi_card("Frecuencia IA", AdminState.frecuencia_ia_items),
+                    _kpi_card("Nivel Educativo", AdminState.nivel_educativo_items),
+                    _kpi_card("Ocupacion", AdminState.ocupacion_items),
+                    _kpi_card("Area", AdminState.area_items),
+                    _kpi_card("Emociones", AdminState.emociones_items),
+                ],
+                spacing="3",
                 align="start",
                 width="100%",
-            ),
-            rx.vstack(
-                rx.text("Edad", font_weight="600"),
-                _count_list(AdminState.edad_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            rx.vstack(
-                rx.text("Genero", font_weight="600"),
-                _count_list(AdminState.genero_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            rx.vstack(
-                rx.text("Ciudad", font_weight="600"),
-                _count_list(AdminState.ciudad_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            rx.vstack(
-                rx.text("Frecuencia IA", font_weight="600"),
-                _count_list(AdminState.frecuencia_ia_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            rx.vstack(
-                rx.text("Nivel Educativo", font_weight="600"),
-                _count_list(AdminState.nivel_educativo_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            rx.vstack(
-                rx.text("Ocupacion", font_weight="600"),
-                _count_list(AdminState.ocupacion_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            rx.vstack(
-                rx.text("Area", font_weight="600"),
-                _count_list(AdminState.area_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            rx.vstack(
-                rx.text("Emociones", font_weight="600"),
-                _count_list(AdminState.emociones_items),
-                spacing="1",
-                align="start",
-                width="100%",
-            ),
-            spacing="4",
-            align="start",
-            width="100%",
-            max_width="720px",
+            )
         ),
         rx.text("Sin datos aún"),
     )
