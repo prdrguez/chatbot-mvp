@@ -74,6 +74,7 @@ def _kpi_card(
     if recharts is not None and hasattr(recharts, "bar_chart"):
         label_list = getattr(recharts, "label_list", None)
         tooltip = getattr(recharts, "tooltip", None)
+        responsive_container = getattr(recharts, "responsive_container", None)
         bar_children = []
         if label_list is not None:
             bar_children.append(label_list(data_key="value", position="right"))
@@ -96,18 +97,30 @@ def _kpi_card(
         ]
         if tooltip is not None:
             chart_children.append(tooltip())
+        bar_chart = recharts.bar_chart(
+            *chart_children,
+            data=chart_data,
+            layout="vertical",
+            height="100%",
+            width="100%",
+        )
+        chart = (
+            responsive_container(bar_chart, width="100%", height=220)
+            if responsive_container is not None
+            else recharts.bar_chart(
+                *chart_children,
+                data=chart_data,
+                layout="vertical",
+                height=180,
+                width="100%",
+            )
+        )
         return rx.card(
             rx.vstack(
                 rx.heading(title, size="4"),
                 rx.cond(
                     items,
-                    recharts.bar_chart(
-                        *chart_children,
-                        data=chart_data,
-                        layout="vertical",
-                        height=180,
-                        width="100%",
-                    ),
+                    chart,
                     rx.text("Sin datos"),
                 ),
                 spacing="2",
@@ -115,6 +128,8 @@ def _kpi_card(
                 width="100%",
             ),
             width="100%",
+            height="100%",
+            min_height="20rem",
         )
     return rx.card(
         rx.vstack(
@@ -129,6 +144,8 @@ def _kpi_card(
             width="100%",
         ),
         width="100%",
+        height="100%",
+        min_height="20rem",
     )
 
 
@@ -528,6 +545,7 @@ def _admin_kpis_section() -> rx.Component:
     if recharts is not None and hasattr(recharts, "bar_chart"):
         label_list = getattr(recharts, "label_list", None)
         tooltip = getattr(recharts, "tooltip", None)
+        responsive_container = getattr(recharts, "responsive_container", None)
         bar_children = []
         if label_list is not None:
             bar_children.append(label_list(data_key="value", position="right"))
@@ -550,18 +568,30 @@ def _admin_kpis_section() -> rx.Component:
         ]
         if tooltip is not None:
             chart_children.append(tooltip())
+        city_bar_chart = recharts.bar_chart(
+            *chart_children,
+            data=AdminState.ciudad_chart,
+            layout="vertical",
+            height="100%",
+            width="100%",
+        )
+        city_chart = (
+            responsive_container(city_bar_chart, width="100%", height=240)
+            if responsive_container is not None
+            else recharts.bar_chart(
+                *chart_children,
+                data=AdminState.ciudad_chart,
+                layout="vertical",
+                height=240,
+                width="100%",
+            )
+        )
         city_card = rx.card(
             rx.vstack(
                 rx.heading("Ciudad", size="4"),
                 rx.cond(
                     AdminState.ciudad_chart_items,
-                    recharts.bar_chart(
-                        *chart_children,
-                        data=AdminState.ciudad_chart,
-                        layout="vertical",
-                        height=240,
-                        width="100%",
-                    ),
+                    city_chart,
                     rx.text("Sin datos"),
                 ),
                 spacing="2",
@@ -569,7 +599,8 @@ def _admin_kpis_section() -> rx.Component:
                 width="100%",
             ),
             width="100%",
-            grid_column="span 2",
+            height="100%",
+            min_height="20rem",
         )
     else:
         city_card = rx.card(
@@ -581,7 +612,8 @@ def _admin_kpis_section() -> rx.Component:
                 width="100%",
             ),
             width="100%",
-            grid_column="span 2",
+            height="100%",
+            min_height="20rem",
         )
 
     summary_card = rx.card(
@@ -604,7 +636,8 @@ def _admin_kpis_section() -> rx.Component:
             wrap="wrap",
         ),
         width="100%",
-        grid_column="span 2",
+        height="100%",
+        min_height="20rem",
     )
 
     cards = [
@@ -666,12 +699,14 @@ def _admin_kpis_section() -> rx.Component:
             grid(
                 *cards,
                 columns=(
-                    rx.breakpoints(initial="1", sm="2")
+                    rx.breakpoints(initial="1", md="2")
                     if hasattr(rx, "breakpoints")
                     else "2"
                 ),
-                gap="6",
+                spacing="6",
                 width="100%",
+                align="stretch",
+                style={"grid_auto_rows": "1fr"},
             )
             if grid is not None
             else rx.vstack(
