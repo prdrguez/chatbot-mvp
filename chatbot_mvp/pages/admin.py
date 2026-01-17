@@ -46,54 +46,63 @@ def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
     )
 
 
-def admin() -> rx.Component:
-    return layout(
+class AdminViewState(rx.State):
+    section: str = "kpis"
+
+    def set_section(self, section: str) -> None:
+        self.section = section
+
+
+def _admin_theme_section() -> rx.Component:
+    return rx.card(
         rx.vstack(
-            rx.heading("Admin (Demo)", size="8"),
-            rx.card(
-                rx.vstack(
-                    rx.hstack(
-                        rx.heading("Theme Editor (MVP)", size="6"),
-                        rx.cond(
-                            ThemeState.saved,
-                            rx.badge("Guardado", variant="soft", color_scheme="green"),
-                            rx.box(),
-                        ),
-                        spacing="2",
-                        align="center",
-                        width="100%",
-                    ),
-                    rx.text(
-                        'Ejemplos: padding "1rem 2rem", border '
-                        '"1px solid var(--gray-200)", radius "0.75rem", '
-                        'color "red".',
-                        color="var(--gray-600)",
-                    ),
-                    rx.cond(
-                        ThemeState.error != "",
-                        rx.text(ThemeState.error, color="var(--app-text-danger)"),
-                        rx.box(),
-                    ),
-                    rx.vstack(
-                        *[
-                            _theme_field(label, var_name, placeholder)
-                            for (label, var_name, placeholder) in _THEME_FIELDS
-                        ],
-                        spacing="3",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.button(
-                        "Reset",
-                        on_click=ThemeState.reset_overrides,
-                        variant="outline",
-                    ),
-                    spacing="4",
-                    align="start",
-                    width="100%",
+            rx.hstack(
+                rx.heading("Theme Editor (MVP)", size="6"),
+                rx.cond(
+                    ThemeState.saved,
+                    rx.badge("Guardado", variant="soft", color_scheme="green"),
+                    rx.box(),
                 ),
+                spacing="2",
+                align="center",
                 width="100%",
             ),
+            rx.text(
+                'Ejemplos: padding "1rem 2rem", border '
+                '"1px solid var(--gray-200)", radius "0.75rem", '
+                'color "red".',
+                color="var(--gray-600)",
+            ),
+            rx.cond(
+                ThemeState.error != "",
+                rx.text(ThemeState.error, color="var(--app-text-danger)"),
+                rx.box(),
+            ),
+            rx.vstack(
+                *[
+                    _theme_field(label, var_name, placeholder)
+                    for (label, var_name, placeholder) in _THEME_FIELDS
+                ],
+                spacing="3",
+                align="start",
+                width="100%",
+            ),
+            rx.button(
+                "Reset",
+                on_click=ThemeState.reset_overrides,
+                variant="outline",
+            ),
+            spacing="4",
+            align="start",
+            width="100%",
+        ),
+        width="100%",
+    )
+
+
+def _admin_export_section() -> rx.Component:
+    return rx.card(
+        rx.vstack(
             rx.hstack(
                 rx.button(
                     "Refrescar",
@@ -120,87 +129,141 @@ def admin() -> rx.Component:
                 rx.text(AdminState.export_error, color="red"),
                 rx.box(),
             ),
-            rx.cond(
-                AdminState.has_data,
-                rx.vstack(
-                    rx.vstack(
-                        rx.text("Total:", font_weight="600"),
-                        rx.text(AdminState.total),
-                        rx.text("Avg %:", font_weight="600"),
-                        rx.text(AdminState.avg_percent, "%"),
-                        spacing="1",
-                        align="start",
-                    ),
-                    rx.vstack(
-                        rx.text("By Level", font_weight="600"),
-                        _count_list(AdminState.by_level_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Edad", font_weight="600"),
-                        _count_list(AdminState.edad_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Genero", font_weight="600"),
-                        _count_list(AdminState.genero_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Ciudad", font_weight="600"),
-                        _count_list(AdminState.ciudad_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Frecuencia IA", font_weight="600"),
-                        _count_list(AdminState.frecuencia_ia_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Nivel Educativo", font_weight="600"),
-                        _count_list(AdminState.nivel_educativo_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Ocupacion", font_weight="600"),
-                        _count_list(AdminState.ocupacion_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Area", font_weight="600"),
-                        _count_list(AdminState.area_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Emociones", font_weight="600"),
-                        _count_list(AdminState.emociones_items),
-                        spacing="1",
-                        align="start",
-                        width="100%",
-                    ),
-                    spacing="4",
-                    align="start",
-                    width="100%",
-                    max_width="720px",
-                ),
-                rx.text("Sin datos aún"),
+            spacing="4",
+            align="start",
+            width="100%",
+        ),
+        width="100%",
+    )
+
+
+def _admin_kpis_section() -> rx.Component:
+    return rx.cond(
+        AdminState.has_data,
+        rx.vstack(
+            rx.vstack(
+                rx.text("Total:", font_weight="600"),
+                rx.text(AdminState.total),
+                rx.text("Avg %:", font_weight="600"),
+                rx.text(AdminState.avg_percent, "%"),
+                spacing="1",
+                align="start",
             ),
+            rx.vstack(
+                rx.text("By Level", font_weight="600"),
+                _count_list(AdminState.by_level_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Edad", font_weight="600"),
+                _count_list(AdminState.edad_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Genero", font_weight="600"),
+                _count_list(AdminState.genero_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Ciudad", font_weight="600"),
+                _count_list(AdminState.ciudad_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Frecuencia IA", font_weight="600"),
+                _count_list(AdminState.frecuencia_ia_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Nivel Educativo", font_weight="600"),
+                _count_list(AdminState.nivel_educativo_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Ocupacion", font_weight="600"),
+                _count_list(AdminState.ocupacion_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Area", font_weight="600"),
+                _count_list(AdminState.area_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.text("Emociones", font_weight="600"),
+                _count_list(AdminState.emociones_items),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            spacing="4",
+            align="start",
+            width="100%",
+            max_width="720px",
+        ),
+        rx.text("Sin datos aún"),
+    )
+
+
+def _admin_tabs() -> rx.Component:
+    tabs = getattr(rx, "tabs", None)
+    if tabs is not None and hasattr(tabs, "root"):
+        return tabs.root(
+            tabs.list(
+                tabs.trigger("KPIs", value="kpis"),
+                tabs.trigger("Theme", value="theme"),
+                tabs.trigger("Export", value="export"),
+            ),
+            tabs.content(_admin_kpis_section(), value="kpis"),
+            tabs.content(_admin_theme_section(), value="theme"),
+            tabs.content(_admin_export_section(), value="export"),
+            default_value="kpis",
+            width="100%",
+        )
+    return rx.vstack(
+        rx.hstack(
+            rx.button("KPIs", on_click=AdminViewState.set_section("kpis")),
+            rx.button("Theme", on_click=AdminViewState.set_section("theme")),
+            rx.button("Export", on_click=AdminViewState.set_section("export")),
+            spacing="2",
+            align="center",
+        ),
+        rx.cond(
+            AdminViewState.section == "kpis",
+            _admin_kpis_section(),
+            rx.cond(
+                AdminViewState.section == "theme",
+                _admin_theme_section(),
+                _admin_export_section(),
+            ),
+        ),
+        spacing="3",
+        align="start",
+        width="100%",
+    )
+
+
+def admin() -> rx.Component:
+    return layout(
+        rx.vstack(
+            rx.heading("Admin (Demo)", size="8"),
+            _admin_tabs(),
             spacing="4",
             align="start",
             width="100%",
