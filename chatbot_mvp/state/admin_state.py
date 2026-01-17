@@ -165,8 +165,7 @@ class AdminState(rx.State):
 
     @rx.var
     def ciudad_extra_count(self) -> int:
-        data = self._breakdown("ciudad")
-        return _extra_count(data, 6)
+        return 0
 
     @rx.var
     def ciudad_chart(self) -> list[dict[str, Any]]:
