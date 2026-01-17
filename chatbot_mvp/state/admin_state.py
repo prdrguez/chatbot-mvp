@@ -63,6 +63,33 @@ class AdminState(rx.State):
         return float(self.summary.get("avg_percent", 0))
 
     @rx.var
+    def avg_percent_value(self) -> int:
+        value = int(round(self.avg_percent))
+        if value < 0:
+            return 0
+        if value > 100:
+            return 100
+        return value
+
+    @rx.var
+    def avg_level_label(self) -> str:
+        value = self.avg_percent_value
+        if value >= 70:
+            return "Alto"
+        if value >= 35:
+            return "Medio"
+        return "Bajo"
+
+    @rx.var
+    def avg_level_color(self) -> str:
+        value = self.avg_percent_value
+        if value >= 70:
+            return "var(--green-9)"
+        if value >= 35:
+            return "var(--amber-9)"
+        return "var(--red-9)"
+
+    @rx.var
     def by_level_items(self) -> list[dict[str, Any]]:
         return _dict_to_items(self.summary.get("by_level", {}))
 

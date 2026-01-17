@@ -11,6 +11,7 @@ ADMIN_AXIS_STROKE = "var(--gray-8)"
 ADMIN_TEXT_COLOR = "var(--gray-11)"
 ADMIN_LIST_MAX_HEIGHT = "10rem"
 ADMIN_ROW_TEXT_SIZE = "2"
+ADMIN_GAUGE_TRACK = "var(--gray-4)"
 
 _THEME_FIELDS: list[tuple[str, str, str]] = [
     ("Header padding", "--app-header-padding", "1.25rem 2rem"),
@@ -146,6 +147,88 @@ def _city_chart(
             width="100%",
         )
     return _mini_chart(items, chart_data)
+
+
+def _avg_gauge() -> rx.Component:
+    recharts = getattr(rx, "recharts", None)
+    if recharts is not None and hasattr(recharts, "pie_chart"):
+        return rx.box(
+            recharts.pie_chart(
+                recharts.pie(
+                    data=[
+                        {"name": "value", "value": AdminState.avg_percent_value},
+                        {
+                            "name": "rest",
+                            "value": 100 - AdminState.avg_percent_value,
+                        },
+                    ],
+                    data_key="value",
+                    name_key="name",
+                    start_angle=180,
+                    end_angle=0,
+                    inner_radius="65%",
+                    outer_radius="90%",
+                    fill=AdminState.avg_level_color,
+                    stroke="none",
+                ),
+                height=160,
+                width="100%",
+            ),
+            rx.box(
+                rx.text(
+                    AdminState.avg_percent_value,
+                    "%",
+                    size="6",
+                    font_weight="700",
+                    color=ADMIN_TEXT_COLOR,
+                ),
+                rx.badge(
+                    AdminState.avg_level_label,
+                    variant="soft",
+                    color_scheme="gray",
+                    style={"color": AdminState.avg_level_color},
+                ),
+                position="absolute",
+                inset="0",
+                display="flex",
+                flex_direction="column",
+                align_items="center",
+                justify_content="center",
+                gap="0.35rem",
+            ),
+            position="relative",
+            width="100%",
+        )
+    progress = getattr(rx, "progress", None)
+    if progress is None:
+        return rx.text("Gauge no disponible", color="var(--gray-600)")
+    return rx.vstack(
+        rx.progress(
+            value=AdminState.avg_percent_value,
+            max=100,
+            width="100%",
+            color_scheme="gray",
+        ),
+        rx.hstack(
+            rx.text(
+                AdminState.avg_percent_value,
+                "%",
+                size="5",
+                font_weight="700",
+                color=ADMIN_TEXT_COLOR,
+            ),
+            rx.badge(
+                AdminState.avg_level_label,
+                variant="soft",
+                style={"color": AdminState.avg_level_color},
+            ),
+            spacing="2",
+            align="center",
+        ),
+        spacing="2",
+        align="start",
+        width="100%",
+    )
 
 def _theme_field(label: str, var_name: str, placeholder: str) -> rx.Component:
     return rx.vstack(
@@ -464,6 +547,7 @@ def _admin_kpis_section() -> rx.Component:
                     rx.card(
                         rx.vstack(
                             rx.heading("Resumen", size="4"),
+                            _avg_gauge(),
                             rx.text("Total", size="2", color="var(--gray-600)"),
                             rx.text(AdminState.total, size="6", font_weight="600"),
                             rx.text("Avg %", size="2", color="var(--gray-600)"),
@@ -549,6 +633,7 @@ def _admin_kpis_section() -> rx.Component:
                     rx.card(
                         rx.vstack(
                             rx.heading("Resumen", size="4"),
+                            _avg_gauge(),
                             rx.text("Total", size="2", color="var(--gray-600)"),
                             rx.text(AdminState.total, size="6", font_weight="600"),
                             rx.text("Avg %", size="2", color="var(--gray-600)"),
