@@ -97,34 +97,34 @@ def _kpi_card(
 
 
 def _avg_gauge() -> rx.Component:
-    recharts = getattr(rx, "recharts", None)
-    if recharts is not None and hasattr(recharts, "pie_chart"):
+    svg = getattr(rx, "svg", None)
+    path = getattr(rx, "path", None)
+    if svg is not None and path is not None:
         return rx.box(
-            recharts.pie_chart(
-                recharts.pie(
-                    data=[
-                        {"name": "value", "value": AdminState.avg_percent_value},
-                        {
-                            "name": "rest",
-                            "value": 100 - AdminState.avg_percent_value,
-                        },
-                    ],
-                    data_key="value",
-                    name_key="name",
-                    start_angle=180,
-                    end_angle=0,
-                    inner_radius="65%",
-                    outer_radius="90%",
-                    fill=AdminState.avg_level_color,
-                    stroke="none",
+            svg(
+                path(
+                    d="M 30 100 A 70 70 0 0 0 170 100",
+                    fill="none",
+                    stroke="var(--gray-6)",
+                    stroke_width=6,
+                    stroke_linecap="round",
+                    stroke_dasharray=AdminState.gauge_track_dasharray,
                 ),
-                height=160,
+                path(
+                    d="M 30 100 A 70 70 0 0 0 170 100",
+                    fill="none",
+                    stroke=AdminState.avg_level_color,
+                    stroke_width=10,
+                    stroke_linecap="round",
+                    stroke_dasharray=AdminState.gauge_progress_dasharray,
+                ),
+                view_box="0 0 200 140",
                 width="100%",
+                height="160px",
             ),
             rx.box(
                 rx.text(
-                    AdminState.avg_percent_value,
-                    "%",
+                    AdminState.avg_percent_display,
                     size="6",
                     font_weight="700",
                     color=ADMIN_TEXT_COLOR,
@@ -146,20 +146,22 @@ def _avg_gauge() -> rx.Component:
             position="relative",
             width="100%",
         )
-    progress = getattr(rx, "progress", None)
-    if progress is None:
-        return rx.text("Gauge no disponible", color="var(--gray-600)")
     return rx.vstack(
-        rx.progress(
-            value=AdminState.avg_percent_value,
-            max=100,
+        rx.box(
+            rx.box(
+                height="0.5rem",
+                width=AdminState.avg_percent_width,
+                background_color=AdminState.avg_level_color,
+                border_radius="999px",
+            ),
+            height="0.5rem",
             width="100%",
-            color_scheme="gray",
+            background_color=ADMIN_GAUGE_TRACK,
+            border_radius="999px",
         ),
         rx.hstack(
             rx.text(
-                AdminState.avg_percent_value,
-                "%",
+                AdminState.avg_percent_display,
                 size="5",
                 font_weight="700",
                 color=ADMIN_TEXT_COLOR,
@@ -485,16 +487,14 @@ def _admin_export_section() -> rx.Component:
 
 
 def _admin_kpis_section() -> rx.Component:
-    grid = getattr(rx, "simple_grid", None) or getattr(rx, "grid", None)
     return rx.cond(
         AdminState.has_data,
-        (
-            grid(
-                *[
-                    rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.card(
+                    rx.hstack(
                         rx.vstack(
                             rx.heading("Resumen", size="4"),
-                            _avg_gauge(),
                             rx.text("Total", size="2", color="var(--gray-600)"),
                             rx.text(AdminState.total, size="6", font_weight="600"),
                             rx.text("Avg %", size="2", color="var(--gray-600)"),
@@ -505,131 +505,86 @@ def _admin_kpis_section() -> rx.Component:
                             align="start",
                             width="100%",
                         ),
+                        rx.box(_avg_gauge(), width="100%", max_width="320px"),
+                        spacing="4",
+                        align="center",
+                        justify="between",
                         width="100%",
+                        wrap="wrap",
                     ),
-                    _kpi_card(
-                        "By Level",
-                        AdminState.by_level_top_items,
-                        AdminState.by_level_extra_count,
-                    ),
-                    _kpi_card(
-                        "Edad",
-                        AdminState.edad_top_items,
-                        AdminState.edad_extra_count,
-                    ),
-                    _kpi_card(
-                        "Genero",
-                        AdminState.genero_top_items,
-                        AdminState.genero_extra_count,
-                    ),
-                    _kpi_card(
-                        "Ciudad",
-                        AdminState.ciudad_chart_items,
-                        AdminState.ciudad_extra_count,
-                    ),
-                    _kpi_card(
-                        "Frecuencia IA",
-                        AdminState.frecuencia_ia_top_items,
-                        AdminState.frecuencia_ia_extra_count,
-                    ),
-                    _kpi_card(
-                        "Nivel Educativo",
-                        AdminState.nivel_educativo_top_items,
-                        AdminState.nivel_educativo_extra_count,
-                    ),
-                    _kpi_card(
-                        "Ocupacion",
-                        AdminState.ocupacion_top_items,
-                        AdminState.ocupacion_extra_count,
-                    ),
-                    _kpi_card(
-                        "Area",
-                        AdminState.area_top_items,
-                        AdminState.area_extra_count,
-                    ),
-                    _kpi_card(
-                        "Emociones",
-                        AdminState.emociones_top_items,
-                        AdminState.emociones_extra_count,
-                    ),
-                ],
-                columns=(
-                    rx.breakpoints(initial="1", sm="2")
-                    if hasattr(rx, "breakpoints")
-                    else "2"
+                    width="100%",
                 ),
-                gap="3",
-                width="100%",
-            )
-            if grid is not None
-            else rx.vstack(
-                *[
-                    rx.card(
-                        rx.vstack(
-                            rx.heading("Resumen", size="4"),
-                            _avg_gauge(),
-                            rx.text("Total", size="2", color="var(--gray-600)"),
-                            rx.text(AdminState.total, size="6", font_weight="600"),
-                            rx.text("Avg %", size="2", color="var(--gray-600)"),
-                            rx.text(
-                                AdminState.avg_percent, "%", size="6", font_weight="600"
-                            ),
-                            spacing="1",
-                            align="start",
-                            width="100%",
-                        ),
-                        width="100%",
-                    ),
-                    _kpi_card(
-                        "By Level",
-                        AdminState.by_level_top_items,
-                        AdminState.by_level_extra_count,
-                    ),
-                    _kpi_card(
-                        "Edad",
-                        AdminState.edad_top_items,
-                        AdminState.edad_extra_count,
-                    ),
-                    _kpi_card(
-                        "Genero",
-                        AdminState.genero_top_items,
-                        AdminState.genero_extra_count,
-                    ),
-                    _kpi_card(
-                        "Ciudad",
-                        AdminState.ciudad_chart_items,
-                        AdminState.ciudad_extra_count,
-                    ),
-                    _kpi_card(
-                        "Frecuencia IA",
-                        AdminState.frecuencia_ia_top_items,
-                        AdminState.frecuencia_ia_extra_count,
-                    ),
-                    _kpi_card(
-                        "Nivel Educativo",
-                        AdminState.nivel_educativo_top_items,
-                        AdminState.nivel_educativo_extra_count,
-                    ),
-                    _kpi_card(
-                        "Ocupacion",
-                        AdminState.ocupacion_top_items,
-                        AdminState.ocupacion_extra_count,
-                    ),
-                    _kpi_card(
-                        "Area",
-                        AdminState.area_top_items,
-                        AdminState.area_extra_count,
-                    ),
-                    _kpi_card(
-                        "Emociones",
-                        AdminState.emociones_top_items,
-                        AdminState.emociones_extra_count,
-                    ),
-                ],
-                spacing="3",
+                _kpi_card(
+                    "By Level",
+                    AdminState.by_level_top_items,
+                    AdminState.by_level_extra_count,
+                ),
+                spacing="4",
                 align="start",
                 width="100%",
-            )
+                wrap="wrap",
+            ),
+            rx.hstack(
+                _kpi_card(
+                    "Edad",
+                    AdminState.edad_top_items,
+                    AdminState.edad_extra_count,
+                ),
+                _kpi_card(
+                    "Genero",
+                    AdminState.genero_top_items,
+                    AdminState.genero_extra_count,
+                ),
+                spacing="4",
+                align="start",
+                width="100%",
+                wrap="wrap",
+            ),
+            _kpi_card(
+                "Ciudad",
+                AdminState.ciudad_chart_items,
+                AdminState.ciudad_extra_count,
+            ),
+            rx.hstack(
+                _kpi_card(
+                    "Frecuencia IA",
+                    AdminState.frecuencia_ia_top_items,
+                    AdminState.frecuencia_ia_extra_count,
+                ),
+                _kpi_card(
+                    "Nivel Educativo",
+                    AdminState.nivel_educativo_top_items,
+                    AdminState.nivel_educativo_extra_count,
+                ),
+                spacing="4",
+                align="start",
+                width="100%",
+                wrap="wrap",
+            ),
+            rx.hstack(
+                _kpi_card(
+                    "Ocupacion",
+                    AdminState.ocupacion_top_items,
+                    AdminState.ocupacion_extra_count,
+                ),
+                _kpi_card(
+                    "Area",
+                    AdminState.area_top_items,
+                    AdminState.area_extra_count,
+                ),
+                spacing="4",
+                align="start",
+                width="100%",
+                wrap="wrap",
+            ),
+            _kpi_card(
+                "Emociones",
+                AdminState.emociones_top_items,
+                AdminState.emociones_extra_count,
+            ),
+            spacing="4",
+            align="start",
+            width="100%",
         ),
         rx.text("Sin datos aún"),
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import reflex as rx
@@ -63,20 +64,35 @@ class AdminState(rx.State):
         return float(self.summary.get("avg_percent", 0))
 
     @rx.var
-    def avg_percent_value(self) -> int:
-        value = int(round(self.avg_percent))
+    def avg_percent_float(self) -> float:
+        try:
+            value = float(self.summary.get("avg_percent", 0))
+        except (TypeError, ValueError):
+            value = 0.0
         if value < 0:
-            return 0
+            return 0.0
         if value > 100:
-            return 100
+            return 100.0
         return value
+
+    @rx.var
+    def avg_percent_value(self) -> float:
+        return self.avg_percent_float
+
+    @rx.var
+    def avg_percent_display(self) -> str:
+        return f"{self.avg_percent_value:.0f}%"
+
+    @rx.var
+    def avg_percent_width(self) -> str:
+        return f"{self.avg_percent_value:.0f}%"
 
     @rx.var
     def avg_level_label(self) -> str:
         value = self.avg_percent_value
         if value >= 70:
             return "Alto"
-        if value >= 35:
+        if value >= 40:
             return "Medio"
         return "Bajo"
 
@@ -85,9 +101,25 @@ class AdminState(rx.State):
         value = self.avg_percent_value
         if value >= 70:
             return "var(--green-9)"
-        if value >= 35:
+        if value >= 40:
             return "var(--amber-9)"
         return "var(--red-9)"
+
+    @rx.var
+    def gauge_arc_len(self) -> float:
+        radius = 70.0
+        return math.pi * radius
+
+    @rx.var
+    def gauge_track_dasharray(self) -> str:
+        arc_len = self.gauge_arc_len
+        return f"{arc_len} {arc_len}"
+
+    @rx.var
+    def gauge_progress_dasharray(self) -> str:
+        arc_len = self.gauge_arc_len
+        progress_len = arc_len * (self.avg_percent_value / 100.0)
+        return f"{progress_len} {arc_len}"
 
     @rx.var
     def by_level_items(self) -> list[dict[str, Any]]:
