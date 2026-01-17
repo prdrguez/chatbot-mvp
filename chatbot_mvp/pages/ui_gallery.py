@@ -201,6 +201,61 @@ def _table_example() -> rx.Component:
     )
 
 
+def _charts_example() -> rx.Component:
+    data = [
+        {"name": "A", "value": 12},
+        {"name": "B", "value": 7},
+        {"name": "C", "value": 19},
+        {"name": "D", "value": 5},
+    ]
+    recharts = getattr(rx, "recharts", None)
+    if recharts is not None and hasattr(recharts, "bar_chart") and hasattr(
+        recharts, "pie_chart"
+    ):
+        return rx.vstack(
+            recharts.bar_chart(
+                recharts.bar(data_key="value", fill="var(--gray-600)"),
+                recharts.x_axis(data_key="name"),
+                recharts.y_axis(),
+                data=data,
+                height=180,
+                width="100%",
+            ),
+            recharts.pie_chart(
+                recharts.pie(
+                    data=data,
+                    data_key="value",
+                    name_key="name",
+                    fill="var(--gray-600)",
+                ),
+                height=180,
+                width="100%",
+            ),
+            spacing="3",
+            align="start",
+            width="100%",
+        )
+    progress = getattr(rx, "progress", None)
+    if progress is None:
+        return rx.text("Charts no disponibles", color="var(--gray-600)")
+    max_value = max(item["value"] for item in data)
+    return rx.vstack(
+        *[
+            rx.hstack(
+                rx.text(item["name"], width="15%"),
+                progress(value=item["value"], max=max_value, width="85%"),
+                spacing="2",
+                align="center",
+                width="100%",
+            )
+            for item in data
+        ],
+        spacing="2",
+        align="start",
+        width="100%",
+    )
+
+
 def ui_gallery() -> rx.Component:
     return layout(
         rx.container(
@@ -308,6 +363,11 @@ def ui_gallery() -> rx.Component:
                 _section(
                     "Navegacion",
                     _tabs_example(),
+                ),
+                _section(
+                    "Charts",
+                    _charts_example(),
+                    description="Ejemplos con recharts o fallback seguro.",
                 ),
                 _section(
                     "Feedback",
