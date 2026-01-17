@@ -79,7 +79,65 @@ def _kpi_card(
     title: str,
     items: list[dict[str, Any]],
     extra_count: int,
+    chart_data: list[dict[str, Any]] | None = None,
 ) -> rx.Component:
+    recharts = getattr(rx, "recharts", None)
+    if recharts is not None and hasattr(recharts, "bar_chart"):
+        label_list = getattr(recharts, "label_list", None)
+        tooltip = getattr(recharts, "tooltip", None)
+        bar_children = []
+        if label_list is not None:
+            bar_children.append(label_list(data_key="value", position="right"))
+        bar = recharts.bar(
+            *bar_children,
+            data_key="value",
+            fill=ADMIN_CHART_FILL,
+            radius=4,
+        )
+        chart_children = [
+            recharts.cartesian_grid(stroke="var(--gray-6)", stroke_dasharray="3 3"),
+            recharts.x_axis(type_="number", hide=True),
+            recharts.y_axis(
+                data_key="name",
+                type_="category",
+                width=110,
+                stroke="var(--gray-6)",
+            ),
+            bar,
+        ]
+        if tooltip is not None:
+            chart_children.append(tooltip())
+        return rx.card(
+            rx.vstack(
+                rx.heading(title, size="4"),
+                rx.cond(
+                    items,
+                    recharts.bar_chart(
+                        *chart_children,
+                        data=chart_data,
+                        layout="vertical",
+                        height=180,
+                        width="100%",
+                    ),
+                    rx.text("Sin datos"),
+                ),
+                rx.cond(
+                    extra_count > 0,
+                    rx.text(
+                        "+",
+                        extra_count,
+                        " mas",
+                        size=ADMIN_ROW_TEXT_SIZE,
+                        color=ADMIN_TEXT_COLOR,
+                    ),
+                    rx.box(),
+                ),
+                spacing="2",
+                align="start",
+                width="100%",
+            ),
+            width="100%",
+        )
     return rx.card(
         rx.vstack(
             rx.heading(title, size="4"),
@@ -518,6 +576,7 @@ def _admin_kpis_section() -> rx.Component:
                     "By Level",
                     AdminState.by_level_top_items,
                     AdminState.by_level_extra_count,
+                    chart_data=AdminState.by_level_chart,
                 ),
                 spacing="4",
                 align="start",
@@ -529,11 +588,13 @@ def _admin_kpis_section() -> rx.Component:
                     "Edad",
                     AdminState.edad_top_items,
                     AdminState.edad_extra_count,
+                    chart_data=AdminState.edad_chart,
                 ),
                 _kpi_card(
                     "Genero",
                     AdminState.genero_top_items,
                     AdminState.genero_extra_count,
+                    chart_data=AdminState.genero_chart,
                 ),
                 spacing="4",
                 align="start",
@@ -544,17 +605,20 @@ def _admin_kpis_section() -> rx.Component:
                 "Ciudad",
                 AdminState.ciudad_chart_items,
                 AdminState.ciudad_extra_count,
+                chart_data=AdminState.ciudad_chart,
             ),
             rx.hstack(
                 _kpi_card(
                     "Frecuencia IA",
                     AdminState.frecuencia_ia_top_items,
                     AdminState.frecuencia_ia_extra_count,
+                    chart_data=AdminState.frecuencia_ia_chart,
                 ),
                 _kpi_card(
                     "Nivel Educativo",
                     AdminState.nivel_educativo_top_items,
                     AdminState.nivel_educativo_extra_count,
+                    chart_data=AdminState.nivel_educativo_chart,
                 ),
                 spacing="4",
                 align="start",
@@ -566,11 +630,13 @@ def _admin_kpis_section() -> rx.Component:
                     "Ocupacion",
                     AdminState.ocupacion_top_items,
                     AdminState.ocupacion_extra_count,
+                    chart_data=AdminState.ocupacion_chart,
                 ),
                 _kpi_card(
                     "Area",
                     AdminState.area_top_items,
                     AdminState.area_extra_count,
+                    chart_data=AdminState.area_chart,
                 ),
                 spacing="4",
                 align="start",
@@ -581,6 +647,7 @@ def _admin_kpis_section() -> rx.Component:
                 "Emociones",
                 AdminState.emociones_top_items,
                 AdminState.emociones_extra_count,
+                chart_data=AdminState.emociones_chart,
             ),
             spacing="4",
             align="start",
