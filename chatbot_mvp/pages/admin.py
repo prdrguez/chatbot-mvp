@@ -56,17 +56,6 @@ def _mini_bar_row(item: dict[str, Any]) -> rx.Component:
 def _mini_chart(items: list[dict[str, Any]], extra_count: int) -> rx.Component:
     return rx.vstack(
         rx.foreach(items, _mini_bar_row),
-        rx.cond(
-            extra_count > 0,
-            rx.text(
-                "+",
-                extra_count,
-                " mas",
-                size=ADMIN_ROW_TEXT_SIZE,
-                color=ADMIN_TEXT_COLOR,
-            ),
-            rx.box(),
-        ),
         spacing="1",
         align="start",
         width="100%",
@@ -100,7 +89,7 @@ def _kpi_card(
             recharts.y_axis(
                 data_key="name",
                 type_="category",
-                width=110,
+                width=120,
                 stroke="var(--gray-6)",
             ),
             bar,
@@ -120,17 +109,6 @@ def _kpi_card(
                         width="100%",
                     ),
                     rx.text("Sin datos"),
-                ),
-                rx.cond(
-                    extra_count > 0,
-                    rx.text(
-                        "+",
-                        extra_count,
-                        " mas",
-                        size=ADMIN_ROW_TEXT_SIZE,
-                        color=ADMIN_TEXT_COLOR,
-                    ),
-                    rx.box(),
                 ),
                 spacing="2",
                 align="start",
