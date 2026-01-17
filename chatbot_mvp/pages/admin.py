@@ -579,11 +579,31 @@ def _admin_kpis_section() -> rx.Component:
                 width="100%",
                 wrap="wrap",
             ),
-            _kpi_card(
-                "Ciudad",
-                AdminState.ciudad_chart_items,
-                AdminState.ciudad_extra_count,
-                chart_data=AdminState.ciudad_chart,
+            rx.card(
+                rx.vstack(
+                    rx.heading("Ciudad", size="4"),
+                    rx.cond(
+                        AdminState.ciudad_items,
+                        rx.recharts.pie_chart(
+                            rx.recharts.pie(
+                                data=AdminState.ciudad_items,
+                                data_key="value",
+                                name_key="name",
+                                inner_radius="55%",
+                                outer_radius="75%",
+                                fill=ADMIN_CHART_FILL,
+                            ),
+                            rx.recharts.tooltip(),
+                            height=180,
+                            width="100%",
+                        ),
+                        rx.text("Sin datos"),
+                    ),
+                    spacing="2",
+                    align="start",
+                    width="100%",
+                ),
+                width="100%",
             ),
             rx.hstack(
                 _kpi_card(

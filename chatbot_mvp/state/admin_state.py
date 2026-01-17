@@ -183,7 +183,9 @@ class AdminState(rx.State):
 
     @rx.var
     def ciudad_items(self) -> list[dict[str, Any]]:
-        return _dict_to_items(self._breakdown("ciudad"))
+        data = self._breakdown("ciudad")
+        items = _top_with_others(data, 6)
+        return _items_to_chart(items)
 
     @rx.var
     def ciudad_top_items(self) -> list[dict[str, Any]]:
