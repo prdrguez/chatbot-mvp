@@ -1,7 +1,8 @@
 import reflex as rx
 
-from chatbot_mvp.config.settings import is_demo_mode
+from chatbot_mvp.config.settings import is_demo_mode, get_admin_password
 from chatbot_mvp.state.theme_state import ThemeState
+from chatbot_mvp.state.auth_state import AuthState
 from chatbot_mvp.ui.tokens import CONTENT_BOX_STYLE, HEADER_BOX_STYLE
 
 
@@ -33,8 +34,8 @@ def layout(content: rx.Component) -> rx.Component:
                     rx.box(),
                 ),
                 rx.cond(
-                    is_demo_mode(),
-                    rx.link("Admin", href="/admin", opacity="0.7"),
+                    get_admin_password(),  # Show admin link only if password is configured
+                    rx.link("Admin", href="/admin"),
                     rx.box(),
                 ),
                 spacing="4",
