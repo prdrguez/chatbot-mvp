@@ -18,8 +18,13 @@ from chatbot_mvp.config.settings import is_demo_mode
 class ResponseStrategy(Protocol):
     """Protocol for response generation strategies."""
     
-    def generate_response(self, message: str, context: Optional[Dict] = None) -> str:
-        """Generate a response for the given message."""
+    def generate_response(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> str:
+        """Generate a response for given message."""
         ...
 
 
@@ -27,15 +32,25 @@ class BaseResponseStrategy(ABC):
     """Base class for response strategies."""
     
     @abstractmethod
-    def generate_response(self, message: str, context: Optional[Dict] = None) -> str:
-        """Generate a response for the given message."""
+    def generate_response(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> str:
+        """Generate a response for given message."""
         pass
 
 
 class DemoResponseStrategy(BaseResponseStrategy):
     """Demo mode response strategy with hardcoded replies."""
     
-    def generate_response(self, message: str, context: Optional[Dict] = None) -> str:
+    def generate_response(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> str:
         """Generate demo response based on message content."""
         lower = message.lower()
         
@@ -58,18 +73,54 @@ class AIResponseStrategy(BaseResponseStrategy):
     
     def __init__(self, ai_client):
         self.ai_client = ai_client
+        self.last_response_time = 0
     
-    def generate_response(self, message: str, context: Optional[Dict] = None) -> str:
+    def generate_response(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> str:
         """Generate AI response for the given message."""
-        # TODO: Implement AI client integration
-        # This will be implemented in Commit 5
-        return "Respuesta de IA próximamente disponible."
+        try:
+            response = self.ai_client.generate_chat_response(
+                message=message,
+                conversation_history=conversation_history,
+                user_context=user_context,
+                max_tokens=150,
+                temperature=0.7
+            )
+            self.last_response_time = time.time()
+            return response
+            
+        except Exception as exc:
+            # Fallback to demo response on error
+            return f"Error con IA: {str(exc)}. Por favor, intenta de nuevo."
 
 
 class MessageProcessor:
     """Processes chat messages and manages conversation flow."""
     
-    def __init__(self, strategy: ResponseStrategy):
+    def __init__(self, strategy: BaseResponseStrategy):
+        self.strategy = strategy
+    
+    def process_message(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> str:
+        """Process a message and return the response."""
+        # Add processing delay for better UX
+        time.sleep(0.5)
+        
+        # Generate response using the configured strategy
+        response = self.strategy.generate_response(message, conversation_history, user_context)
+        
+        return response
+    
+    def change_strategy(self, strategy: BaseResponseStrategy):
+        """Change the response strategy."""
         self.strategy = strategy
     
     def process_message(
@@ -146,7 +197,7 @@ class ChatService:
         """Get a summary of the current conversation context."""
         return self.conversation_context.copy()
     
-    def change_response_strategy(self, strategy: ResponseStrategy):
+    def change_response_strategy(self, strategy: BaseResponseStrategy):
         """Change the response strategy used by the service."""
         self.processor.change_strategy(strategy)
 

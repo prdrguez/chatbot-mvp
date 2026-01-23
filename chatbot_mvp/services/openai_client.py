@@ -1,9 +1,188 @@
 import os
-from typing import Dict
+import time
+import logging
+from typing import Dict, List, Optional, Iterator
 
 from chatbot_mvp.config.settings import is_demo_mode
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+
+class AIClientError(Exception):
+    """Custom exception for AI client errors."""
+    pass
+
+
+class OpenAIChatClient:
+    """Enhanced OpenAI client for chat interactions."""
+    
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY", "").strip()
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+        self.client = None
+        self._initialized = False
+        
+        if self.api_key:
+            self._initialize_client()
+    
+    def _initialize_client(self) -> bool:
+        """Initialize the OpenAI client."""
+        if self._initialized:
+            return True
+            
+        try:
+            from openai import OpenAI
+            self.client = OpenAI(api_key=self.api_key)
+            self._initialized = True
+            logger.info("OpenAI client initialized successfully")
+            return True
+        except ImportError as exc:
+            logger.error(f"OpenAI SDK not installed: {exc}")
+            raise AIClientError(f"SDK de OpenAI no instalado: {exc}")
+        except Exception as exc:
+            logger.error(f"Failed to initialize OpenAI client: {exc}")
+            raise AIClientError(f"Error al inicializar cliente OpenAI: {exc}")
+    
+    def generate_chat_response(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None,
+        max_tokens: int = 150,
+        temperature: float = 0.7
+    ) -> str:
+        """
+        Generate a chat response using OpenAI.
+        
+        Args:
+            message: Current user message
+            conversation_history: List of previous messages
+            user_context: Optional user context information
+            max_tokens: Maximum response length
+            temperature: Response randomness (0-1)
+            
+        Returns:
+            Generated response text
+        """
+        if not self._initialized:
+            raise AIClientError("Cliente OpenAI no inicializado")
+        
+        try:
+            # Build messages for API
+            messages = self._build_chat_messages(
+                message, conversation_history, user_context
+            )
+            
+            # Generate response with retries
+            response = self._generate_with_retry(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
+            
+            return self._extract_response_text(response)
+            
+        except Exception as exc:
+            logger.error(f"Error generating chat response: {exc}")
+            raise AIClientError(f"Error al generar respuesta: {exc}")
+    
+    def _build_chat_messages(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> List[Dict]:
+        """Build message list for OpenAI API."""
+        messages = [
+            {
+                "role": "system",
+                "content": self._build_system_prompt(user_context)
+            }
+        ]
+        
+        # Add conversation history (last 10 messages to avoid token limits)
+        recent_history = conversation_history[-10:]
+        for msg in recent_history:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        # Add current message
+        messages.append({
+            "role": "user", 
+            "content": message
+        })
+        
+        return messages
+    
+    def _build_system_prompt(self, user_context: Optional[Dict] = None) -> str:
+        """Build system prompt based on user context."""
+        base_prompt = (
+            "Eres un asistente útil y amigable que responde en español. "
+            "Sé conciso pero informativo. Mantén un tono profesional pero cercano. "
+            "Si no sabes algo, admítelo claramente."
+        )
+        
+        if user_context:
+            context_info = []
+            if "demografia" in user_context:
+                demografia = user_context["demografia"]
+                if demografia.get("edad"):
+                    context_info.append(f"Edad: {demografia['edad']}")
+                if demografia.get("ocupacion"):
+                    context_info.append(f"Ocupación: {demografia['ocupacion']}")
+                if demografia.get("nivel_conocimiento_ia"):
+                    context_info.append(f"Nivel conocimiento IA: {demografia['nivel_conocimiento_ia']}")
+            
+            if context_info:
+                base_prompt += f"\n\nContexto del usuario:\n" + "\n".join(context_info)
+        
+        return base_prompt
+    
+    def _generate_with_retry(
+        self, 
+        messages: List[Dict], 
+        max_tokens: int, 
+        temperature: float,
+        max_retries: int = 3
+    ) -> Dict:
+        """Generate response with retry logic."""
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    timeout=30
+                )
+                return response
+                
+            except Exception as exc:
+                if attempt == max_retries - 1:
+                    raise
+                
+                wait_time = 2 ** attempt  # Exponential backoff
+                logger.warning(f"Attempt {attempt + 1} failed, retrying in {wait_time}s: {exc}")
+                time.sleep(wait_time)
+    
+    def _extract_response_text(self, response: Dict) -> str:
+        """Extract text from OpenAI response."""
+        try:
+            return response.choices[0].message.content.strip()
+        except (AttributeError, IndexError, KeyError) as exc:
+            logger.error(f"Failed to extract response text: {exc}")
+            raise AIClientError("Respuesta vacía o malformed")
+    
+    def is_available(self) -> bool:
+        """Check if the client is available."""
+        return self._initialized and self.client is not None
+
+
+# Legacy functions for evaluation compatibility
 def _demo_text(answers: Dict[str, str]) -> str:
     answered = sum(1 for value in answers.values() if value.strip())
     lines = [
@@ -74,3 +253,19 @@ def generate_evaluation(answers: Dict[str, str]) -> str:
         return text
     except Exception as exc:
         return f"Error al generar con IA: {exc}"
+
+
+# Factory function for creating chat clients
+def create_chat_client() -> Optional[OpenAIChatClient]:
+    """
+    Factory function to create a chat client.
+    
+    Returns:
+        OpenAIChatClient instance if configured, None otherwise
+    """
+    try:
+        client = OpenAIChatClient()
+        return client if client.is_available() else None
+    except Exception as exc:
+        logger.warning(f"Failed to create chat client: {exc}")
+        return None
