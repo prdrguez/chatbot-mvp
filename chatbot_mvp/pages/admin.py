@@ -683,4 +683,3 @@ def admin() -> rx.Component:
         ),
         rx.redirect("/login")
     )
-    )
