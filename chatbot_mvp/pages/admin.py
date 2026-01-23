@@ -6,6 +6,7 @@ from chatbot_mvp.components.layout import layout
 from chatbot_mvp.state.admin_state import AdminState
 from chatbot_mvp.state.theme_state import ThemeState
 from chatbot_mvp.state.simplified_theme_state import SimplifiedThemeState
+from chatbot_mvp.state.auth_state import AuthState
 from chatbot_mvp.ui.simplified_theme_components import simplified_theme_editor
 
 ADMIN_CHART_FILL = "var(--teal-9)"
