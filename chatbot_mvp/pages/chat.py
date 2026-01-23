@@ -32,69 +32,73 @@ def _message_row(message: dict[str, str]) -> rx.Component:
     )
 
 
+from chatbot_mvp.components.chat_sidebar import chat_sidebar
+
 def chat() -> rx.Component:
     return layout(
-        rx.vstack(
-            rx.hstack(
-                rx.heading("Chat", size="8"),
-                rx.button(
-                    "Reiniciar chat",
-                    on_click=ChatState.clear_chat,
-                    variant="outline",
+        rx.hstack(
+            chat_sidebar(),
+            rx.vstack(
+                rx.hstack(
+                    rx.heading("Chat", size="8"),
+                    rx.hstack(
+                        rx.button("Exportar", on_click=lambda: ChatState.export_session("json"), variant="outline", size="2"),
+                        rx.button(
+                            "Nuevo Chat",
+                            on_click=ChatState.clear_chat,
+                            variant="soft",
+                            size="2",
+                        ),
+                        spacing="2",
+                    ),
+                    justify="between",
+                    align="center",
+                    width="100%",
+                    max_width="800px",
                 ),
-                justify="between",
+                rx.box(
+                    rx.vstack(
+                        rx.foreach(ChatState.messages, _message_row),
+                        rx.cond(ChatState.typing, typing_indicator()),
+                        rx.cond(ChatState.loading, skeleton_loader()),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    **CHAT_SURFACE_STYLE,
+                    width="100%",
+                    max_width="800px",
+                    min_height="400px",
+                    max_height="60vh",
+                    overflow_y="auto",
+                ),
+                rx.hstack(
+                    rx.input(
+                        value=ChatState.current_input,
+                        on_change=ChatState.set_input,
+                        on_key_down=ChatState.handle_key_down,
+                        placeholder="Escribe tu mensaje...",
+                        width="100%",
+                        disabled=ChatState.loading,
+                        style=CHAT_INPUT_STYLE,
+                    ),
+                    rx.button(
+                        rx.icon("send", size=18),
+                        on_click=ChatState.send_message,
+                        **CHAT_SEND_BUTTON_STYLE,
+                        loading=ChatState.loading,
+                        disabled=ChatState.loading,
+                    ),
+                    spacing="2",
+                    width="100%",
+                    max_width="800px",
+                ),
+                spacing="6",
                 align="center",
                 width="100%",
-                max_width="640px",
+                padding="2rem 1rem",
             ),
-            rx.box(
-                rx.vstack(
-                    rx.foreach(ChatState.messages, _message_row),
-                    rx.cond(ChatState.typing, typing_indicator()),
-                    rx.cond(ChatState.loading, skeleton_loader()),
-                    spacing="3",
-                    width="100%",
-                ),
-                **CHAT_SURFACE_STYLE,
-                width="100%",
-                max_width="640px",
-                min_height="320px",
-                max_height="420px",
-                overflow_y="auto",
-            ),
-            rx.hstack(
-                rx.input(
-                    value=ChatState.current_input,
-                    on_change=ChatState.set_input,
-                    placeholder="Escribe tu mensaje...",
-                    width="100%",
-                    disabled=ChatState.loading,
-                ),
-                rx.button(
-                    "Enviar", 
-                    on_click=ChatState.send_message,
-                    background="var(--chat-bg-gradient)",
-                    box_shadow="var(--chat-shadow-sm)",
-                    transition="var(--chat-transition)",
-                    disabled=ChatState.loading,
-                    opacity=rx.cond(ChatState.loading, 0.6, 1),
-                    loading=ChatState.loading,
-                ),
-                spacing="2",
-                width="100%",
-                max_width="640px",
-            ),
-            # Add contextual quick replies after the input area
-            rx.cond(
-                ChatState.messages,
-                contextual_quick_replies(
-                    last_message=ChatState.messages[-1]["content"],
-                    on_reply=lambda reply: ChatState.handle_quick_reply(reply),
-                    disabled=ChatState.loading,
-                ),
-            ),
-            spacing="4",
-            align="start",
             width="100%",
+            align_items="stretch",
+            spacing="0",
         )
     )
