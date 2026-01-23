@@ -12,15 +12,39 @@ def mode_toggle() -> rx.Component:
     """
     return rx.hstack(
         rx.text("☀️", font_size="20px"),
-        rx.switch(
-            checked=SimplifiedThemeState.is_dark_mode,
-            on_change=lambda checked: SimplifiedThemeState.set_mode("dark" if checked else "light"),
-            size="3",
-            color_scheme="blue"
+        rx.button(
+            "☀️",
+            on_click=SimplifiedThemeState.set_mode("light"),
+            variant=rx.cond(
+                SimplifiedThemeState.is_light_mode,
+                "solid",
+                "soft"
+            ),
+            color_scheme=rx.cond(
+                SimplifiedThemeState.is_light_mode,
+                "yellow",
+                "gray"
+            ),
+            size="2",
+            margin_right="1"
         ),
-        rx.text("🌙", font_size="20px"),
+        rx.button(
+            "🌙", 
+            on_click=SimplifiedThemeState.set_mode("dark"),
+            variant=rx.cond(
+                SimplifiedThemeState.is_dark_mode,
+                "solid",
+                "soft"
+            ),
+            color_scheme=rx.cond(
+                SimplifiedThemeState.is_dark_mode,
+                "blue",
+                "gray"
+            ),
+            size="2"
+        ),
         align="center",
-        spacing="2"
+        spacing="1"
     )
 
 
