@@ -102,11 +102,17 @@ def border_radius_selector() -> rx.Component:
     """
     return rx.vstack(
         rx.text("Bordes Redondeados", font_weight="500", margin_bottom="3"),
-        rx.radio(
-            ["Pequeño", "Mediano", "Grande"],
+        rx.radio_group(
+            rx.vstack(
+                rx.radio_group.item("Pequeño", value="small"),
+                rx.radio_group.item("Mediano", value="medium"),
+                rx.radio_group.item("Grande", value="large"),
+                align_items="start",
+                spacing="2",
+            ),
             value=SimplifiedThemeState.border_radius,
-            on_change=lambda value: SimplifiedThemeState.set_border_radius("small" if value == "Pequeño" else "medium" if value == "Mediano" else "large"),
-            default_value="Mediano",
+            on_change=SimplifiedThemeState.set_border_radius,
+            default_value="medium",
             size="2"
         ),
         spacing="1",
