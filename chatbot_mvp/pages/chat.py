@@ -69,9 +69,6 @@ def chat() -> rx.Component:
                     placeholder="Escribe tu mensaje...",
                     width="100%",
                     disabled=ChatState.loading,
-                    type="text",
-                    spell_check=False,
-                    auto_complete="off",
                 ),
                 rx.button(
                     "Enviar", 
