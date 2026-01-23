@@ -2,7 +2,13 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.state.chat_state import ChatState
-from chatbot_mvp.ui.tokens import CHAT_SURFACE_STYLE
+from chatbot_mvp.ui.tokens import (
+    CHAT_SURFACE_STYLE,
+    CHAT_MESSAGE_USER_STYLE,
+    CHAT_MESSAGE_ASSISTANT_STYLE,
+    CHAT_INPUT_STYLE,
+    CHAT_SEND_BUTTON_STYLE,
+)
 
 
 def _message_row(message: dict[str, str]) -> rx.Component:
@@ -10,13 +16,17 @@ def _message_row(message: dict[str, str]) -> rx.Component:
     return rx.hstack(
         rx.box(
             rx.text(message["content"], white_space="pre-wrap"),
-            background=rx.cond(is_user, "var(--blue-100)", "var(--gray-100)"),
             padding="0.75rem 1rem",
             border_radius="0.75rem",
             max_width="75%",
+            background=rx.cond(is_user, "var(--chat-user-bg)", "var(--chat-assistant-bg)"),
+            color=rx.cond(is_user, "white", "var(--gray-800)"),
+            box_shadow=rx.cond(is_user, "var(--chat-shadow-md)", "var(--chat-shadow-sm)"),
+            transition="var(--chat-transition)",
         ),
         justify=rx.cond(is_user, "end", "start"),
         width="100%",
+        animation="fadeIn 0.3s ease-in-out",
     )
 
 
@@ -52,10 +62,19 @@ def chat() -> rx.Component:
                 rx.input(
                     value=ChatState.current_input,
                     on_change=ChatState.set_input,
-                    placeholder="Escribe tu mensaje",
+                    placeholder="Escribe tu mensaje...",
                     width="100%",
+                    box_shadow="var(--chat-shadow-sm)",
+                    border="var(--chat-border-modern)",
+                    transition="var(--chat-transition)",
                 ),
-                rx.button("Enviar", on_click=ChatState.send_message),
+                rx.button(
+                    "Enviar", 
+                    on_click=ChatState.send_message,
+                    background="var(--chat-bg-gradient)",
+                    box_shadow="var(--chat-shadow-sm)",
+                    transition="var(--chat-transition)",
+                ),
                 spacing="2",
                 width="100%",
                 max_width="640px",
