@@ -102,7 +102,7 @@ def border_radius_selector() -> rx.Component:
     """
     return rx.vstack(
         rx.text("Bordes Redondeados", font_weight="500", margin_bottom="3"),
-        rx.radio_group(
+        rx.radio_group.root(
             rx.vstack(
                 rx.radio_group.item("Pequeño", value="small"),
                 rx.radio_group.item("Mediano", value="medium"),
