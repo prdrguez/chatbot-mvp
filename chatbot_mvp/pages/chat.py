@@ -90,10 +90,10 @@ def chat() -> rx.Component:
             ),
             # Add contextual quick replies after the input area
             rx.cond(
-                ChatState.messages.length() > 0,
+                ChatState.messages,
                 contextual_quick_replies(
                     last_message=ChatState.messages[-1]["content"],
-                    on_reply=ChatState.handle_quick_reply,
+                    on_reply=lambda reply: ChatState.handle_quick_reply(reply),
                     disabled=ChatState.loading,
                 ),
             ),

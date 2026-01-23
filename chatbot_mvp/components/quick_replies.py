@@ -9,7 +9,7 @@ def quick_reply_button(text: str, on_click: Callable, disabled: bool = False) ->
         on_click=on_click,
         disabled=disabled,
         variant="outline",
-        size="sm",
+        
         background="white",
         border="1px solid var(--gray-300)",
         color="var(--gray-700)",
@@ -40,8 +40,8 @@ def quick_replies_container(
     return rx.cond(
         len(replies) > 0,
         rx.vstack(
-            rx.text("Sugerencias:", size="sm", color="var(--gray-600)", margin_bottom="0.5rem"),
-            rx.wrap(
+            rx.text("Sugerencias:", font_size="0.875rem", color="var(--gray-600)", margin_bottom="0.5rem"),
+            rx.hstack(
                 rx.foreach(
                     replies,
                     lambda reply: quick_reply_button(
@@ -51,6 +51,7 @@ def quick_replies_container(
                     ),
                 ),
                 spacing="1",
+                flex_wrap="wrap",
                 width="100%",
             ),
             spacing="1",

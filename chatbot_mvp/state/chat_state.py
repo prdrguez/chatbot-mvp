@@ -1,6 +1,6 @@
 import reflex as rx
 
-from chatbot_mvp.config.settings import is_demo_mode
+from chatbot_mvp.services.chat_service import create_chat_service
 
 
 class ChatState(rx.State):
@@ -8,6 +8,18 @@ class ChatState(rx.State):
     current_input: str = ""
     loading: bool = False
     typing: bool = False
+    user_context: dict = {}
+    session_id: str = ""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize chat service
+        self.chat_service = create_chat_service()
+        
+        # Generate session ID
+        import uuid
+        import time
+        self.session_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
 
     def set_input(self, value: str) -> None:
         self.current_input = value
@@ -26,28 +38,17 @@ class ChatState(rx.State):
         self.loading = True
         self.typing = True
 
-        # Simulate processing delay for better UX
-        import time
-        time.sleep(0.5)
-
-        lower = content.lower()
-        if "hola" in lower or "buenas" in lower:
-            reply = "Hola! Contame cual es tu objetivo principal."
-        elif "precio" in lower:
-            if is_demo_mode():
-                reply = "Esto es un demo. Pronto se conectara a IA para dar precios."
-            else:
-                reply = (
-                    "Aun no hay modulo de precios. Contame que necesitas "
-                    "y lo armamos."
-                )
-        else:
-            reply = "Entendido. Contame un poco mas para ayudarte mejor."
+        # Get response from chat service
+        response = self.chat_service.send_message(
+            message=content,
+            conversation_history=self.messages,
+            user_context=self.user_context,
+        )
 
         # Add assistant response
         self.messages = [
             *self.messages,
-            {"role": "assistant", "content": reply},
+            {"role": "assistant", "content": response},
         ]
         self.loading = False
         self.typing = False
@@ -62,3 +63,19 @@ class ChatState(rx.State):
         self.current_input = ""
         self.loading = False
         self.typing = False
+        
+        # Create new session
+        import uuid
+        import time
+        self.session_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
+        
+        # Reset chat service
+        self.chat_service = create_chat_service()
+
+    def set_user_context(self, context: dict) -> None:
+        """Set user context information."""
+        self.user_context = context
+        
+    def get_chat_context(self) -> dict:
+        """Get current chat context information."""
+        return self.chat_service.get_context_summary()
