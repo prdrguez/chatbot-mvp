@@ -3,16 +3,21 @@ Chat service module for handling business logic and AI integration.
 
 This module separates chat logic from UI state, implementing:
 - Response generation strategies
-- AI client integration
+- AI client integration (OpenAI, Gemini, Demo)
 - Message processing
 - Context management
 """
 
 import time
+import logging
 from typing import Dict, List, Optional, Protocol
 from abc import ABC, abstractmethod
 
-from chatbot_mvp.config.settings import is_demo_mode
+from chatbot_mvp.config.settings import get_ai_provider
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class ResponseStrategy(Protocol):
@@ -69,9 +74,15 @@ class DemoResponseStrategy(BaseResponseStrategy):
 
 
 class AIResponseStrategy(BaseResponseStrategy):
-    """AI-powered response strategy using OpenAI."""
+    """AI-powered response strategy using configurable AI client (OpenAI/Gemini)."""
     
     def __init__(self, ai_client):
+        """
+        Initialize AI response strategy.
+        
+        Args:
+            ai_client: Configured AI client (OpenAI or Gemini)
+        """
         self.ai_client = ai_client
         self.last_response_time = 0
     
@@ -81,7 +92,17 @@ class AIResponseStrategy(BaseResponseStrategy):
         conversation_history: List[Dict[str, str]],
         user_context: Optional[Dict] = None
     ) -> str:
-        """Generate AI response for the given message."""
+        """
+        Generate AI response for given message.
+        
+        Args:
+            message: User message
+            conversation_history: Previous conversation messages
+            user_context: Optional user context
+            
+        Returns:
+            AI-generated response or error fallback
+        """
         try:
             response = self.ai_client.generate_chat_response(
                 message=message,
@@ -94,8 +115,9 @@ class AIResponseStrategy(BaseResponseStrategy):
             return response
             
         except Exception as exc:
-            # Fallback to demo response on error
-            return f"Error con IA: {str(exc)}. Por favor, intenta de nuevo."
+            # Fallback to demo response on AI error
+            logger.warning(f"AI response failed, using fallback: {exc}")
+            return "Lo siento, tuve un problema para responder. ¿Podrías reformular tu pregunta?"
 
 
 class MessageProcessor:
@@ -110,36 +132,21 @@ class MessageProcessor:
         conversation_history: List[Dict[str, str]],
         user_context: Optional[Dict] = None
     ) -> str:
-        """Process a message and return the response."""
+        """Process a message and return response."""
         # Add processing delay for better UX
         time.sleep(0.5)
         
         # Generate response using the configured strategy
-        response = self.strategy.generate_response(message, conversation_history, user_context)
+        response = self.strategy.generate_response(
+            message, 
+            conversation_history, 
+            user_context
+        )
         
         return response
     
     def change_strategy(self, strategy: BaseResponseStrategy):
-        """Change the response strategy."""
-        self.strategy = strategy
-    
-    def process_message(
-        self, 
-        message: str, 
-        conversation_history: List[Dict[str, str]],
-        user_context: Optional[Dict] = None
-    ) -> str:
-        """Process a message and return the response."""
-        # Add processing delay for better UX
-        time.sleep(0.5)
-        
-        # Generate response using the configured strategy
-        response = self.strategy.generate_response(message, user_context)
-        
-        return response
-    
-    def change_strategy(self, strategy: ResponseStrategy):
-        """Change the response strategy."""
+        """Change response strategy."""
         self.strategy = strategy
 
 
@@ -147,14 +154,35 @@ class ChatService:
     """Main service for chat functionality."""
     
     def __init__(self, ai_client=None):
-        # Initialize appropriate strategy based on configuration
-        if is_demo_mode():
-            strategy = DemoResponseStrategy()
-        else:
-            strategy = AIResponseStrategy(ai_client) if ai_client else DemoResponseStrategy()
-        
+        # Initialize appropriate strategy based on provider configuration
+        strategy = self._create_strategy(ai_client)
         self.processor = MessageProcessor(strategy)
         self.conversation_context: Dict = {}
+    
+    def _create_strategy(self, ai_client=None) -> BaseResponseStrategy:
+        """
+        Create appropriate response strategy based on configuration.
+        
+        Args:
+            ai_client: Optional AI client instance
+            
+        Returns:
+            Configured response strategy
+        """
+        provider = get_ai_provider()
+        
+        if provider == "demo":
+            logger.info("Using demo response strategy")
+            return DemoResponseStrategy()
+        elif provider == "openai" and ai_client:
+            logger.info("Using OpenAI response strategy")
+            return AIResponseStrategy(ai_client)
+        elif provider == "gemini" and ai_client:
+            logger.info("Using Gemini response strategy")
+            return AIResponseStrategy(ai_client)
+        else:
+            logger.warning(f"Provider {provider} not available, falling back to demo")
+            return DemoResponseStrategy()
     
     def send_message(
         self, 
@@ -163,7 +191,7 @@ class ChatService:
         user_context: Optional[Dict] = None
     ) -> str:
         """
-        Send a message and get the response.
+        Send a message and get response.
         
         Args:
             message: The user's message
@@ -176,8 +204,12 @@ class ChatService:
         # Update conversation context
         self._update_context(conversation_history, user_context)
         
-        # Process the message
-        response = self.processor.process_message(message, conversation_history, user_context)
+        # Process message
+        response = self.processor.process_message(
+            message, 
+            conversation_history, 
+            user_context
+        )
         
         return response
     
@@ -186,7 +218,7 @@ class ChatService:
         conversation_history: List[Dict[str, str]], 
         user_context: Optional[Dict]
     ):
-        """Update the internal conversation context."""
+        """Update internal conversation context."""
         self.conversation_context = {
             "message_count": len(conversation_history),
             "last_message_time": time.time(),
@@ -194,11 +226,11 @@ class ChatService:
         }
     
     def get_context_summary(self) -> Dict:
-        """Get a summary of the current conversation context."""
+        """Get a summary of current conversation context."""
         return self.conversation_context.copy()
     
     def change_response_strategy(self, strategy: BaseResponseStrategy):
-        """Change the response strategy used by the service."""
+        """Change response strategy used by the service."""
         self.processor.change_strategy(strategy)
 
 
@@ -206,6 +238,9 @@ class ChatService:
 def create_chat_service(ai_client=None) -> ChatService:
     """
     Factory function to create a ChatService instance.
+    
+    This function now determines the AI provider automatically based on
+    environment configuration and creates the appropriate service.
     
     Args:
         ai_client: Optional AI client for AI responses

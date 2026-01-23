@@ -2,6 +2,13 @@ import reflex as rx
 
 from chatbot_mvp.services.chat_service import create_chat_service
 from chatbot_mvp.services.chat_persistence import create_chat_persistence
+from chatbot_mvp.services.openai_client import create_chat_client
+from chatbot_mvp.services.gemini_client import create_gemini_client
+from chatbot_mvp.config.settings import get_ai_provider
+
+# Global service instances to avoid state variable issues
+_chat_service_global = None
+_chat_persistence_global = None
 
 
 class ChatState(rx.State):
@@ -13,12 +20,26 @@ class ChatState(rx.State):
     session_id: str = ""
     auto_save_enabled: bool = True
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._initialize_services()
+    
     def _initialize_services(self):
-        """Initialize chat services if not already initialized."""
-        if not hasattr(self, '_services_initialized'):
-            self.chat_service = create_chat_service()
-            self.chat_persistence = create_chat_persistence()
-            self._services_initialized = True
+        """Initialize global services if not already initialized."""
+        global _chat_service_global, _chat_persistence_global
+        
+        if _chat_service_global is None:
+            # Initialize appropriate AI client based on provider
+            ai_client = None
+            provider = get_ai_provider()
+            
+            if provider == "openai":
+                ai_client = create_chat_client()
+            elif provider == "gemini":
+                ai_client = create_gemini_client()
+            
+            _chat_service_global = create_chat_service(ai_client)
+            _chat_persistence_global = create_chat_persistence()
         
         # Generate session ID if not set
         if not self.session_id:
@@ -27,14 +48,16 @@ class ChatState(rx.State):
             self.session_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
     
     def _get_chat_service(self):
-        """Get chat service, initializing if needed."""
+        """Get chat service from global."""
+        global _chat_service_global
         self._initialize_services()
-        return self.chat_service
+        return _chat_service_global or create_chat_service()
     
     def _get_chat_persistence(self):
-        """Get chat persistence, initializing if needed."""
+        """Get chat persistence from global."""
+        global _chat_persistence_global
         self._initialize_services()
-        return self.chat_persistence
+        return _chat_persistence_global or create_chat_persistence()
 
     def set_input(self, value: str) -> None:
         self.current_input = value
