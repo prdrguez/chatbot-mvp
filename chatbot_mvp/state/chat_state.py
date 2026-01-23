@@ -7,6 +7,7 @@ class ChatState(rx.State):
     messages: list[dict[str, str]] = []
     current_input: str = ""
     loading: bool = False
+    typing: bool = False
 
     def set_input(self, value: str) -> None:
         self.current_input = value
@@ -15,6 +16,19 @@ class ChatState(rx.State):
         content = self.current_input.strip()
         if not content:
             return
+
+        # Add user message immediately
+        self.messages = [
+            *self.messages,
+            {"role": "user", "content": content},
+        ]
+        self.current_input = ""
+        self.loading = True
+        self.typing = True
+
+        # Simulate processing delay for better UX
+        import time
+        time.sleep(0.5)
 
         lower = content.lower()
         if "hola" in lower or "buenas" in lower:
@@ -30,12 +44,13 @@ class ChatState(rx.State):
         else:
             reply = "Entendido. Contame un poco mas para ayudarte mejor."
 
+        # Add assistant response
         self.messages = [
             *self.messages,
-            {"role": "user", "content": content},
             {"role": "assistant", "content": reply},
         ]
-        self.current_input = ""
+        self.loading = False
+        self.typing = False
 
     def clear_chat(self) -> None:
         self.messages = []

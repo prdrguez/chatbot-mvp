@@ -1,6 +1,7 @@
 import reflex as rx
 
 from chatbot_mvp.components.layout import layout
+from chatbot_mvp.components.typing_indicator import typing_indicator, skeleton_loader
 from chatbot_mvp.state.chat_state import ChatState
 from chatbot_mvp.ui.tokens import (
     CHAT_SURFACE_STYLE,
@@ -48,6 +49,8 @@ def chat() -> rx.Component:
             rx.box(
                 rx.vstack(
                     rx.foreach(ChatState.messages, _message_row),
+                    rx.cond(ChatState.typing, typing_indicator()),
+                    rx.cond(ChatState.loading, skeleton_loader()),
                     spacing="3",
                     width="100%",
                 ),
@@ -67,6 +70,8 @@ def chat() -> rx.Component:
                     box_shadow="var(--chat-shadow-sm)",
                     border="var(--chat-border-modern)",
                     transition="var(--chat-transition)",
+                    disabled=ChatState.loading,
+                    opacity=rx.cond(ChatState.loading, 0.6, 1),
                 ),
                 rx.button(
                     "Enviar", 
@@ -74,6 +79,9 @@ def chat() -> rx.Component:
                     background="var(--chat-bg-gradient)",
                     box_shadow="var(--chat-shadow-sm)",
                     transition="var(--chat-transition)",
+                    disabled=ChatState.loading,
+                    opacity=rx.cond(ChatState.loading, 0.6, 1),
+                    loading=ChatState.loading,
                 ),
                 spacing="2",
                 width="100%",

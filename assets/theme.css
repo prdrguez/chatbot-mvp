@@ -82,3 +82,12 @@
 .chat-typing {
   animation: pulse 1.5s ease-in-out infinite;
 }
+
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+}
