@@ -1,6 +1,7 @@
 import reflex as rx
 
 from chatbot_mvp.services.chat_service import create_chat_service
+from chatbot_mvp.services.chat_persistence import create_chat_persistence
 
 
 class ChatState(rx.State):
@@ -10,11 +11,13 @@ class ChatState(rx.State):
     typing: bool = False
     user_context: dict = {}
     session_id: str = ""
+    auto_save_enabled: bool = True
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Initialize chat service
+        # Initialize chat service and persistence
         self.chat_service = create_chat_service()
+        self.chat_persistence = create_chat_persistence()
         
         # Generate session ID
         import uuid
@@ -52,6 +55,26 @@ class ChatState(rx.State):
         ]
         self.loading = False
         self.typing = False
+        
+        # Auto-save conversation
+        if self.auto_save_enabled:
+            self._save_conversation()
+
+    def _save_conversation(self) -> None:
+        """Save current conversation to persistent storage."""
+        try:
+            self.chat_persistence.save_session(
+                session_id=self.session_id,
+                messages=self.messages,
+                user_context=self.user_context,
+                metadata={
+                    "auto_save": True,
+                    "message_count": len(self.messages),
+                }
+            )
+        except Exception:
+            # Silently fail to avoid disrupting user experience
+            pass
 
     def handle_quick_reply(self, reply: str) -> None:
         """Handle quick reply button clicks."""
@@ -79,3 +102,37 @@ class ChatState(rx.State):
     def get_chat_context(self) -> dict:
         """Get current chat context information."""
         return self.chat_service.get_context_summary()
+    
+    def load_session(self, session_id: str) -> bool:
+        """Load a previous chat session."""
+        try:
+            session_data = self.chat_persistence.load_session(session_id)
+            if session_data:
+                self.session_id = session_id
+                self.messages = session_data.get("messages", [])
+                self.user_context = session_data.get("user_context", {})
+                return True
+            return False
+        except Exception:
+            return False
+    
+    def export_session(self, format_type: str = "json") -> str:
+        """Export current session in specified format."""
+        try:
+            return self.chat_persistence.export_session(
+                self.session_id, 
+                format_type
+            ) or "No data available for export"
+        except Exception:
+            return "Error exporting session"
+    
+    def get_recent_sessions(self, limit: int = 10) -> list:
+        """Get recent chat sessions."""
+        try:
+            return self.chat_persistence.get_recent_sessions(limit)
+        except Exception:
+            return []
+    
+    def toggle_auto_save(self) -> None:
+        """Toggle auto-save functionality."""
+        self.auto_save_enabled = not self.auto_save_enabled
