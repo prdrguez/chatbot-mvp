@@ -13,16 +13,28 @@ class ChatState(rx.State):
     session_id: str = ""
     auto_save_enabled: bool = True
     
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Initialize chat service and persistence
-        self.chat_service = create_chat_service()
-        self.chat_persistence = create_chat_persistence()
+    def _initialize_services(self):
+        """Initialize chat services if not already initialized."""
+        if not hasattr(self, '_services_initialized'):
+            self.chat_service = create_chat_service()
+            self.chat_persistence = create_chat_persistence()
+            self._services_initialized = True
         
-        # Generate session ID
-        import uuid
-        import time
-        self.session_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
+        # Generate session ID if not set
+        if not self.session_id:
+            import uuid
+            import time
+            self.session_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    
+    def _get_chat_service(self):
+        """Get chat service, initializing if needed."""
+        self._initialize_services()
+        return self.chat_service
+    
+    def _get_chat_persistence(self):
+        """Get chat persistence, initializing if needed."""
+        self._initialize_services()
+        return self.chat_persistence
 
     def set_input(self, value: str) -> None:
         self.current_input = value
@@ -42,7 +54,8 @@ class ChatState(rx.State):
         self.typing = True
 
         # Get response from chat service
-        response = self.chat_service.send_message(
+        chat_service = self._get_chat_service()
+        response = chat_service.send_message(
             message=content,
             conversation_history=self.messages,
             user_context=self.user_context,
@@ -63,7 +76,8 @@ class ChatState(rx.State):
     def _save_conversation(self) -> None:
         """Save current conversation to persistent storage."""
         try:
-            self.chat_persistence.save_session(
+            chat_persistence = self._get_chat_persistence()
+            chat_persistence.save_session(
                 session_id=self.session_id,
                 messages=self.messages,
                 user_context=self.user_context,
@@ -92,8 +106,9 @@ class ChatState(rx.State):
         import time
         self.session_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
         
-        # Reset chat service
-        self.chat_service = create_chat_service()
+        # Reset services
+        if hasattr(self, '_services_initialized'):
+            delattr(self, '_services_initialized')
 
     def set_user_context(self, context: dict) -> None:
         """Set user context information."""
@@ -101,12 +116,14 @@ class ChatState(rx.State):
         
     def get_chat_context(self) -> dict:
         """Get current chat context information."""
-        return self.chat_service.get_context_summary()
+        chat_service = self._get_chat_service()
+        return chat_service.get_context_summary()
     
     def load_session(self, session_id: str) -> bool:
         """Load a previous chat session."""
         try:
-            session_data = self.chat_persistence.load_session(session_id)
+            chat_persistence = self._get_chat_persistence()
+            session_data = chat_persistence.load_session(session_id)
             if session_data:
                 self.session_id = session_id
                 self.messages = session_data.get("messages", [])
@@ -119,7 +136,8 @@ class ChatState(rx.State):
     def export_session(self, format_type: str = "json") -> str:
         """Export current session in specified format."""
         try:
-            return self.chat_persistence.export_session(
+            chat_persistence = self._get_chat_persistence()
+            return chat_persistence.export_session(
                 self.session_id, 
                 format_type
             ) or "No data available for export"
@@ -129,7 +147,8 @@ class ChatState(rx.State):
     def get_recent_sessions(self, limit: int = 10) -> list:
         """Get recent chat sessions."""
         try:
-            return self.chat_persistence.get_recent_sessions(limit)
+            chat_persistence = self._get_chat_persistence()
+            return chat_persistence.get_recent_sessions(limit)
         except Exception:
             return []
     

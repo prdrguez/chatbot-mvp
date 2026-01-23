@@ -70,51 +70,18 @@ def contextual_quick_replies(
 ) -> rx.Component:
     """Generate contextual quick replies based on last message."""
     
-    # Define reply patterns based on message content
-    reply_patterns: Dict[str, List[str]] = {
-        "hola": [
-            "¿Qué servicios ofrecen?",
-            "¿Cuáles son sus precios?", 
-            "Necesito ayuda técnica",
-            "Hablar con un humano"
-        ],
-        "precio": [
-            "Planes básicos",
-            "Planes premium",
-            "Descuentos disponibles",
-            "Facturación mensual"
-        ],
-        "servicio": [
-            "Desarrollo web",
-            "Aplicaciones móviles",
-            "Consultoría",
-            "Soporte técnico"
-        ],
-        "ayuda": [
-            "Guía de inicio",
-            "FAQ",
-            "Contacto soporte",
-            "Video tutoriales"
-        ],
-        "default": [
-            "Contarme más",
-            "¿Cómo funciona?",
-            "Empezar ahora",
-            "Ver ejemplos"
-        ]
-    }
+    # Default quick replies - always show these for simplicity
+    default_replies = [
+        "Contarme más",
+        "¿Cómo funciona?",
+        "Empezar ahora", 
+        "Ver ejemplos"
+    ]
     
-    # Determine which replies to show based on last message content
-    last_lower = last_message.lower()
-    selected_replies = reply_patterns["default"]
-    
-    for keyword, replies in reply_patterns.items():
-        if keyword in last_lower and keyword != "default":
-            selected_replies = replies
-            break
-    
+    # For now, use simple default replies to avoid Var compatibility issues
+    # TODO: Implement contextual replies with proper Var handling
     return quick_replies_container(
-        replies=selected_replies,
+        replies=default_replies,
         on_reply=on_reply,
         disabled=disabled,
     )
