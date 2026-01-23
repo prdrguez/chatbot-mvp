@@ -29,7 +29,7 @@ def color_picker(label: str, color_value: str, color_type: str) -> rx.Component:
     Color picker with preview.
     
     Args:
-        label: Label for the color picker
+        label: Label for color picker
         color_value: Current color value
         color_type: Type of color (primary/secondary/accent)
         
@@ -53,9 +53,9 @@ def color_picker(label: str, color_value: str, color_type: str) -> rx.Component:
             # Color input
             rx.input(
                 value=color_value,
-                on_change=lambda value: SimplifiedThemeState.set_color(color_type, value),
+                on_change=lambda v: SimplifiedThemeState.set_color(color_type, v),
                 placeholder="#000000",
-                type="color",
+                type_="color",
                 margin_left="3",
                 size="2",
                 width="120px"
@@ -80,29 +80,15 @@ def border_radius_selector() -> rx.Component:
         rx.text("Bordes Redondeados", font_weight="500", margin_bottom="3"),
         rx.radio.group(
             rx.vstack(
-                rx.radio(
-                    "Pequeño",
-                    value=SimplifiedThemeState.border_radius,
-                    on_change=lambda value: SimplifiedThemeState.set_border_radius("small"),
-                    value="small"
-                ),
-                rx.radio(
-                    "Mediano", 
-                    value=SimplifiedThemeState.border_radius,
-                    on_change=lambda value: SimplifiedThemeState.set_border_radius("medium"),
-                    value="medium"
-                ),
-                rx.radio(
-                    "Grande",
-                    value=SimplifiedThemeState.border_radius,
-                    on_change=lambda value: SimplifiedThemeState.set_border_radius("large"),
-                    value="large"
-                ),
+                rx.radio("Pequeño", value="small"),
+                rx.radio("Mediano", value="medium"),
+                rx.radio("Grande", value="large"),
                 spacing="2",
                 direction="row",
                 width="100%"
             ),
             value=SimplifiedThemeState.border_radius,
+            on_change=SimplifiedThemeState.set_border_radius,
             default_value="medium",
             size="2"
         ),
