@@ -14,7 +14,7 @@ def mode_toggle() -> rx.Component:
         rx.text("☀️", font_size="20px"),
         rx.button(
             "☀️",
-            on_click=SimplifiedThemeState.set_mode("light"),
+            on_click=lambda: SimplifiedThemeState.set_mode("light"),
             variant=rx.cond(
                 SimplifiedThemeState.is_light_mode,
                 "solid",
@@ -30,7 +30,7 @@ def mode_toggle() -> rx.Component:
         ),
         rx.button(
             "🌙", 
-            on_click=SimplifiedThemeState.set_mode("dark"),
+            on_click=lambda: SimplifiedThemeState.set_mode("dark"),
             variant=rx.cond(
                 SimplifiedThemeState.is_dark_mode,
                 "solid",
@@ -103,17 +103,10 @@ def border_radius_selector() -> rx.Component:
     return rx.vstack(
         rx.text("Bordes Redondeados", font_weight="500", margin_bottom="3"),
         rx.radio(
-            rx.vstack(
-                rx.radio("Pequeño", value="small"),
-                rx.radio("Mediano", value="medium"),
-                rx.radio("Grande", value="large"),
-                spacing="2",
-                direction="row",
-                width="100%"
-            ),
+            ["Pequeño", "Mediano", "Grande"],
             value=SimplifiedThemeState.border_radius,
-            on_change=SimplifiedThemeState.set_border_radius,
-            default_value="medium",
+            on_change=lambda value: SimplifiedThemeState.set_border_radius("small" if value == "Pequeño" else "medium" if value == "Mediano" else "large"),
+            default_value="Mediano",
             size="2"
         ),
         spacing="1",
@@ -132,7 +125,7 @@ def action_buttons() -> rx.Component:
         # Reset button
         rx.button(
             "Resetear",
-            on_click=SimplifiedThemeState.reset_theme,
+            on_click=lambda: SimplifiedThemeState.reset_theme(),
             variant="soft",
             color_scheme="gray",
             size="2",
@@ -142,7 +135,7 @@ def action_buttons() -> rx.Component:
         # Save button
         rx.button(
             "Guardar",
-            on_click=SimplifiedThemeState.save_theme,
+            on_click=lambda: SimplifiedThemeState.save_theme(),
             variant="solid",
             color_scheme="blue", 
             size="2",
