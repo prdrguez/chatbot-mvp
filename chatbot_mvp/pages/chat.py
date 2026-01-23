@@ -2,6 +2,7 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.components.typing_indicator import typing_indicator, skeleton_loader
+from chatbot_mvp.components.quick_replies import contextual_quick_replies
 from chatbot_mvp.state.chat_state import ChatState
 from chatbot_mvp.ui.tokens import (
     CHAT_SURFACE_STYLE,
@@ -86,6 +87,15 @@ def chat() -> rx.Component:
                 spacing="2",
                 width="100%",
                 max_width="640px",
+            ),
+            # Add contextual quick replies after the input area
+            rx.cond(
+                ChatState.messages.length() > 0,
+                contextual_quick_replies(
+                    last_message=ChatState.messages[-1]["content"],
+                    on_reply=ChatState.handle_quick_reply,
+                    disabled=ChatState.loading,
+                ),
             ),
             spacing="4",
             align="start",

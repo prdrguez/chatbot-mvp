@@ -52,7 +52,13 @@ class ChatState(rx.State):
         self.loading = False
         self.typing = False
 
+    def handle_quick_reply(self, reply: str) -> None:
+        """Handle quick reply button clicks."""
+        self.current_input = reply
+        self.send_message()
+
     def clear_chat(self) -> None:
         self.messages = []
         self.current_input = ""
         self.loading = False
+        self.typing = False
