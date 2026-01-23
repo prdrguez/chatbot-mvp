@@ -10,18 +10,27 @@
   --chat-radius: 0.75rem;
   --chat-surface-padding: 1rem;
   
-  /* Modern chat design tokens */
-  --chat-bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --chat-shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  --chat-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --chat-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --chat-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  --chat-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --chat-message-scale: scale(1.02);
-  --chat-hover-lift: translateY(-2px);
-  --chat-user-bg: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  --chat-assistant-bg: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-  --chat-border-modern: 1px solid rgba(0, 0, 0, 0.05);
+  /* Glassmorphism & Premium Design */
+  --app-glass-bg: rgba(255, 255, 255, 0.75);
+  --app-glass-border: 1px solid rgba(255, 255, 255, 0.4);
+  --app-glass-blur: blur(16px);
+  --app-glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  
+  --chat-bg-gradient: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+  --chat-user-bg: var(--chat-bg-gradient);
+  --chat-assistant-bg: rgba(241, 245, 249, 0.8);
+  --chat-border-modern: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Chat animations */

@@ -23,7 +23,8 @@ app.add_page(
     route="/evaluacion",
     on_load=[ThemeState.load_overrides, EvaluacionState.ensure_initialized],
 )
-app.add_page(chat, route="/chat", on_load=ThemeState.load_overrides)
+from chatbot_mvp.state.chat_state import ChatState
+app.add_page(chat, route="/chat", on_load=[ThemeState.load_overrides, ChatState.load_sessions])
 
 app.add_page(
     admin,

@@ -28,10 +28,19 @@ from chatbot_mvp.ui.evaluacion_tokens import (
 
 
 def _consent_input() -> rx.Component:
-    return rx.checkbox(
-        EvaluacionState.current_options[0],
-        is_checked=EvaluacionState.current_consent_value,
-        on_change=EvaluacionState.set_current_response,
+    return rx.hstack(
+        rx.checkbox(
+            is_checked=EvaluacionState.current_consent_value,
+            on_change=EvaluacionState.set_current_response,
+            size="2",
+        ),
+        rx.text(
+            EvaluacionState.current_options[0],
+            color="var(--gray-900)",
+            size="2",
+        ),
+        spacing="2",
+        align="center",
     )
 
 
@@ -40,20 +49,30 @@ def _text_input() -> rx.Component:
         value=EvaluacionState.current_text_value,
         on_change=EvaluacionState.set_current_response,
         placeholder=EvaluacionState.current_placeholder,
+        color="var(--gray-900)",
+        background="white",
         **EVAL_INPUT_PROPS,
     )
 
 
 def _single_input() -> rx.Component:
-    return rx.radio_group(
-        items=EvaluacionState.current_options,
+    return rx.radio_group.root(
+        rx.vstack(
+            rx.foreach(
+                EvaluacionState.current_options,
+                lambda option: rx.hstack(
+                    rx.radio_group.item(value=option),
+                    rx.text(option, color="var(--gray-900)", size="2"),
+                    spacing="2",
+                    align="center",
+                ),
+            ),
+            spacing="2",
+            align="stretch",
+        ),
         value=EvaluacionState.current_single_value,
         on_change=EvaluacionState.set_current_response,
-        direction="column",
-        variant=EVAL_CHOICE_ITEM_STYLE["variant"],
-        size=EVAL_CHOICE_ITEM_STYLE["size"],
-        item_style={"width": EVAL_CHOICE_ITEM_STYLE["width"]},
-        **EVAL_CHOICE_GROUP_STYLE,
+        size="2",
     )
 
 
@@ -61,16 +80,21 @@ def _multi_input() -> rx.Component:
     return rx.vstack(
         rx.foreach(
             EvaluacionState.current_options,
-            lambda option: rx.checkbox(
-                option,
-                is_checked=EvaluacionState.is_checked(option),
-                on_change=lambda checked: EvaluacionState.set_multi_option(
-                    option, checked
+            lambda option: rx.hstack(
+                rx.checkbox(
+                    is_checked=EvaluacionState.is_checked(option),
+                    on_change=lambda checked: EvaluacionState.set_multi_option(
+                        option, checked
+                    ),
+                    size="2",
                 ),
-                **EVAL_MULTI_CHECKBOX_STYLE,
+                rx.text(option, color="var(--gray-900)", size="2"),
+                spacing="2",
+                align="center",
             ),
         ),
-        **EVAL_CHOICE_GROUP_STYLE,
+        spacing="2",
+        align="stretch",
     )
 
 

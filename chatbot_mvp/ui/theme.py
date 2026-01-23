@@ -8,7 +8,10 @@ APP_THEME = rx.theme(
 )
 
 GLOBAL_STYLE = {
-    "font_family": "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+    "font_family": "Outfit, Inter, system-ui, sans-serif",
 }
 
-STYLESHEETS = ["/theme.css"]
+STYLESHEETS = [
+    "https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap",
+    "/theme.css",
+]

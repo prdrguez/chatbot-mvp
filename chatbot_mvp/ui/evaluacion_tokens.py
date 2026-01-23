@@ -85,6 +85,8 @@ EVAL_CHOICE_ITEM_STYLE = {
     "width": "100%",
     "variant": "surface",
     "size": "2",
+    "color": "var(--gray-900)",
+    "background": "white",
 }
 
 EVAL_MULTI_CHECKBOX_STYLE = {

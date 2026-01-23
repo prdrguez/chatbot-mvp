@@ -46,16 +46,21 @@ def layout(content: rx.Component) -> rx.Component:
         **HEADER_BOX_STYLE,
     )
 
-    return rx.box(
+    return rx.vstack(
         header,
-        rx.box(content, **CONTENT_BOX_STYLE),
+        rx.center(
+            rx.box(
+                content,
+                **CONTENT_BOX_STYLE,
+                width="100%",
+                max_width="1200px",
+            ),
+            width="100%",
+            flex="1",
+        ),
         style=SimplifiedThemeState.applied_theme,
         width="100%",
+        min_height="100vh",
+        spacing="0",
     )
-
-    return rx.box(
-        header,
-        rx.box(content, **CONTENT_BOX_STYLE),
-        style=SimplifiedThemeState.applied_theme,
-        width="100%",
-    )
+    

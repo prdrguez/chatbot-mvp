@@ -24,22 +24,22 @@ APP_PRIMARY_BUTTON_PROPS = {
 }
 
 APP_SURFACE_STYLE = {
-    "border": "var(--app-card-border)",
-    "padding": "var(--app-surface-padding)",
+    "background": "var(--app-glass-bg)",
+    "backdrop_filter": "var(--app-glass-blur)",
+    "border": "var(--app-glass-border)",
+    "box_shadow": "var(--app-glass-shadow)",
     "border_radius": "var(--app-radius-md)",
 }
 
 CHAT_SURFACE_STYLE = {
-    "border": "var(--chat-border-modern)",
+    "background": "var(--app-glass-bg)",
+    "backdrop_filter": "var(--app-glass-blur)",
+    "border": "var(--app-glass-border)",
     "padding": "var(--chat-surface-padding)",
     "border_radius": "var(--chat-radius)",
-    "box_shadow": "var(--chat-shadow-lg)",
-    "background": "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+    "box_shadow": "var(--app-glass-shadow)",
     "transition": "var(--chat-transition)",
-    "_hover": {
-        "box_shadow": "var(--chat-shadow-xl)",
-        "transform": "var(--chat-hover-lift)",
-    }
+    "animation": "fadeInUp 0.6s ease-out",
 }
 
 CHAT_MESSAGE_USER_STYLE = {
@@ -47,31 +47,23 @@ CHAT_MESSAGE_USER_STYLE = {
     "color": "white",
     "box_shadow": "var(--chat-shadow-md)",
     "transition": "var(--chat-transition)",
-    "_hover": {
-        "box_shadow": "var(--chat-shadow-lg)",
-        "transform": "var(--chat-message-scale)",
-    }
+    "animation": "slideInRight 0.3s ease-out",
 }
 
 CHAT_MESSAGE_ASSISTANT_STYLE = {
     "background": "var(--chat-assistant-bg)",
-    "color": "var(--gray-800)",
+    "color": "var(--gray-900)",
     "box_shadow": "var(--chat-shadow-sm)",
     "transition": "var(--chat-transition)",
-    "_hover": {
-        "box_shadow": "var(--chat-shadow-md)",
-        "transform": "var(--chat-message-scale)",
-    }
+    "animation": "slideInLeft 0.3s ease-out",
 }
 
 CHAT_INPUT_STYLE = {
-    "box_shadow": "var(--chat-shadow-sm)",
-    "border": "var(--chat-border-modern)",
-    "transition": "var(--chat-transition)",
-    "_focus": {
-        "box_shadow": "0 0 0 3px rgba(59, 130, 246, 0.1), var(--chat-shadow-md)",
-        "border_color": "var(--blue-500)",
-    }
+    "background": "white",
+    "border": "1px solid var(--gray-300)",
+    "border_radius": "var(--app-radius-md)",
+    "color": "var(--gray-900)",
+    "padding": "0.5rem",
 }
 
 CHAT_SEND_BUTTON_STYLE = {
