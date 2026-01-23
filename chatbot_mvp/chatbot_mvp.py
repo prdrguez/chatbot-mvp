@@ -25,17 +25,8 @@ app.add_page(
 )
 app.add_page(chat, route="/chat", on_load=ThemeState.load_overrides)
 
-# Protected admin route - redirects to login if not authenticated
-def protected_admin():
-    """Admin page with authentication check."""
-    return rx.cond(
-        AuthState.is_authenticated,
-        admin(),
-        rx.redirect("/login")
-    )
-
 app.add_page(
-    protected_admin,
+    admin,
     route="/admin",
     on_load=[ThemeState.load_overrides, AuthState.check_session, AdminState.load_summary],
 )

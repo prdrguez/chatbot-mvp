@@ -5,6 +5,8 @@ import reflex as rx
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.state.admin_state import AdminState
 from chatbot_mvp.state.theme_state import ThemeState
+from chatbot_mvp.state.simplified_theme_state import SimplifiedThemeState
+from chatbot_mvp.ui.simplified_theme_components import simplified_theme_editor
 
 ADMIN_CHART_FILL = "var(--teal-9)"
 ADMIN_TEXT_COLOR = "var(--gray-11)"
@@ -406,100 +408,8 @@ class AdminViewState(rx.State):
 
 
 def _admin_theme_section() -> rx.Component:
-    spacing_fields = [
-        ("Header padding", "--app-header-padding", "Ej: 1.25rem 2rem"),
-        ("Content padding", "--app-content-padding", "Ej: 2rem"),
-    ]
-    radius_fields = [
-        ("Radius md", "--app-radius-md", "Ej: 0.5rem"),
-        ("Chat radius", "--chat-radius", "Ej: 0.75rem"),
-    ]
-    border_fields = [
-        ("Card border", "--app-card-border", "Ej: 1px solid var(--gray-300)"),
-        ("Chat card border", "--chat-card-border", "Ej: 1px solid var(--gray-200)"),
-    ]
-    color_fields = [
-        ("Text danger", "--app-text-danger", "Ej: red"),
-    ]
-    return rx.card(
-        rx.vstack(
-            rx.hstack(
-                rx.heading("Theme Editor (MVP)", size="6"),
-                rx.cond(
-                    ThemeState.saved,
-                    rx.badge("Guardado", variant="soft", color_scheme="green"),
-                    rx.box(),
-                ),
-                spacing="2",
-                align="center",
-                width="100%",
-            ),
-            rx.text(
-                'Ejemplos: padding "1rem 2rem", border '
-                '"1px solid var(--gray-200)", radius "0.75rem", '
-                'color "red".',
-                color="var(--gray-600)",
-            ),
-            rx.cond(
-                ThemeState.error != "",
-                rx.text(ThemeState.error, color="var(--app-text-danger)"),
-                rx.box(),
-            ),
-            _theme_preview_card(),
-            rx.vstack(
-                rx.heading("Presets rapidos", size="4"),
-                _preset_field(
-                    "Radius (app)",
-                    "--app-radius-md",
-                    ["0.25rem", "0.5rem", "0.75rem", "1rem"],
-                ),
-                _preset_field(
-                    "Padding (content)",
-                    "--app-content-padding",
-                    ["1rem", "1.5rem", "2rem", "2.5rem 3rem"],
-                ),
-                _preset_field(
-                    "Border (card)",
-                    "--app-card-border",
-                    [
-                        "1px solid var(--gray-200)",
-                        "1px solid var(--gray-300)",
-                        "1px solid var(--gray-400)",
-                    ],
-                ),
-                spacing="3",
-                align="start",
-                width="100%",
-            ),
-            rx.heading("Controles", size="4"),
-            _theme_group("Spacing", spacing_fields),
-            _theme_group("Radius", radius_fields),
-            _theme_group("Borders", border_fields),
-            _theme_group("Colors", color_fields),
-            rx.card(
-                rx.vstack(
-                    rx.heading("Avanzado", size="4"),
-                    *[
-                        _theme_field(label, var_name, placeholder)
-                        for (label, var_name, placeholder) in _THEME_FIELDS
-                    ],
-                    spacing="3",
-                    align="start",
-                    width="100%",
-                ),
-                width="100%",
-            ),
-            rx.button(
-                "Reset",
-                on_click=ThemeState.reset_overrides,
-                variant="outline",
-            ),
-            spacing="4",
-            align="start",
-            width="100%",
-        ),
-        width="100%",
-    )
+    """Simplified theme editor section."""
+    return simplified_theme_editor()
 
 
 def _admin_export_section() -> rx.Component:
@@ -759,12 +669,18 @@ def _admin_tabs() -> rx.Component:
 
 
 def admin() -> rx.Component:
-    return layout(
-        rx.vstack(
-            rx.heading("Admin (Demo)", size="8"),
-            _admin_tabs(),
-            spacing="4",
-            align="start",
-            width="100%",
-        )
+    """Admin page with authentication protection."""
+    return rx.cond(
+        AuthState.is_authenticated,
+        layout(
+            rx.vstack(
+                rx.heading("Admin (Demo)", size="8"),
+                _admin_tabs(),
+                spacing="4",
+                align="start",
+                width="100%",
+            ),
+        ),
+        rx.redirect("/login")
+    )
     )
