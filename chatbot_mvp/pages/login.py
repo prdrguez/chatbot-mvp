@@ -38,7 +38,7 @@ def login_page() -> rx.Component:
                                 AuthState.auth_error != "",
                                 rx.callout(
                                     AuthState.auth_error,
-                                    icon="warning",
+                                    icon="triangle_alert",
                                     color_scheme="red",
                                     margin_bottom="4",
                                     width="100%"

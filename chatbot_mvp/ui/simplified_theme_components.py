@@ -165,7 +165,7 @@ def error_message() -> rx.Component:
         SimplifiedThemeState.error_message != "",
         rx.callout(
             SimplifiedThemeState.error_message,
-            icon="warning",
+            icon="triangle_alert",
             color_scheme="red",
             margin_top="3",
             width="100%"

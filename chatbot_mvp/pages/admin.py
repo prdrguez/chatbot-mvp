@@ -671,16 +671,12 @@ def _admin_tabs() -> rx.Component:
 
 def admin() -> rx.Component:
     """Admin page with authentication protection."""
-    return rx.cond(
-        AuthState.is_authenticated,
-        layout(
-            rx.vstack(
-                rx.heading("Admin (Demo)", size="8"),
-                _admin_tabs(),
-                spacing="4",
-                align="start",
-                width="100%",
-            ),
+    return layout(
+        rx.vstack(
+            rx.heading("Admin (Demo)", size="8"),
+            _admin_tabs(),
+            spacing="4",
+            align="start",
+            width="100%",
         ),
-        rx.redirect("/login")
     )

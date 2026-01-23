@@ -153,3 +153,11 @@ class AuthState(rx.State):
         # Clear error when user starts typing
         if self.auth_error and value:
             self.auth_error = ""
+    
+    def check_login(self) -> None:
+        """
+        Check if user is authenticated, redirect to login if not.
+        This method should be called on page mount for protected routes.
+        """
+        if not self.is_authenticated:
+            return rx.redirect("/login")

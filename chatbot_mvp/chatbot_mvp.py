@@ -28,7 +28,7 @@ app.add_page(chat, route="/chat", on_load=ThemeState.load_overrides)
 app.add_page(
     admin,
     route="/admin",
-    on_load=[ThemeState.load_overrides, AuthState.check_session, AdminState.load_summary],
+    on_load=[ThemeState.load_overrides, AuthState.check_login, AuthState.check_session, AdminState.load_summary],
 )
 
 # Login page for admin access
