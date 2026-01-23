@@ -12,9 +12,9 @@ def get_ai_provider() -> str:
         'demo', 'openai', or 'gemini' based on AI_PROVIDER env var
         Defaults to 'demo' if not set
     """
-    provider = os.getenv("AI_PROVIDER", "demo").strip().lower()
+    provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
     valid_providers = {"demo", "openai", "gemini"}
-    return provider if provider in valid_providers else "demo"
+    return provider if provider in valid_providers else "gemini"
 
 
 def is_demo_mode() -> bool:
@@ -51,4 +51,4 @@ def get_admin_password() -> str:
     Returns:
         Admin password string or empty string if not set
     """
-    return os.getenv("ADMIN_PASSWORD", "").strip()
+    return os.getenv("ADMIN_PASSWORD", "123").strip()

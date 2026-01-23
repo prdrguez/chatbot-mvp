@@ -1,4 +1,5 @@
 import reflex as rx
+from typing import Any
 
 from chatbot_mvp.services.chat_service import create_chat_service
 from chatbot_mvp.services.chat_persistence import create_chat_persistence
@@ -18,6 +19,7 @@ class ChatState(rx.State):
     typing: bool = False
     user_context: dict = {}
     session_id: str = ""
+    session_list: list[dict[str, Any]] = []
     auto_save_enabled: bool = True
     
     def __init__(self, *args, **kwargs):
@@ -47,6 +49,11 @@ class ChatState(rx.State):
             import time
             self.session_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
     
+    @rx.event
+    def load_sessions(self) -> None:
+        """Load recent sessions for the sidebar."""
+        self.session_list = self.get_recent_sessions()
+
     def _get_chat_service(self):
         """Get chat service from global."""
         global _chat_service_global
@@ -61,6 +68,12 @@ class ChatState(rx.State):
 
     def set_input(self, value: str) -> None:
         self.current_input = value
+
+    @rx.event
+    def handle_key_down(self, key: str) -> None:
+        """Handle key down events."""
+        if key == "Enter":
+            self.send_message()
 
     def send_message(self) -> None:
         content = self.current_input.strip()

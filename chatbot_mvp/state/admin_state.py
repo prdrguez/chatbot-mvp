@@ -101,6 +101,10 @@ class AdminState(rx.State):
         return self.avg_percent_float
 
     @rx.var
+    def avg_percent_int(self) -> int:
+        return int(self.avg_percent_value)
+
+    @rx.var
     def avg_percent_display(self) -> str:
         return f"{self.avg_percent_value:.0f}%"
 
@@ -417,3 +421,33 @@ class AdminState(rx.State):
         async with self:
             self.export_message = message
             self.export_error = error
+    @rx.event(background=True)
+    async def reset_data(self) -> None:
+        """Clear all submissions and reset the summary."""
+        async with self:
+            self.loading = True
+        
+        try:
+            from pathlib import Path
+            from chatbot_mvp.services.submissions_store import SUBMISSIONS_PATH
+            path = Path(SUBMISSIONS_PATH)
+            if path.exists():
+                path.unlink()
+            
+            # Re-initialize summary
+            async with self:
+                self.summary = {}
+                self.error = "Datos eliminados correctamente."
+        except Exception as exc:
+            async with self:
+                self.error = f"Error al eliminar datos: {exc}"
+        
+        async with self:
+            self.loading = False
+            await self.load_summary()
+
+    @rx.event
+    def logout_admin(self) -> None:
+        """Logout and redirect."""
+        from chatbot_mvp.state.auth_state import AuthState
+        return rx.redirect("/login")

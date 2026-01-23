@@ -153,7 +153,7 @@ class EvaluacionState(rx.State):
         self.current_index -= 1
         self.error_message = ""
 
-    def finish(self) -> None:
+    async def finish(self) -> None:
         score = 0
         total_scored = 0
         for question in QUESTIONS:
@@ -170,13 +170,17 @@ class EvaluacionState(rx.State):
             if normalized == correct:
                 score += 1
 
-        level, ai_text = self._score_to_level(score)
+        level, simulated_text = self._score_to_level(score)
         self.score = score
         self.correct_count = score
         self.total_scored = total_scored
         self.score_percent = int((score / total_scored) * 100) if total_scored else 0
         self.level = level
-        self.ai_simulated_text = ai_text
+        
+        # Real AI evaluation with Gemini
+        from chatbot_mvp.services.gemini_client import generate_evaluation
+        self.ai_simulated_text = generate_evaluation(self.responses)
+        
         self.finished = True
         self.error_message = ""
         self._save_submission()

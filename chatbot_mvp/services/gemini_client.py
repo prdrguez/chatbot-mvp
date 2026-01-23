@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from typing import Dict, List, Optional, Iterator
+from typing import Any, Dict, List, Optional, Iterator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -263,6 +263,60 @@ class GeminiChatClient:
             logger.error(f"Failed to extract response text: {exc}")
             raise AIClientError("Respuesta vacía o malformed")
     
+    def generate_evaluation(self, answers: Dict[str, Any]) -> str:
+        """
+        Generate evaluation feedback based on questionnaire answers.
+        
+        Args:
+            answers: Dictionary of questionnaire answers
+            
+        Returns:
+            Generated evaluation text
+        """
+        if not self._initialized:
+            raise AIClientError("Cliente Gemini no inicializado")
+        
+        try:
+            prompt = self._build_evaluation_prompt(answers)
+            response = self._generate_with_retry(
+                prompt=prompt,
+                max_tokens=300,
+                temperature=0.4
+            )
+            return self._extract_response_text(response)
+        except Exception as exc:
+            logger.error(f"Error generating Gemini evaluation: {exc}")
+            raise AIClientError(f"Error al generar evaluación: {exc}")
+
+    def _build_evaluation_prompt(self, answers: Dict[str, Any]) -> str:
+        """
+        Build prompt for evaluation feedback based on answers.
+        
+        Args:
+            answers: User answers dictionary
+            
+        Returns:
+            Formatted prompt string
+        """
+        lines = [
+            "Eres un evaluador experto en ética e inteligencia artificial. "
+            "Da una evaluación personalizada, breve y útil en español basada en las siguientes respuestas a un cuestionario de ética.",
+            "\nRespuestas del usuario:"
+        ]
+        
+        for key, value in answers.items():
+            if value:
+                # Convert list values (for multi-choice) to string
+                val_str = ", ".join(value) if isinstance(value, list) else str(value)
+                lines.append(f"- {key}: {val_str}")
+        
+        lines.append(
+            "\nPor favor entrega 6-10 líneas con un tono profesional, claro y accionable. "
+            "Enfócate en consejos prácticos basados en sus respuestas específicas. "
+            "No uses formato markdown excesivo, prefiere texto plano."
+        )
+        return "\n".join(lines)
+
     def is_available(self) -> bool:
         """
         Check if the client is available.
@@ -287,3 +341,23 @@ def create_gemini_client() -> Optional[GeminiChatClient]:
     except Exception as exc:
         logger.warning(f"Failed to create Gemini chat client: {exc}")
         return None
+
+def generate_evaluation(answers: Dict[str, Any]) -> str:
+    """
+    Top-level helper to generate evaluation feedback.
+    
+    Args:
+        answers: Dictionary of questionnaire answers
+        
+    Returns:
+        Evaluation text or fallback message
+    """
+    client = create_gemini_client()
+    if not client:
+        return "Modo demo: No se pudo conectar con Gemini para evaluación en tiempo real."
+    
+    try:
+        return client.generate_evaluation(answers)
+    except Exception as exc:
+        logger.error(f"Generate evaluation helper failed: {exc}")
+        return "Error al generar evaluación con Gemini. Por favor intenta de nuevo."
