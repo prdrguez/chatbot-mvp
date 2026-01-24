@@ -1,8 +1,13 @@
-import reflex as rx
 import hashlib
+import logging
 import time
 
-from chatbot_mvp.config.settings import get_admin_password
+import reflex as rx
+
+from chatbot_mvp.config.settings import get_admin_password, is_demo_mode
+
+
+logger = logging.getLogger(__name__)
 
 
 class AuthState(rx.State):
@@ -33,6 +38,9 @@ class AuthState(rx.State):
         Returns:
             True if locked out, False otherwise
         """
+        if is_demo_mode():
+            # TEMP DISABLED FOR TESTING: lockout in dev/demo
+            return False
         if self.login_attempt_count >= 3:
             time_since_last = time.time() - self.last_attempt_time
             return time_since_last < 300  # 5 minutes lockout
@@ -77,6 +85,7 @@ class AuthState(rx.State):
         # Check if locked out
         if self.is_locked_out:
             self.auth_error = f"Demasiados intentos. Intenta en {self.lockout_time_remaining}s"
+            logger.warning("Admin login failed: locked out")
             self.loading = False
             return
         
@@ -87,6 +96,7 @@ class AuthState(rx.State):
             self.login_attempt_count = 0
             self.password_input = ""
             self.auth_error = ""
+            logger.info("Admin login successful")
         else:
             self.login_attempt_count += 1
             self.last_attempt_time = time.time()
@@ -96,6 +106,7 @@ class AuthState(rx.State):
                 self.auth_error = f"Contraseña incorrecta. {remaining_attempts} intentos restantes."
             else:
                 self.auth_error = "Demasiados intentos. Espera 5 minutos."
+            logger.warning("Admin login failed: invalid password")
         
         self.loading = False
     
@@ -109,6 +120,7 @@ class AuthState(rx.State):
         Returns:
             True if password matches, False otherwise
         """
+        password = password.strip()
         if not password:
             return False
         

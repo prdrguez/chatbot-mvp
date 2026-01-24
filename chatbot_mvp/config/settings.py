@@ -67,4 +67,7 @@ def get_admin_password() -> str:
     Returns:
         Admin password string or empty string if not set
     """
-    return os.getenv("ADMIN_PASSWORD", "123").strip()
+    value = os.getenv("ADMIN_PASSWORD")
+    if value is None or value.strip() == "":
+        return "123" if is_demo_mode() else ""
+    return value.strip()
