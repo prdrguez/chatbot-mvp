@@ -3,9 +3,16 @@ import reflex as rx
 from chatbot_mvp.state.admin_state import AdminState
 
 ADMIN_CHART_FILL = "var(--teal-9)"
-ADMIN_TEXT_COLOR = "var(--gray-11)"
+ADMIN_TEXT_COLOR = "var(--gray-50)"
+ADMIN_TEXT_MUTED = "rgba(226, 232, 240, 0.75)"
 ADMIN_ROW_TEXT_SIZE = "2"
-ADMIN_GAUGE_TRACK = "var(--gray-4)"
+ADMIN_GAUGE_TRACK = "rgba(148, 163, 184, 0.35)"
+ADMIN_CARD_STYLE = {
+    "background": "rgba(15, 23, 42, 0.92)",
+    "border": "1px solid rgba(148, 163, 184, 0.25)",
+    "box_shadow": "0 12px 40px rgba(0, 0, 0, 0.35)",
+    "border_radius": "16px",
+}
 
 def _mini_bar_row(item: dict[str, Any]) -> rx.Component:
     return rx.hstack(
@@ -16,7 +23,7 @@ def _mini_bar_row(item: dict[str, Any]) -> rx.Component:
             overflow="hidden",
             text_overflow="ellipsis",
             size=ADMIN_ROW_TEXT_SIZE,
-            color=ADMIN_TEXT_COLOR,
+            color=ADMIN_TEXT_MUTED,
         ),
         rx.progress(
             value=item["count"],
@@ -59,7 +66,9 @@ def kpi_card(
         responsive_container = getattr(recharts, "responsive_container", None)
         bar_children = []
         if label_list is not None:
-            bar_children.append(label_list(data_key="value", position="right"))
+            bar_children.append(
+                label_list(data_key="value", position="right", fill=ADMIN_TEXT_COLOR)
+            )
         bar = recharts.bar(
             *bar_children,
             data_key="value",
@@ -67,18 +76,29 @@ def kpi_card(
             radius=4,
         )
         chart_children = [
-            recharts.cartesian_grid(stroke="var(--gray-6)", stroke_dasharray="3 3"),
+            recharts.cartesian_grid(stroke="rgba(148, 163, 184, 0.2)", stroke_dasharray="3 3"),
             recharts.x_axis(type_="number", hide=True),
             recharts.y_axis(
                 data_key="name",
                 type_="category",
                 width=120,
-                stroke="var(--gray-6)",
+                stroke="rgba(148, 163, 184, 0.5)",
+                tick={"fill": ADMIN_TEXT_MUTED},
             ),
             bar,
         ]
         if tooltip is not None:
-            chart_children.append(tooltip())
+            chart_children.append(
+                tooltip(
+                    content_style={
+                        "background": "rgba(2, 6, 23, 0.95)",
+                        "border": "1px solid rgba(148, 163, 184, 0.25)",
+                        "color": ADMIN_TEXT_COLOR,
+                    },
+                    item_style={"color": ADMIN_TEXT_COLOR},
+                    label_style={"color": ADMIN_TEXT_MUTED},
+                )
+            )
         
         bar_chart = recharts.bar_chart(
             *chart_children,
@@ -96,11 +116,11 @@ def kpi_card(
         
         return rx.card(
             rx.vstack(
-                rx.heading(title, size="4"),
+                rx.heading(title, size="4", color=ADMIN_TEXT_COLOR),
                 rx.cond(
                     items,
                     chart,
-                    rx.text("Sin datos"),
+                    rx.text("Sin datos", color=ADMIN_TEXT_MUTED),
                 ),
                 spacing="2",
                 align="start",
@@ -109,19 +129,16 @@ def kpi_card(
             width="100%",
             height="100%",
             min_height="20rem",
-            # Glassmorphism
-            background="var(--app-glass-bg)",
-            backdrop_filter="var(--app-glass-blur)",
-            border="var(--app-glass-border)",
+            **ADMIN_CARD_STYLE,
         )
     
     return rx.card(
         rx.vstack(
-            rx.heading(title, size="4"),
+            rx.heading(title, size="4", color=ADMIN_TEXT_COLOR),
             rx.cond(
                 items,
                 _mini_chart(items),
-                rx.text("Sin datos"),
+                rx.text("Sin datos", color=ADMIN_TEXT_MUTED),
             ),
             spacing="2",
             align="start",
@@ -130,6 +147,7 @@ def kpi_card(
         width="100%",
         height="100%",
         min_height="20rem",
+        **ADMIN_CARD_STYLE,
     )
 
 def avg_gauge() -> rx.Component:
@@ -141,7 +159,7 @@ def avg_gauge() -> rx.Component:
                 path(
                     d="M 30 100 A 70 70 0 0 0 170 100",
                     fill="none",
-                    stroke="var(--gray-6)",
+                    stroke=ADMIN_GAUGE_TRACK,
                     stroke_width=6,
                     stroke_linecap="round",
                     stroke_dasharray=AdminState.gauge_track_dasharray,
