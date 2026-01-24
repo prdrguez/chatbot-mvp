@@ -25,6 +25,13 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 # DEMO_MODE=1 para demo, DEMO_MODE=0 para ocultar /ui y el link a /admin
+
+# Configuración de AI
+export GEMINI_API_KEY="tu_clave_aqui"  # Requerido para chat y evaluaciones reales
+export AI_PROVIDER="gemini"            # "gemini" (default), "openai" o "demo"
+
+# Credenciales
+# ADMIN_PASSWORD por defecto es "123"
 ```
 
 4) Ejecutar

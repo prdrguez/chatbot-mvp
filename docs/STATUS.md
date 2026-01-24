@@ -4,12 +4,14 @@
 
 - App Reflex con rutas principales: `/`, `/evaluacion`, `/chat`, `/admin`.
 - Modo demo por `DEMO_MODE` habilita `/ui` y links extra en el header.
-- Evaluacion con flujo completo de preguntas (consent/text/single/multi), scoring y resultado.
+- Evaluacion con IA (Gemini) en tiempo real para feedback personalizado.
+- ChatBot con integración `google-genai` y fallback a modo demo.
+- Historial de sesiones persistente en barra lateral del chat.
 - Guardado local de submissions en `data/submissions.jsonl` (append-only).
-- KPIs en Admin con charts horizontales y resumen (total y promedio).
-- Theme editor con overrides persistidos en `chatbot_mvp/data/theme_overrides.json`.
+- KPIs en Admin con charts, reinicio de datos y logout.
+- Theme editor simplificado y persistente.
 - Export de submissions a `exports/` en JSON y CSV.
-- UI Gallery de componentes para demo/QA visual.
+- UI Premium con glassmorphism, animaciones y diseño responsivo.
 
 ## Arquitectura rapida
 
