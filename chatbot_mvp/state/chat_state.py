@@ -21,6 +21,15 @@ class ChatState(rx.State):
     session_id: str = ""
     session_list: list[dict[str, Any]] = []
     auto_save_enabled: bool = True
+    sidebar_collapsed: bool = False
+    export_content: str = ""
+    export_error: str = ""
+    export_format: str = ""
+    last_error: str = ""
+
+    @rx.var
+    def has_messages(self) -> bool:
+        return len(self.messages) > 0
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -53,6 +62,11 @@ class ChatState(rx.State):
     def load_sessions(self) -> None:
         """Load recent sessions for the sidebar."""
         self.session_list = self.get_recent_sessions()
+    
+    @rx.event
+    def toggle_sidebar(self) -> None:
+        """Toggle chat sidebar collapsed state."""
+        self.sidebar_collapsed = not self.sidebar_collapsed
 
     def _get_chat_service(self):
         """Get chat service from global."""
@@ -88,6 +102,7 @@ class ChatState(rx.State):
         self.current_input = ""
         self.loading = True
         self.typing = True
+        self.last_error = ""
 
         # Get response from chat service
         chat_service = self._get_chat_service()
@@ -97,17 +112,33 @@ class ChatState(rx.State):
             user_context=self.user_context,
         )
 
-        # Add assistant response
-        self.messages = [
-            *self.messages,
-            {"role": "assistant", "content": response},
-        ]
+        if self._is_error_response(response):
+            self.last_error = response
+        else:
+            # Add assistant response
+            self.messages = [
+                *self.messages,
+                {"role": "assistant", "content": response},
+            ]
         self.loading = False
         self.typing = False
         
         # Auto-save conversation
         if self.auto_save_enabled:
             self._save_conversation()
+
+    def _is_error_response(self, response: str) -> bool:
+        if not response:
+            return True
+        message = response.strip().lower()
+        error_prefixes = (
+            "estoy recibiendo muchas solicitudes",
+            "hay mucho tráfico",
+            "estoy limitado por cuota",
+            "error al generar",
+            "rate limit",
+        )
+        return message.startswith(error_prefixes)
 
     def _save_conversation(self) -> None:
         """Save current conversation to persistent storage."""
@@ -122,20 +153,20 @@ class ChatState(rx.State):
                     "message_count": len(self.messages),
                 }
             )
+            self.session_list = self.get_recent_sessions()
         except Exception:
             # Silently fail to avoid disrupting user experience
             pass
-
-    def handle_quick_reply(self, reply: str) -> None:
-        """Handle quick reply button clicks."""
-        self.current_input = reply
-        self.send_message()
 
     def clear_chat(self) -> None:
         self.messages = []
         self.current_input = ""
         self.loading = False
         self.typing = False
+        self.last_error = ""
+        self.export_content = ""
+        self.export_error = ""
+        self.export_format = ""
         
         # Create new session
         import uuid
@@ -164,6 +195,9 @@ class ChatState(rx.State):
                 self.session_id = session_id
                 self.messages = session_data.get("messages", [])
                 self.user_context = session_data.get("user_context", {})
+                self.export_content = ""
+                self.export_error = ""
+                self.export_format = ""
                 return True
             return False
         except Exception:
@@ -179,6 +213,46 @@ class ChatState(rx.State):
             ) or "No data available for export"
         except Exception:
             return "Error exporting session"
+
+    @rx.event(background=True)
+    async def do_export_json(self) -> None:
+        async with self:
+            self.export_content = ""
+            self.export_error = ""
+            self.export_format = "JSON"
+
+        try:
+            chat_persistence = self._get_chat_persistence()
+            content = chat_persistence.export_session(self.session_id, "json") or ""
+        except Exception as exc:  # pragma: no cover - fallback to avoid UI crash.
+            content = ""
+            error = f"Error al exportar JSON: {exc}"
+        else:
+            error = ""
+
+        async with self:
+            self.export_content = content
+            self.export_error = error
+
+    @rx.event(background=True)
+    async def do_export_csv(self) -> None:
+        async with self:
+            self.export_content = ""
+            self.export_error = ""
+            self.export_format = "CSV"
+
+        try:
+            chat_persistence = self._get_chat_persistence()
+            content = chat_persistence.export_session(self.session_id, "csv") or ""
+        except Exception as exc:  # pragma: no cover - fallback to avoid UI crash.
+            content = ""
+            error = f"Error al exportar CSV: {exc}"
+        else:
+            error = ""
+
+        async with self:
+            self.export_content = content
+            self.export_error = error
     
     def get_recent_sessions(self, limit: int = 10) -> list:
         """Get recent chat sessions."""

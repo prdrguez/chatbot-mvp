@@ -79,6 +79,22 @@ def chat() -> rx.Component:
                     max_height="60vh",
                     overflow_y="auto",
                 ),
+                rx.cond(
+                    ChatState.last_error != "",
+                    rx.callout(
+                        ChatState.last_error,
+                        icon="triangle_alert",
+                        color_scheme="orange",
+                        width="100%",
+                        max_width="800px",
+                        style={
+                            "background": "rgba(124, 45, 18, 0.92)",
+                            "color": "var(--gray-50)",
+                            "border": "1px solid rgba(251, 191, 36, 0.4)",
+                        },
+                    ),
+                    rx.box(),
+                ),
                 rx.hstack(
                     rx.input(
                         value=ChatState.current_input,
