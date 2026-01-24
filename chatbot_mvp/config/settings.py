@@ -1,7 +1,23 @@
+import logging
 import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+
+_ROOT = Path(__file__).resolve().parents[2]
+logger = logging.getLogger(__name__)
+if load_dotenv is None:
+    logger.warning("python-dotenv not installed; .env will not be loaded")
+else:
+    load_dotenv(dotenv_path=_ROOT / ".env", override=False)
 
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
+_DEFAULT_AI_PROVIDER = "gemini"
 
 
 def get_ai_provider() -> str:
@@ -10,11 +26,11 @@ def get_ai_provider() -> str:
     
     Returns:
         'demo', 'openai', or 'gemini' based on AI_PROVIDER env var
-        Defaults to 'demo' if not set
+        Defaults to 'gemini' if not set
     """
-    provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
+    provider = os.getenv("AI_PROVIDER", _DEFAULT_AI_PROVIDER).strip().lower()
     valid_providers = {"demo", "openai", "gemini"}
-    return provider if provider in valid_providers else "gemini"
+    return provider if provider in valid_providers else _DEFAULT_AI_PROVIDER
 
 
 def is_demo_mode() -> bool:
