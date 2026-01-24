@@ -12,6 +12,13 @@ from chatbot_mvp.ui.tokens import (
     CHAT_SEND_BUTTON_STYLE,
 )
 
+CHAT_SURFACE_DARK_STYLE = {
+    **CHAT_SURFACE_STYLE,
+    "background": "rgba(15, 23, 42, 0.92)",
+    "border": "1px solid rgba(148, 163, 184, 0.25)",
+    "box_shadow": "0 12px 40px rgba(0,0,0,0.25)",
+}
+
 CHAT_INPUT_LEGIBLE_STYLE = {
     **CHAT_INPUT_STYLE,
     "background": "rgba(15, 23, 42, 0.9)",
@@ -72,7 +79,7 @@ def chat() -> rx.Component:
                         spacing="3",
                         width="100%",
                     ),
-                    **CHAT_SURFACE_STYLE,
+                    **CHAT_SURFACE_DARK_STYLE,
                     width="100%",
                     max_width="800px",
                     min_height="400px",
