@@ -12,6 +12,14 @@ from chatbot_mvp.ui.tokens import (
     CHAT_SEND_BUTTON_STYLE,
 )
 
+CHAT_INPUT_LEGIBLE_STYLE = {
+    **CHAT_INPUT_STYLE,
+    "background": "rgba(15, 23, 42, 0.9)",
+    "color": "var(--gray-50)",
+    "border": "1px solid rgba(148, 163, 184, 0.6)",
+    "_placeholder": {"color": "rgba(226, 232, 240, 0.7)"},
+}
+
 
 def _message_row(message: dict[str, str]) -> rx.Component:
     is_user = message["role"] == "user"
@@ -79,7 +87,7 @@ def chat() -> rx.Component:
                         placeholder="Escribe tu mensaje...",
                         width="100%",
                         disabled=ChatState.loading,
-                        style=CHAT_INPUT_STYLE,
+                        style=CHAT_INPUT_LEGIBLE_STYLE,
                     ),
                     rx.button(
                         rx.icon("send", size=18),
