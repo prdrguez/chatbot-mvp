@@ -2,7 +2,6 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.components.typing_indicator import typing_indicator, skeleton_loader
-from chatbot_mvp.components.quick_replies import contextual_quick_replies
 from chatbot_mvp.state.chat_state import ChatState
 from chatbot_mvp.ui.tokens import (
     CHAT_SURFACE_STYLE,
@@ -11,6 +10,14 @@ from chatbot_mvp.ui.tokens import (
     CHAT_INPUT_STYLE,
     CHAT_SEND_BUTTON_STYLE,
 )
+
+CHAT_INPUT_LEGIBLE_STYLE = {
+    **CHAT_INPUT_STYLE,
+    "background": "rgba(15, 23, 42, 0.9)",
+    "color": "var(--gray-50)",
+    "border": "1px solid rgba(148, 163, 184, 0.6)",
+    "_placeholder": {"color": "rgba(226, 232, 240, 0.7)"},
+}
 
 
 def _message_row(message: dict[str, str]) -> rx.Component:
@@ -42,7 +49,25 @@ def chat() -> rx.Component:
                 rx.hstack(
                     rx.heading("Chat", size="8"),
                     rx.hstack(
-                        rx.button("Exportar", on_click=lambda: ChatState.export_session("json"), variant="outline", size="2"),
+                        rx.cond(
+                            ChatState.has_messages,
+                            rx.hstack(
+                                rx.button(
+                                    "Exportar JSON",
+                                    on_click=ChatState.do_export_json,
+                                    variant="outline",
+                                    size="2",
+                                ),
+                                rx.button(
+                                    "Exportar CSV",
+                                    on_click=ChatState.do_export_csv,
+                                    variant="outline",
+                                    size="2",
+                                ),
+                                spacing="2",
+                            ),
+                            rx.box(),
+                        ),
                         rx.button(
                             "Nuevo Chat",
                             on_click=ChatState.clear_chat,
@@ -79,7 +104,7 @@ def chat() -> rx.Component:
                         placeholder="Escribe tu mensaje...",
                         width="100%",
                         disabled=ChatState.loading,
-                        style=CHAT_INPUT_STYLE,
+                        style=CHAT_INPUT_LEGIBLE_STYLE,
                     ),
                     rx.button(
                         rx.icon("send", size=18),
@@ -91,6 +116,46 @@ def chat() -> rx.Component:
                     spacing="2",
                     width="100%",
                     max_width="800px",
+                ),
+                rx.cond(
+                    ChatState.export_error != "",
+                    rx.callout(
+                        ChatState.export_error,
+                        icon="triangle_alert",
+                        color_scheme="red",
+                        width="100%",
+                        max_width="800px",
+                    ),
+                    rx.box(),
+                ),
+                rx.cond(
+                    ChatState.export_content != "",
+                    rx.vstack(
+                        rx.text(
+                            f"Export {ChatState.export_format}",
+                            size="2",
+                            weight="medium",
+                        ),
+                        rx.box(
+                            rx.text(
+                                ChatState.export_content,
+                                white_space="pre-wrap",
+                                font_family="monospace",
+                                font_size="0.85rem",
+                            ),
+                            padding="0.75rem",
+                            border="1px solid var(--gray-300)",
+                            border_radius="0.5rem",
+                            background="white",
+                            max_height="260px",
+                            overflow_y="auto",
+                            width="100%",
+                        ),
+                        spacing="2",
+                        width="100%",
+                        max_width="800px",
+                    ),
+                    rx.box(),
                 ),
                 spacing="6",
                 align="center",
