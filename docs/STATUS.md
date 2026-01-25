@@ -34,6 +34,15 @@
 2) Verificar rutas: `/chat`, `/evaluacion`, `/admin`
 3) (Opcional) `/login` y `/ui` si demo
 
+## Workflow / Cómo retomar
+- Source of truth: `docs/WORKFLOW.md` (AGENTS.md lo referencia).
+- Branch actual: `docs/workflow`.
+- Para retomar: `git status -sb` + `git diff --name-only` + `git log -5 --oneline`.
+- Revisar PRs abiertos antes de continuar.
+
+## Backlog UI
+- Arreglar panel lateral de sesiones (alto/scroll/estética).
+
 ## Últimos cambios (resumen breve)
 - Ajustes de layout y UX en /chat (input, panel, sidebar, altura).
 - Mejoras UI admin (login y cards de KPIs/graphs).

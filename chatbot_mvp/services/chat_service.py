@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Protocol
 from abc import ABC, abstractmethod
 
 from chatbot_mvp.config.settings import get_ai_provider
+from chatbot_mvp.services.openai_client import AIClientError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -117,6 +118,8 @@ class AIResponseStrategy(BaseResponseStrategy):
         except Exception as exc:
             # Fallback to demo response on AI error
             logger.warning(f"AI response failed, using fallback: {exc}")
+            if isinstance(exc, AIClientError) and str(exc):
+                return str(exc)
             return "Lo siento, tuve un problema para responder. ¿Podrías reformular tu pregunta?"
 
 
@@ -177,8 +180,30 @@ class ChatService:
         elif provider == "openai" and ai_client:
             logger.info("Using OpenAI response strategy")
             return AIResponseStrategy(ai_client)
-        elif provider == "gemini" and ai_client:
-            logger.info("Using Gemini response strategy")
+        elif provider == "gemini":
+            if not ai_client:
+                from chatbot_mvp.services.gemini_client import (
+                    create_gemini_client,
+                    get_gemini_api_key,
+                )
+
+                api_key = get_gemini_api_key()
+                if api_key:
+                    try:
+                        ai_client = create_gemini_client()
+                    except Exception as exc:
+                        logger.warning(f"Gemini client init failed: {exc}")
+                if not ai_client:
+                    if api_key:
+                        logger.warning(
+                            "Gemini API key detected (GEMINI_API_KEY/GOOGLE_API_KEY) but client unavailable, falling back to demo"
+                        )
+                    else:
+                        logger.warning(
+                            "Gemini API key missing (set GEMINI_API_KEY or GOOGLE_API_KEY), falling back to demo"
+                        )
+                    return DemoResponseStrategy()
+            logger.info("Using provider: gemini")
             return AIResponseStrategy(ai_client)
         else:
             logger.warning(f"Provider {provider} not available, falling back to demo")

@@ -1,6 +1,6 @@
 import reflex as rx
 
-from chatbot_mvp.state.simplified_theme_state import SimplifiedThemeState
+from chatbot_mvp.state.theme_state import ThemeState
 
 
 def mode_toggle() -> rx.Component:
@@ -14,14 +14,14 @@ def mode_toggle() -> rx.Component:
         rx.text("☀️", font_size="20px"),
         rx.button(
             "☀️",
-            on_click=lambda: SimplifiedThemeState.set_mode("light"),
+            on_click=lambda: ThemeState.set_mode("light"),
             variant=rx.cond(
-                SimplifiedThemeState.is_light_mode,
+                ThemeState.is_light_mode,
                 "solid",
                 "soft"
             ),
             color_scheme=rx.cond(
-                SimplifiedThemeState.is_light_mode,
+                ThemeState.is_light_mode,
                 "yellow",
                 "gray"
             ),
@@ -30,14 +30,14 @@ def mode_toggle() -> rx.Component:
         ),
         rx.button(
             "🌙", 
-            on_click=lambda: SimplifiedThemeState.set_mode("dark"),
+            on_click=lambda: ThemeState.set_mode("dark"),
             variant=rx.cond(
-                SimplifiedThemeState.is_dark_mode,
+                ThemeState.is_dark_mode,
                 "solid",
                 "soft"
             ),
             color_scheme=rx.cond(
-                SimplifiedThemeState.is_dark_mode,
+                ThemeState.is_dark_mode,
                 "blue",
                 "gray"
             ),
@@ -77,7 +77,7 @@ def color_picker(label: str, color_value: str, color_type: str) -> rx.Component:
             # Color input
             rx.input(
                 value=color_value,
-                on_change=lambda v: SimplifiedThemeState.set_color(color_type, v),
+                on_change=lambda v: ThemeState.set_color(color_type, v),
                 placeholder="#000000",
                 type_="color",
                 margin_left="3",
@@ -110,8 +110,8 @@ def border_radius_selector() -> rx.Component:
                 align_items="start",
                 spacing="2",
             ),
-            value=SimplifiedThemeState.border_radius,
-            on_change=SimplifiedThemeState.set_border_radius,
+            value=ThemeState.border_radius,
+            on_change=ThemeState.set_border_radius,
             default_value="medium",
             size="2"
         ),
@@ -131,21 +131,21 @@ def action_buttons() -> rx.Component:
         # Reset button
         rx.button(
             "Resetear",
-            on_click=lambda: SimplifiedThemeState.reset_theme(),
+            on_click=lambda: ThemeState.reset_theme(),
             variant="soft",
             color_scheme="gray",
             size="2",
-            loading=SimplifiedThemeState.loading
+            loading=ThemeState.loading
         ),
         
         # Save button
         rx.button(
             "Guardar",
-            on_click=lambda: SimplifiedThemeState.save_theme(),
+            on_click=lambda: ThemeState.save_theme(),
             variant="solid",
             color_scheme="blue", 
             size="2",
-            loading=SimplifiedThemeState.loading
+            loading=ThemeState.loading
         ),
         
         spacing="3",
@@ -162,9 +162,9 @@ def error_message() -> rx.Component:
         Error callout component if error exists
     """
     return rx.cond(
-        SimplifiedThemeState.error_message != "",
+        ThemeState.error_message != "",
         rx.callout(
-            SimplifiedThemeState.error_message,
+            ThemeState.error_message,
             icon="triangle_alert",
             color_scheme="red",
             margin_top="3",
@@ -181,7 +181,7 @@ def success_message() -> rx.Component:
         Success callout component if theme was updated
     """
     return rx.cond(
-        SimplifiedThemeState.theme_updated,
+        ThemeState.theme_updated,
         rx.callout(
             "¡Tema guardado exitosamente!",
             icon="check",
@@ -229,9 +229,9 @@ def simplified_theme_editor() -> rx.Component:
             rx.vstack(
                 rx.text("Colores Principales", font_weight="500", margin_bottom="4"),
                 
-                color_picker("Color Primario", SimplifiedThemeState.primary_color, "primary"),
-                color_picker("Color Secundario", SimplifiedThemeState.secondary_color, "secondary"),
-                color_picker("Color de Acento", SimplifiedThemeState.accent_color, "accent"),
+                color_picker("Color Primario", ThemeState.primary_color, "primary"),
+                color_picker("Color Secundario", ThemeState.secondary_color, "secondary"),
+                color_picker("Color de Acento", ThemeState.accent_color, "accent"),
                 
                 spacing="4",
                 padding="4",

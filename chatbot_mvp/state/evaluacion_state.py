@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import reflex as rx
@@ -7,6 +8,8 @@ import reflex as rx
 from chatbot_mvp.config.settings import is_demo_mode
 from chatbot_mvp.data.juego_etico import QUESTIONS
 from chatbot_mvp.services.submissions_store import append_submission
+
+logger = logging.getLogger(__name__)
 
 
 class EvaluacionState(rx.State):
@@ -153,7 +156,7 @@ class EvaluacionState(rx.State):
         self.current_index -= 1
         self.error_message = ""
 
-    async def finish(self) -> None:
+    def finish(self) -> None:
         score = 0
         total_scored = 0
         for question in QUESTIONS:
@@ -176,13 +179,25 @@ class EvaluacionState(rx.State):
         self.total_scored = total_scored
         self.score_percent = int((score / total_scored) * 100) if total_scored else 0
         self.level = level
-        
-        # Real AI evaluation with Gemini
-        from chatbot_mvp.services.gemini_client import generate_evaluation
-        self.ai_simulated_text = generate_evaluation(self.responses)
-        
+        self.ai_simulated_text = simulated_text
+
+        evaluation_payload = self._build_evaluation_payload()
+        try:
+            from chatbot_mvp.services.gemini_client import generate_evaluation_feedback
+
+            ai_text = generate_evaluation_feedback(evaluation_payload)
+            if ai_text:
+                self.ai_simulated_text = ai_text
+        except Exception as exc:
+            logger.warning("Gemini evaluation feedback failed: %s", exc)
+
         self.finished = True
         self.error_message = ""
+        logger.info(
+            "Evaluacion finished: score=%s, answers_count=%s",
+            self.score,
+            len(self.responses),
+        )
         self._save_submission()
 
     def _is_valid_response(self, question: dict[str, Any], response: Any) -> bool:
@@ -229,6 +244,42 @@ class EvaluacionState(rx.State):
             )
         return level, text
 
+    def _build_evaluation_payload(self) -> dict[str, Any]:
+        questions_payload: list[dict[str, Any]] = []
+        for question in QUESTIONS:
+            question_id = question.get("id")
+            response = self.responses.get(question_id)
+            if isinstance(response, list):
+                answer_text = ", ".join([str(item) for item in response if item])
+            elif isinstance(response, bool):
+                answer_text = "Acepto" if response else "No acepto"
+            elif response is None:
+                answer_text = ""
+            else:
+                answer_text = str(response)
+            
+            questions_payload.append(
+                {
+                    "id": question_id,
+                    "section": question.get("section", ""),
+                    "prompt": question.get("prompt", ""),
+                    "answer": answer_text,
+                    "type": question.get("type", ""),
+                    "scored": bool(question.get("scored")),
+                }
+            )
+        
+        return {
+            "summary": {
+                "score": self.score,
+                "correct_count": self.correct_count,
+                "total_scored": self.total_scored,
+                "score_percent": self.score_percent,
+                "level": self.level,
+            },
+            "questions": questions_payload,
+        }
+
     def _save_submission(self) -> None:
         append_submission(
             answers=self.responses,
@@ -238,4 +289,5 @@ class EvaluacionState(rx.State):
             correct_count=self.correct_count,
             total_scored=self.total_scored,
             score_percent=self.score_percent,
+            ai_feedback=self.ai_simulated_text,
         )

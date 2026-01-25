@@ -351,13 +351,17 @@ class ChatPersistence:
     
     def _format_as_csv(self, session: Dict) -> str:
         """Format session as CSV."""
-        lines = ["timestamp,role,content"]
+        lines = ["session_id,created_at,updated_at,role,content"]
         
+        session_id = session.get("session_id", "")
         created_at = session.get("created_at", "")
+        updated_at = session.get("updated_at", "")
         for message in session.get("messages", []):
             role = message.get("role", "")
             content = message.get("content", "").replace('"', '""')  # Escape quotes
-            lines.append(f'"{created_at}","{role}","{content}"')
+            lines.append(
+                f'"{session_id}","{created_at}","{updated_at}","{role}","{content}"'
+            )
         
         return "\n".join(lines)
 
