@@ -11,7 +11,7 @@ SIDEBAR_HEADER_STYLE = {
     "padding_bottom": "0.5rem",
 }
 SIDEBAR_ITEM_STYLE = {
-    "padding": "0.4rem 0.5rem",
+    "padding": "0.45rem 0.55rem",
     "border_radius": "0.6rem",
     "width": "100%",
     "justify_content": "start",
@@ -89,15 +89,11 @@ def sidebar_item(session: dict) -> rx.Component:
                 width="100%",
             ),
             rx.text(
-                preview,
-                **SIDEBAR_TEXT_PREVIEW,
+                date_label,
+                **SIDEBAR_TEXT_DATE,
                 overflow="hidden",
                 text_overflow="ellipsis",
                 white_space="nowrap",
-            ),
-            rx.text(
-                date_label,
-                **SIDEBAR_TEXT_DATE,
             ),
             spacing="1",
             align="start",
@@ -170,7 +166,7 @@ def chat_sidebar() -> rx.Component:
         ),
         spacing="3",
         width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
-        min_width=rx.cond(ChatState.sidebar_collapsed, "64px", "240px"),
+        min_width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
         max_width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
         height="100%",
         max_height="100%",
