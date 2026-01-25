@@ -4,7 +4,6 @@ from chatbot_mvp.state.chat_state import ChatState
 SIDEBAR_STYLE = {
     "background": "rgba(2, 6, 23, 0.98)",
     "border_right": "1px solid rgba(148, 163, 184, 0.2)",
-    "display": "flex",
 }
 SIDEBAR_HEADER_STYLE = {
     "padding_bottom": "0.75rem",
