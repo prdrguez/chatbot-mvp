@@ -2,14 +2,12 @@ import reflex as rx
 
 from chatbot_mvp.config.settings import is_demo_mode, get_admin_password
 from chatbot_mvp.state.theme_state import ThemeState
-from chatbot_mvp.state.simplified_theme_state import SimplifiedThemeState
-from chatbot_mvp.state.auth_state import AuthState
 from chatbot_mvp.ui.tokens import CONTENT_BOX_STYLE, HEADER_BOX_STYLE
 
 
 def layout(content: rx.Component) -> rx.Component:
     # Load theme on layout render
-    SimplifiedThemeState.load_theme()
+    ThemeState.load_theme()
     
     header = rx.box(
         rx.hstack(
@@ -58,7 +56,7 @@ def layout(content: rx.Component) -> rx.Component:
             width="100%",
             flex="1",
         ),
-        style=SimplifiedThemeState.applied_theme,
+        style=ThemeState.applied_theme,
         width="100%",
         min_height="100vh",
         spacing="0",

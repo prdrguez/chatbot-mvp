@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+import chatbot_mvp.state
 from chatbot_mvp.ui.theme import APP_THEME, GLOBAL_STYLE, STYLESHEETS
 from chatbot_mvp.pages.admin import admin
 from chatbot_mvp.pages.chat import chat
@@ -17,23 +18,23 @@ from chatbot_mvp.config.settings import is_demo_mode, get_admin_password
 
 
 app = rx.App(theme=APP_THEME, style=GLOBAL_STYLE, stylesheets=STYLESHEETS)
-app.add_page(home, route="/", on_load=ThemeState.load_overrides)
+app.add_page(home, route="/", on_load=ThemeState.load_theme)
 app.add_page(
     evaluacion,
     route="/evaluacion",
-    on_load=[ThemeState.load_overrides, EvaluacionState.ensure_initialized],
+    on_load=[ThemeState.load_theme, EvaluacionState.ensure_initialized],
 )
 from chatbot_mvp.state.chat_state import ChatState
-app.add_page(chat, route="/chat", on_load=[ThemeState.load_overrides, ChatState.load_sessions])
+app.add_page(chat, route="/chat", on_load=[ThemeState.load_theme, ChatState.load_sessions])
 
 app.add_page(
     admin,
     route="/admin",
-    on_load=[ThemeState.load_overrides, AuthState.check_login, AuthState.check_session, AdminState.load_summary],
+    on_load=[ThemeState.load_theme, AuthState.check_login, AuthState.check_session, AdminState.load_summary],
 )
 
 # Login page for admin access
-app.add_page(login_page, route="/login", on_load=ThemeState.load_overrides)
+app.add_page(login_page, route="/login", on_load=ThemeState.load_theme)
 
 if is_demo_mode():
-    app.add_page(ui_gallery, route="/ui", on_load=ThemeState.load_overrides)
+    app.add_page(ui_gallery, route="/ui", on_load=ThemeState.load_theme)
