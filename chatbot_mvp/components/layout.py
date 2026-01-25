@@ -5,10 +5,11 @@ from chatbot_mvp.state.theme_state import ThemeState
 from chatbot_mvp.ui.tokens import CONTENT_BOX_STYLE, HEADER_BOX_STYLE
 
 
-def layout(content: rx.Component) -> rx.Component:
-    # Load theme on layout render
-    ThemeState.load_theme()
-    
+def layout(
+    content: rx.Component,
+    hide_header: bool = False,
+    full_width: bool = False,
+) -> rx.Component:
     header = rx.box(
         rx.hstack(
             rx.hstack(
@@ -44,9 +45,16 @@ def layout(content: rx.Component) -> rx.Component:
         **HEADER_BOX_STYLE,
     )
 
-    return rx.vstack(
-        header,
-        rx.center(
+    if full_width:
+        body = rx.box(
+            content,
+            width="100%",
+            height="100%",
+            min_height="0",
+            flex="1",
+        )
+    else:
+        body = rx.center(
             rx.box(
                 content,
                 **CONTENT_BOX_STYLE,
@@ -55,7 +63,20 @@ def layout(content: rx.Component) -> rx.Component:
             ),
             width="100%",
             flex="1",
-        ),
+        )
+
+    if hide_header:
+        return rx.vstack(
+            body,
+            style=ThemeState.applied_theme,
+            width="100%",
+            min_height="100vh",
+            spacing="0",
+        )
+
+    return rx.vstack(
+        header,
+        body,
         style=ThemeState.applied_theme,
         width="100%",
         min_height="100vh",

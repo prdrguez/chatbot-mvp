@@ -2,16 +2,15 @@ import reflex as rx
 from chatbot_mvp.state.chat_state import ChatState
 
 SIDEBAR_STYLE = {
-    "background": "rgba(15, 23, 42, 0.92)",
-    "border": "1px solid rgba(148, 163, 184, 0.25)",
-    "box_shadow": "0 12px 40px rgba(0,0,0,0.25)",
-    "border_radius": "16px",
+    "background": "rgba(18, 18, 18, 0.98)",
+    "border_right": "1px solid rgba(255, 255, 255, 0.08)",
 }
 SIDEBAR_HEADER_STYLE = {
-    "padding_bottom": "0.5rem",
+    "padding_bottom": "0.75rem",
+    "border_bottom": "1px solid rgba(148, 163, 184, 0.15)",
 }
 SIDEBAR_ITEM_STYLE = {
-    "padding": "0.4rem 0.5rem",
+    "padding": "0.45rem 0.55rem",
     "border_radius": "0.6rem",
     "width": "100%",
     "justify_content": "start",
@@ -21,7 +20,7 @@ SIDEBAR_ITEM_ACTIVE_STYLE = {
     "border": "1px solid rgba(45, 212, 191, 0.25)",
 }
 SIDEBAR_ITEM_HOVER_STYLE = {
-    "background": "rgba(148, 163, 184, 0.12)",
+    "background": "rgba(255, 255, 255, 0.06)",
 }
 SIDEBAR_TEXT_TITLE = {
     "color": "white",
@@ -89,15 +88,11 @@ def sidebar_item(session: dict) -> rx.Component:
                 width="100%",
             ),
             rx.text(
-                preview,
-                **SIDEBAR_TEXT_PREVIEW,
+                date_label,
+                **SIDEBAR_TEXT_DATE,
                 overflow="hidden",
                 text_overflow="ellipsis",
                 white_space="nowrap",
-            ),
-            rx.text(
-                date_label,
-                **SIDEBAR_TEXT_DATE,
             ),
             spacing="1",
             align="start",
@@ -155,7 +150,7 @@ def chat_sidebar() -> rx.Component:
             **SIDEBAR_HEADER_STYLE,
             flex="0 0 auto",
         ),
-        rx.scroll_area(
+        rx.box(
             rx.vstack(
                 rx.foreach(ChatState.session_list, sidebar_item),
                 spacing="1",
@@ -168,15 +163,14 @@ def chat_sidebar() -> rx.Component:
             flex="1 1 auto",
             min_height="0",
         ),
-        spacing="3",
+        spacing="2",
         width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
-        min_width=rx.cond(ChatState.sidebar_collapsed, "64px", "240px"),
+        min_width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
         max_width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
         height="100%",
         max_height="100%",
         padding=rx.cond(ChatState.sidebar_collapsed, "0.75rem", "1rem"),
         **SIDEBAR_STYLE,
         overflow="hidden",
-        flex_direction="column",
         display=rx.cond(rx.breakpoints(initial=False, md=True), "flex", "none"),
     )
