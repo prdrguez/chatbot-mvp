@@ -2,6 +2,7 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.components.typing_indicator import typing_indicator, skeleton_loader
+from chatbot_mvp.config.settings import get_admin_password
 from chatbot_mvp.state.chat_state import ChatState
 from chatbot_mvp.ui.tokens import (
     CHAT_INPUT_STYLE,
@@ -9,26 +10,27 @@ from chatbot_mvp.ui.tokens import (
 )
 
 CHAT_APP_STYLE = {
-    "background": "rgba(2, 6, 23, 0.96)",
+    "background": "rgba(17, 17, 17, 0.98)",
 }
 CHAT_TOPBAR_STYLE = {
     "padding": "1rem 1.5rem",
     "border_bottom": "1px solid rgba(148, 163, 184, 0.15)",
-    "background": "rgba(2, 6, 23, 0.98)",
+    "background": "rgba(20, 20, 20, 0.98)",
 }
 CHAT_MESSAGES_STYLE = {
     "padding": "1.5rem 1.75rem",
     "overflow_y": "auto",
+    "background": "rgba(17, 17, 17, 0.98)",
 }
 CHAT_COMPOSER_STYLE = {
     "padding": "1rem 1.5rem",
     "border_top": "1px solid rgba(148, 163, 184, 0.15)",
-    "background": "rgba(2, 6, 23, 0.98)",
+    "background": "rgba(20, 20, 20, 0.98)",
 }
 
 CHAT_INPUT_LEGIBLE_STYLE = {
     **CHAT_INPUT_STYLE,
-    "background": "rgba(15, 23, 42, 0.9)",
+    "background": "rgba(28, 28, 28, 0.95)",
     "color": "var(--gray-50)",
     "border": "1px solid rgba(148, 163, 184, 0.6)",
     "_placeholder": {"color": "rgba(226, 232, 240, 0.7)"},
@@ -69,7 +71,24 @@ def chat() -> rx.Component:
                     rx.vstack(
                         rx.box(
                             rx.hstack(
-                                rx.heading("Chat", size="6", color="var(--gray-50)"),
+                                rx.hstack(
+                                    rx.heading("Chat", size="6", color="var(--gray-50)"),
+                                    rx.hstack(
+                                        rx.link("Inicio", href="/", color="var(--gray-300)", size="2"),
+                                        rx.link("Evaluación", href="/evaluacion", color="var(--gray-300)", size="2"),
+                                        rx.cond(
+                                            get_admin_password(),
+                                            rx.link("Admin", href="/admin", color="var(--gray-300)", size="2"),
+                                            rx.box(),
+                                        ),
+                                        spacing="3",
+                                        align="center",
+                                        flex_wrap="wrap",
+                                    ),
+                                    spacing="4",
+                                    align="center",
+                                    flex_wrap="wrap",
+                                ),
                                 rx.hstack(
                                     rx.button(
                                         "Exportar",
@@ -88,6 +107,7 @@ def chat() -> rx.Component:
                                 justify="between",
                                 align="center",
                                 width="100%",
+                                flex_wrap="wrap",
                             ),
                             width="100%",
                             **CHAT_TOPBAR_STYLE,
