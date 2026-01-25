@@ -122,7 +122,6 @@ def chat() -> rx.Component:
                     spacing="2",
                     width="100%",
                     max_width="800px",
-                    margin_top="auto",
                 ),
                 spacing="6",
                 align="center",
