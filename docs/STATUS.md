@@ -1,81 +1,41 @@
 # Project Status
 
-## Estado actual (hoy)
+## Estado actual
+- App Reflex + Python en funcionamiento local.
+- Rutas activas: `/`, `/chat`, `/evaluacion`, `/admin`, `/login` (y `/ui` en modo demo).
+- Chat: UI oscura, sidebar y panel con scroll interno; input legible.
+- Evaluación: flujo completo con resultados y fallback si Gemini falla.
+- Admin: login funcional en demo, UI oscura y KPIs/graphs legibles.
+- Gemini: rate limiting, cache, backoff y cooldown configurables por env.
 
-- App Reflex con rutas principales: `/`, `/evaluacion`, `/chat`, `/admin`.
-- Modo demo por `DEMO_MODE` habilita `/ui` y links extra en el header.
-- Evaluacion con IA (Gemini) en tiempo real para feedback personalizado.
-- ChatBot con integración `google-genai` y fallback a modo demo.
-- Historial de sesiones persistente en barra lateral del chat.
-- Guardado local de submissions en `data/submissions.jsonl` (append-only).
-- KPIs en Admin con charts, reinicio de datos y logout.
-- Theme editor simplificado y persistente.
-- Export de submissions a `exports/` en JSON y CSV.
-- UI Premium con glassmorphism, animaciones y diseño responsivo.
+## Issues conocidos
+- P0: Ninguno reportado al momento.
+- P1: Límites de cuota de Gemini pueden activar cooldown/429 en picos de tráfico (mitigado por backoff/cooldown).
+- P1: Admin login usa password por env; en demo se permite "123" si no hay env.
 
-## Arquitectura rapida
+## Variables de entorno requeridas
+- AI_PROVIDER
+- DEMO_MODE
+- ADMIN_PASSWORD
+- GEMINI_API_KEY
+- GOOGLE_API_KEY
+- GEMINI_MODEL
+- GEMINI_MIN_INTERVAL_SECONDS
+- GEMINI_CACHE_TTL_SECONDS
+- GEMINI_CACHE_MAX_SIZE
+- GEMINI_MAX_BACKOFF_SECONDS
+- GEMINI_COOLDOWN_SECONDS
+- GEMINI_MAX_COOLDOWN_SECONDS
+- OPENAI_API_KEY
+- OPENAI_MODEL
 
-- `pages/` define pantallas (layout + componentes).
-- `components/` contiene layout compartido (header + content).
-- `state/` guarda estado Reflex (vars, events, carga de datos).
-- `services/` maneja I/O local (submissions, export, resumen de KPIs).
-- `data/` contiene cuestionario, versiones, y overrides de theme.
-- `ui/` define tokens y estilos reutilizables.
+## Pasos de prueba
+1) `reflex run`
+2) Verificar rutas: `/chat`, `/evaluacion`, `/admin`
+3) (Opcional) `/login` y `/ui` si demo
 
-## Mapa de archivos clave
-
-- `chatbot_mvp/chatbot_mvp.py`: define app, rutas y on_load.
-- `chatbot_mvp/components/layout.py`: layout base, header y links demo.
-- `chatbot_mvp/pages/admin.py`: tabs (KPIs/Theme/Export) y layout de cards.
-- `chatbot_mvp/pages/evaluacion.py`: render de preguntas y flujo visual.
-- `chatbot_mvp/pages/chat.py`: UI de chat con respuestas demo.
-- `chatbot_mvp/pages/ui_gallery.py`: catalogo de componentes (demo).
-- `chatbot_mvp/state/admin_state.py`: KPIs, charts y export.
-- `chatbot_mvp/state/evaluacion_state.py`: flujo de evaluacion y scoring.
-- `chatbot_mvp/state/chat_state.py`: mensajes de chat demo.
-- `chatbot_mvp/state/theme_state.py`: overrides de theme persistidos.
-- `chatbot_mvp/services/submissions_store.py`: lectura, resumen y export.
-- `chatbot_mvp/data/juego_etico.py`: preguntas y metadata del cuestionario.
-- `chatbot_mvp/ui/tokens.py`: tokens base de layout/estilo.
-- `chatbot_mvp/ui/evaluacion_tokens.py`: estilos del flujo de evaluacion.
-
-## Decisiones tomadas y por que (mini ADR)
-
-- Theme overrides: se guardan en `chatbot_mvp/data/theme_overrides.json` y se aplican
-  via `ThemeState.applied_overrides` en `components/layout.py` para afectar toda la app.
-- UI Gallery: existe para verificar componentes Reflex disponibles y estilos base
-  en modo demo, sin depender del flujo productivo.
-- Admin: tabs separan KPIs, Theme y Export. KPIs usan Recharts con fallback seguro
-  para mantener UI funcional aun si algunos componentes no existen.
-- Evaluacion: tipos `consent`, `text`, `single`, `multi` renderizan inputs distintos
-  y se validan en `EvaluacionState` antes de avanzar.
-
-## Estado de KPIs
-
-- KPIs activos: Resumen (total + promedio), By Level, Edad, Genero, Ciudad,
-  Frecuencia IA, Nivel Educativo, Ocupacion, Area, Emociones.
-- Fuente de datos: `services/submissions_store.summarize` sobre submissions locales.
-- Ciudad usa top 8 + "Otros" en chart horizontal.
-- Export: JSON y CSV con timestamp en `exports/`.
-
-## Known issues / riesgos
-
-- P0: Ninguno identificado.
-- P1: `reflex` no disponible en PATH -> usar `python3 -m reflex run`.
-- P1: Errores por usar `if state_var` -> usar `rx.cond` en UI.
-- P2: Props invalidas en grid (`columns=[...]`) -> usar string o breakpoints.
-- P2: `openai_client.py` existe pero no esta conectado a UI (verificar
-  `chatbot_mvp/services/openai_client.py`).
-
-## Backlog recomendado (orden sugerido)
-
-1) Agregar autenticacion o gating real para `/admin` en no-demo.
-2) Semillas de datos de ejemplo para KPIs (y reset local).
-3) Conectar evaluacion a `openai_client` (si se requiere feedback IA).
-4) Tests basicos de `summarize` y `AdminState` (happy path + edge cases).
-5) Documentar el formato de submissions en `data/submissions.jsonl`.
-6) Ajustar export CSV para incluir schema/version metadata.
-7) Separar assets y estilos en un tema centralizado (tokens unificados).
-8) Agregar logging simple para cargas/errores en Admin.
-9) Mejorar UX de errores en evaluacion y export.
-10) Revisar performance de charts con datasets grandes.
+## Últimos cambios (resumen breve)
+- Ajustes de layout y UX en /chat (input, panel, sidebar, altura).
+- Mejoras UI admin (login y cards de KPIs/graphs).
+- Manejo de errores en chat (callout sin bubble) y rate limit Gemini (cache/backoff/cooldown).
+- Registro y carga temprana de ThemeState.
