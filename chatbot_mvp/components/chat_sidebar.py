@@ -5,7 +5,6 @@ SIDEBAR_STYLE = {
     "background": "rgba(2, 6, 23, 0.98)",
     "border_right": "1px solid rgba(148, 163, 184, 0.2)",
     "display": "flex",
-    "flex_direction": "column",
 }
 SIDEBAR_HEADER_STYLE = {
     "padding_bottom": "0.75rem",
@@ -174,6 +173,5 @@ def chat_sidebar() -> rx.Component:
         padding=rx.cond(ChatState.sidebar_collapsed, "0.75rem", "1rem"),
         **SIDEBAR_STYLE,
         overflow="hidden",
-        flex_direction="column",
         display=rx.cond(rx.breakpoints(initial=False, md=True), "flex", "none"),
     )
