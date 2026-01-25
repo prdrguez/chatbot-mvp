@@ -30,20 +30,23 @@ CHAT_INPUT_LEGIBLE_STYLE = {
 
 def _message_row(message: dict[str, str]) -> rx.Component:
     is_user = message["role"] == "user"
-    return rx.hstack(
-        rx.box(
-            rx.text(message["content"], white_space="pre-wrap"),
-            padding="0.75rem 1rem",
-            border_radius="0.75rem",
-            max_width="75%",
-            background=rx.cond(is_user, "var(--chat-user-bg)", "var(--chat-assistant-bg)"),
-            color=rx.cond(is_user, "white", "var(--gray-800)"),
-            box_shadow=rx.cond(is_user, "var(--chat-shadow-md)", "var(--chat-shadow-sm)"),
-            transition="var(--chat-transition)",
+    return rx.vstack(
+        rx.text(
+            rx.cond(is_user, "Tú", "Asistente"),
+            size="1",
+            weight="medium",
+            color=rx.cond(is_user, "var(--teal-8)", "var(--gray-400)"),
         ),
-        justify=rx.cond(is_user, "end", "start"),
+        rx.text(
+            message["content"],
+            white_space="pre-wrap",
+            color="var(--gray-50)",
+        ),
+        spacing="1",
+        align="start",
         width="100%",
-        animation="fadeIn 0.3s ease-in-out",
+        padding="0.75rem 0",
+        border_bottom="1px solid rgba(148, 163, 184, 0.2)",
     )
 
 
