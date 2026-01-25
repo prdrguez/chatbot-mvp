@@ -19,6 +19,10 @@ Instrucciones persistentes para este repo (Reflex + Python). Seguir estas reglas
 ## Commits
 - Si hacés commits: mensajes **MUY cortos** (1 línea).
 
+## Workflow
+- Guía completa en `docs/WORKFLOW.md` (source of truth).
+- Resumen: branch por tarea, commits cortos, push y PR a `main`.
+
 ## Secrets / Keys
 - Nunca commitear keys ni tokens.
 - Usar `.env` local (ignorado) o exportar variables de entorno.
