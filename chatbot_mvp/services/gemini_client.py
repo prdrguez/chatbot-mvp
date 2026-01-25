@@ -6,6 +6,8 @@ import time
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Iterator
 
+from chatbot_mvp.config.settings import get_env_value, sanitize_env_value
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,8 +31,8 @@ _CACHE: "OrderedDict[str, tuple[float, str]]" = OrderedDict()
 
 
 def _get_env_float(name: str, default: float) -> float:
-    raw = os.getenv(name)
-    if raw is None:
+    raw = get_env_value(name, "")
+    if raw == "":
         return default
     try:
         return float(raw.strip())
@@ -39,8 +41,8 @@ def _get_env_float(name: str, default: float) -> float:
 
 
 def _get_env_int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None:
+    raw = get_env_value(name, "")
+    if raw == "":
         return default
     try:
         return int(raw.strip())
@@ -150,10 +152,10 @@ def _cooldown_remaining() -> int:
 
 
 def get_gemini_api_key() -> str:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    api_key = get_env_value("GEMINI_API_KEY")
     if api_key:
         return api_key
-    return os.getenv("GOOGLE_API_KEY", "").strip()
+    return get_env_value("GOOGLE_API_KEY")
 
 
 # Import AIClientError from openai_client to maintain consistency
@@ -169,10 +171,12 @@ class GeminiChatClient:
     """
     
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = api_key.strip() if isinstance(api_key, str) else ""
+        self.api_key = sanitize_env_value(api_key) if isinstance(api_key, str) else ""
         if not self.api_key:
             self.api_key = get_gemini_api_key()
-        self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+        self.model = sanitize_env_value(model) if isinstance(model, str) else ""
+        if not self.model:
+            self.model = get_env_value("GEMINI_MODEL", "gemini-2.0-flash")
         self.client = None
         self._initialized = False
         self.retry_count = 0
