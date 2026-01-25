@@ -20,16 +20,33 @@ _TRUE_VALUES = {"1", "true", "yes", "on"}
 _DEFAULT_AI_PROVIDER = "gemini"
 
 
+def sanitize_env_value(value: str | None) -> str:
+    if value is None:
+        return ""
+    cleaned = value.strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {"'", '"'}:
+        cleaned = cleaned[1:-1].strip()
+    return cleaned
+
+
+def get_env_value(name: str, default: str = "") -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    cleaned = sanitize_env_value(raw)
+    return cleaned if cleaned != "" else default
+
+
 def get_ai_provider() -> str:
     """
     Get the configured AI provider.
     
     Returns:
-        'demo', 'openai', or 'gemini' based on AI_PROVIDER env var
+        'demo', 'openai', 'gemini', or 'groq' based on AI_PROVIDER env var
         Defaults to 'gemini' if not set
     """
-    provider = os.getenv("AI_PROVIDER", _DEFAULT_AI_PROVIDER).strip().lower()
-    valid_providers = {"demo", "openai", "gemini"}
+    provider = get_env_value("AI_PROVIDER", _DEFAULT_AI_PROVIDER).lower()
+    valid_providers = {"demo", "openai", "gemini", "groq"}
     return provider if provider in valid_providers else _DEFAULT_AI_PROVIDER
 
 
@@ -44,8 +61,8 @@ def is_demo_mode() -> bool:
     Returns:
         True if demo mode is enabled
     """
-    value = os.getenv("DEMO_MODE")
-    if value is None:
+    value = get_env_value("DEMO_MODE")
+    if value == "":
         return True
     return value.strip().lower() in _TRUE_VALUES
 
@@ -67,7 +84,7 @@ def get_admin_password() -> str:
     Returns:
         Admin password string or empty string if not set
     """
-    value = os.getenv("ADMIN_PASSWORD")
-    if value is None or value.strip() == "":
+    value = get_env_value("ADMIN_PASSWORD")
+    if value == "":
         return "123" if is_demo_mode() else ""
-    return value.strip()
+    return value
