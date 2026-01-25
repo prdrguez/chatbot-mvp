@@ -1,6 +1,5 @@
 import hashlib
 import logging
-import os
 import threading
 import time
 from collections import OrderedDict
@@ -8,8 +7,6 @@ from typing import Any, Dict, List, Optional, Iterator
 
 from chatbot_mvp.config.settings import get_env_value, sanitize_env_value
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _GEMINI_LOCK = threading.Lock()
@@ -171,12 +168,10 @@ class GeminiChatClient:
     """
     
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = sanitize_env_value(api_key) if isinstance(api_key, str) else ""
-        if not self.api_key:
-            self.api_key = get_gemini_api_key()
-        self.model = sanitize_env_value(model) if isinstance(model, str) else ""
-        if not self.model:
-            self.model = get_env_value("GEMINI_MODEL", "gemini-2.0-flash")
+        api_key_value = sanitize_env_value(api_key) if isinstance(api_key, str) else ""
+        self.api_key = api_key_value or get_gemini_api_key()
+        model_value = sanitize_env_value(model) if isinstance(model, str) else ""
+        self.model = model_value or get_env_value("GEMINI_MODEL", "gemini-2.0-flash")
         self.client = None
         self._initialized = False
         self.retry_count = 0

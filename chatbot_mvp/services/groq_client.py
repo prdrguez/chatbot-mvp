@@ -3,9 +3,6 @@ from typing import Dict, List, Optional
 
 from chatbot_mvp.config.settings import get_env_value, sanitize_env_value
 from chatbot_mvp.services.openai_client import AIClientError
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
@@ -19,12 +16,10 @@ class GroqChatClient:
     """Groq client for chat interactions."""
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = sanitize_env_value(api_key) if isinstance(api_key, str) else ""
-        if not self.api_key:
-            self.api_key = get_groq_api_key()
-        self.model = sanitize_env_value(model) if isinstance(model, str) else ""
-        if not self.model:
-            self.model = get_env_value("GROQ_MODEL", _DEFAULT_GROQ_MODEL)
+        api_key_value = sanitize_env_value(api_key) if isinstance(api_key, str) else ""
+        self.api_key = api_key_value or get_groq_api_key()
+        model_value = sanitize_env_value(model) if isinstance(model, str) else ""
+        self.model = model_value or get_env_value("GROQ_MODEL", _DEFAULT_GROQ_MODEL)
         self.client = None
         self._initialized = False
 

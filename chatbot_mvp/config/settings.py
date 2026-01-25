@@ -18,6 +18,7 @@ else:
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _DEFAULT_AI_PROVIDER = "gemini"
+_VALID_AI_PROVIDERS = {"demo", "openai", "gemini", "groq"}
 
 
 def sanitize_env_value(value: str | None) -> str:
@@ -46,8 +47,7 @@ def get_ai_provider() -> str:
         Defaults to 'gemini' if not set
     """
     provider = get_env_value("AI_PROVIDER", _DEFAULT_AI_PROVIDER).lower()
-    valid_providers = {"demo", "openai", "gemini", "groq"}
-    return provider if provider in valid_providers else _DEFAULT_AI_PROVIDER
+    return provider if provider in _VALID_AI_PROVIDERS else _DEFAULT_AI_PROVIDER
 
 
 def is_demo_mode() -> bool:
