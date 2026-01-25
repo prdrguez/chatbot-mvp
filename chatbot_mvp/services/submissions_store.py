@@ -26,6 +26,7 @@ def append_submission(
     correct_count: int | None = None,
     total_scored: int | None = None,
     score_percent: int | None = None,
+    ai_feedback: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -45,6 +46,8 @@ def append_submission(
         payload["total_scored"] = total_scored
     if isinstance(score_percent, int):
         payload["score_percent"] = score_percent
+    if isinstance(ai_feedback, str) and ai_feedback.strip():
+        payload["ai_feedback"] = ai_feedback.strip()
 
     path = Path(SUBMISSIONS_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)

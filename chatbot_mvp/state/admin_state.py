@@ -71,6 +71,9 @@ class AdminState(rx.State):
     summary: dict[str, Any] = {}
     export_message: str = ""
     export_error: str = ""
+    reset_confirm_open: bool = False
+    reset_message: str = ""
+    reset_error: str = ""
 
     @rx.var
     def has_data(self) -> bool:
@@ -421,26 +424,44 @@ class AdminState(rx.State):
         async with self:
             self.export_message = message
             self.export_error = error
+
+    @rx.event
+    def request_reset(self) -> None:
+        self.reset_message = ""
+        self.reset_error = ""
+        self.reset_confirm_open = True
+
+    @rx.event
+    def cancel_reset(self) -> None:
+        self.reset_confirm_open = False
     @rx.event(background=True)
     async def reset_data(self) -> None:
         """Clear all submissions and reset the summary."""
         async with self:
             self.loading = True
+            self.reset_message = ""
+            self.reset_error = ""
+            self.reset_confirm_open = False
         
         try:
             from pathlib import Path
+            import shutil
             from chatbot_mvp.services.submissions_store import SUBMISSIONS_PATH
             path = Path(SUBMISSIONS_PATH)
             if path.exists():
                 path.unlink()
+
+            chats_path = Path("data/chats")
+            if chats_path.exists():
+                shutil.rmtree(chats_path)
             
             # Re-initialize summary
             async with self:
                 self.summary = {}
-                self.error = "Datos eliminados correctamente."
+                self.reset_message = "Datos locales eliminados correctamente."
         except Exception as exc:
             async with self:
-                self.error = f"Error al eliminar datos: {exc}"
+                self.reset_error = f"Error al eliminar datos: {exc}"
         
         async with self:
             self.loading = False
