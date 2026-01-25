@@ -82,7 +82,6 @@ def chat() -> rx.Component:
                     **CHAT_SURFACE_DARK_STYLE,
                     width="100%",
                     max_width="800px",
-                    min_height="400px",
                     height="100%",
                     flex="1",
                     min_height="0",
