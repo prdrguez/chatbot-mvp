@@ -1,5 +1,17 @@
 # Project Status
 
+## Session Snapshot (2026-01-25)
+- Branch actual: main
+- Último commit: 3319103 docs: add workflow (#1)
+- PRs abiertos: ninguno
+
+## NOW / NEXT
+- NOW: estabilizar UI chat (sidebar height/scroll) + tareas #0 pendientes
+- NEXT:
+  - Retomar tarea #0 (por definir)
+  - Mejorar panel lateral de sesiones (estética + scroll)
+  - Revisar tema ThemeState null (si vuelve a aparecer)
+
 ## Estado actual
 - App Reflex + Python en funcionamiento local.
 - Rutas activas: `/`, `/chat`, `/evaluacion`, `/admin`, `/login` (y `/ui` en modo demo).
