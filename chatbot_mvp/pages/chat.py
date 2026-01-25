@@ -138,7 +138,8 @@ def chat() -> rx.Component:
             align_items="stretch",
             spacing="0",
             style={
-                "height": "calc(100vh - 72px)",
+                "height": "100%",
+                "min_height": "0",
                 "overflow": "hidden",
             },
         )

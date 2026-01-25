@@ -52,6 +52,9 @@
 - Para retomar: `git status -sb` + `git diff --name-only` + `git log -5 --oneline`.
 - Revisar PRs abiertos antes de continuar.
 
+## Open PRs
+- PR (OPEN): fix/chat-height-scroll — Fix height/scroll del chat (sidebar + panel).
+
 ## Backlog UI
 - Arreglar panel lateral de sesiones (alto/scroll/estética).
 
