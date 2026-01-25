@@ -2,13 +2,14 @@ import reflex as rx
 from chatbot_mvp.state.chat_state import ChatState
 
 SIDEBAR_STYLE = {
-    "background": "rgba(15, 23, 42, 0.92)",
-    "border": "1px solid rgba(148, 163, 184, 0.25)",
-    "box_shadow": "0 12px 40px rgba(0,0,0,0.25)",
-    "border_radius": "16px",
+    "background": "rgba(2, 6, 23, 0.98)",
+    "border_right": "1px solid rgba(148, 163, 184, 0.2)",
+    "display": "flex",
+    "flex_direction": "column",
 }
 SIDEBAR_HEADER_STYLE = {
-    "padding_bottom": "0.5rem",
+    "padding_bottom": "0.75rem",
+    "border_bottom": "1px solid rgba(148, 163, 184, 0.15)",
 }
 SIDEBAR_ITEM_STYLE = {
     "padding": "0.45rem 0.55rem",
@@ -151,7 +152,7 @@ def chat_sidebar() -> rx.Component:
             **SIDEBAR_HEADER_STYLE,
             flex="0 0 auto",
         ),
-        rx.scroll_area(
+        rx.box(
             rx.vstack(
                 rx.foreach(ChatState.session_list, sidebar_item),
                 spacing="1",
@@ -164,7 +165,7 @@ def chat_sidebar() -> rx.Component:
             flex="1 1 auto",
             min_height="0",
         ),
-        spacing="3",
+        spacing="2",
         width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
         min_width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
         max_width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),

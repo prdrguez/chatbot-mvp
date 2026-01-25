@@ -2,21 +2,28 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.components.typing_indicator import typing_indicator, skeleton_loader
-from chatbot_mvp.components.quick_replies import contextual_quick_replies
 from chatbot_mvp.state.chat_state import ChatState
 from chatbot_mvp.ui.tokens import (
-    CHAT_SURFACE_STYLE,
-    CHAT_MESSAGE_USER_STYLE,
-    CHAT_MESSAGE_ASSISTANT_STYLE,
     CHAT_INPUT_STYLE,
     CHAT_SEND_BUTTON_STYLE,
 )
 
-CHAT_SURFACE_DARK_STYLE = {
-    **CHAT_SURFACE_STYLE,
-    "background": "rgba(15, 23, 42, 0.92)",
-    "border": "1px solid rgba(148, 163, 184, 0.25)",
-    "box_shadow": "0 12px 40px rgba(0,0,0,0.25)",
+CHAT_APP_STYLE = {
+    "background": "rgba(2, 6, 23, 0.96)",
+}
+CHAT_TOPBAR_STYLE = {
+    "padding": "1rem 1.5rem",
+    "border_bottom": "1px solid rgba(148, 163, 184, 0.15)",
+    "background": "rgba(2, 6, 23, 0.98)",
+}
+CHAT_MESSAGES_STYLE = {
+    "padding": "1.5rem 1.75rem",
+    "overflow_y": "auto",
+}
+CHAT_COMPOSER_STYLE = {
+    "padding": "1rem 1.5rem",
+    "border_top": "1px solid rgba(148, 163, 184, 0.15)",
+    "background": "rgba(2, 6, 23, 0.98)",
 }
 
 CHAT_INPUT_LEGIBLE_STYLE = {
@@ -40,12 +47,13 @@ def _message_row(message: dict[str, str]) -> rx.Component:
         rx.text(
             message["content"],
             white_space="pre-wrap",
+            word_break="break-word",
             color="var(--gray-50)",
         ),
         spacing="1",
         align="start",
         width="100%",
-        padding="0.75rem 0",
+        padding="0.85rem 0",
         border_bottom="1px solid rgba(148, 163, 184, 0.2)",
     )
 
@@ -59,26 +67,30 @@ def chat() -> rx.Component:
                 chat_sidebar(),
                 rx.box(
                     rx.vstack(
-                        rx.hstack(
-                            rx.heading("Chat", size="8"),
+                        rx.box(
                             rx.hstack(
-                                rx.button(
-                                    "Exportar",
-                                    on_click=lambda: ChatState.export_session("json"),
-                                    variant="outline",
-                                    size="2",
+                                rx.heading("Chat", size="6", color="var(--gray-50)"),
+                                rx.hstack(
+                                    rx.button(
+                                        "Exportar",
+                                        on_click=lambda: ChatState.export_session("json"),
+                                        variant="outline",
+                                        size="2",
+                                    ),
+                                    rx.button(
+                                        "Nuevo Chat",
+                                        on_click=ChatState.clear_chat,
+                                        variant="soft",
+                                        size="2",
+                                    ),
+                                    spacing="2",
                                 ),
-                                rx.button(
-                                    "Nuevo Chat",
-                                    on_click=ChatState.clear_chat,
-                                    variant="soft",
-                                    size="2",
-                                ),
-                                spacing="2",
+                                justify="between",
+                                align="center",
+                                width="100%",
                             ),
-                            justify="between",
-                            align="center",
                             width="100%",
+                            **CHAT_TOPBAR_STYLE,
                         ),
                         rx.box(
                             rx.vstack(
@@ -88,72 +100,79 @@ def chat() -> rx.Component:
                                 spacing="3",
                                 width="100%",
                             ),
-                            **CHAT_SURFACE_DARK_STYLE,
                             width="100%",
                             flex="1",
                             min_height="0",
-                            overflow_y="auto",
+                            **CHAT_MESSAGES_STYLE,
                         ),
                         rx.cond(
                             ChatState.last_error != "",
-                            rx.callout(
-                                ChatState.last_error,
-                                icon="triangle_alert",
-                                color_scheme="orange",
-                                width="100%",
-                                style={
-                                    "background": "rgba(124, 45, 18, 0.92)",
-                                    "color": "var(--gray-50)",
-                                    "border": "1px solid rgba(251, 191, 36, 0.4)",
-                                },
+                            rx.box(
+                                rx.callout(
+                                    ChatState.last_error,
+                                    icon="triangle_alert",
+                                    color_scheme="orange",
+                                    width="100%",
+                                    style={
+                                        "background": "rgba(124, 45, 18, 0.92)",
+                                        "color": "var(--gray-50)",
+                                        "border": "1px solid rgba(251, 191, 36, 0.4)",
+                                    },
+                                ),
+                                padding="0 1.5rem 1rem",
                             ),
                             rx.box(),
                         ),
-                        rx.hstack(
-                            rx.input(
-                                value=ChatState.current_input,
-                                on_change=ChatState.set_input,
-                                on_key_down=ChatState.handle_key_down,
-                                placeholder="Escribe tu mensaje...",
+                        rx.box(
+                            rx.hstack(
+                                rx.input(
+                                    value=ChatState.current_input,
+                                    on_change=ChatState.set_input,
+                                    on_key_down=ChatState.handle_key_down,
+                                    placeholder="Escribe tu mensaje...",
+                                    width="100%",
+                                    disabled=ChatState.loading,
+                                    style=CHAT_INPUT_LEGIBLE_STYLE,
+                                ),
+                                rx.button(
+                                    rx.icon("send", size=18),
+                                    on_click=ChatState.send_message,
+                                    **CHAT_SEND_BUTTON_STYLE,
+                                    loading=ChatState.loading,
+                                    disabled=ChatState.loading,
+                                ),
+                                spacing="2",
                                 width="100%",
-                                disabled=ChatState.loading,
-                                style=CHAT_INPUT_LEGIBLE_STYLE,
                             ),
-                            rx.button(
-                                rx.icon("send", size=18),
-                                on_click=ChatState.send_message,
-                                **CHAT_SEND_BUTTON_STYLE,
-                                loading=ChatState.loading,
-                                disabled=ChatState.loading,
-                            ),
-                            spacing="2",
                             width="100%",
+                            **CHAT_COMPOSER_STYLE,
                         ),
-                        spacing="6",
-                        align="center",
+                        spacing="0",
+                        align="stretch",
                         width="100%",
                         height="100%",
                         min_height="0",
-                        display="flex",
-                        flex_direction="column",
-                        flex="1",
                     ),
-                    width="100%",
+                    flex="1",
+                    min_width="0",
                     height="100%",
-                    min_height="0",
-                    display="flex",
-                    justify_content="center",
-                    padding="2rem 1rem",
+                    overflow="hidden",
                 ),
                 width="100%",
                 height="100%",
                 min_height="0",
                 align_items="stretch",
                 spacing="0",
+                flex="1",
             ),
+            **CHAT_APP_STYLE,
             width="100%",
-            height="calc(100vh - 72px)",
+            height="100vh",
             min_height="0",
             overflow="hidden",
-        )
+            display="flex",
+            flex_direction="column",
+        ),
+        hide_header=True,
+        full_width=True,
     )
