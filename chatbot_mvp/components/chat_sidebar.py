@@ -8,10 +8,10 @@ SIDEBAR_STYLE = {
     "border_radius": "16px",
 }
 SIDEBAR_HEADER_STYLE = {
-    "padding_bottom": "1rem",
+    "padding_bottom": "0.5rem",
 }
 SIDEBAR_ITEM_STYLE = {
-    "padding": "0.55rem 0.6rem",
+    "padding": "0.4rem 0.5rem",
     "border_radius": "0.6rem",
     "width": "100%",
     "justify_content": "start",
@@ -62,7 +62,7 @@ def sidebar_item(session: dict) -> rx.Component:
     is_active = session_id == ChatState.session_id
 
     collapsed = rx.icon_button(
-        rx.icon("message-square", size=16),
+        rx.icon("message-square", size=14),
         on_click=lambda: ChatState.load_session(session_id),
         variant="ghost",
         size="2",
@@ -76,7 +76,7 @@ def sidebar_item(session: dict) -> rx.Component:
     expanded = rx.button(
         rx.vstack(
             rx.hstack(
-                rx.icon("message-square", size=16),
+                rx.icon("message-square", size=14),
                 rx.text(
                     preview,
                     **SIDEBAR_TEXT_TITLE,
@@ -138,8 +138,8 @@ def chat_sidebar() -> rx.Component:
             ),
             rx.cond(
                 ChatState.sidebar_collapsed,
-                rx.icon("message-square", size=16),
-                rx.heading("Sesiones", size="4", color="white"),
+                rx.icon("message-square", size=14),
+                rx.heading("Sesiones", size="3", color="white"),
             ),
             rx.icon_button(
                 rx.icon("plus"),
@@ -166,7 +166,9 @@ def chat_sidebar() -> rx.Component:
             padding_right="0.25rem",
         ),
         spacing="3",
-        width=rx.cond(ChatState.sidebar_collapsed, "64px", "280px"),
+        width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
+        min_width=rx.cond(ChatState.sidebar_collapsed, "64px", "240px"),
+        max_width=rx.cond(ChatState.sidebar_collapsed, "64px", "260px"),
         height="100vh",
         padding=rx.cond(ChatState.sidebar_collapsed, "0.75rem", "1rem"),
         **SIDEBAR_STYLE,
