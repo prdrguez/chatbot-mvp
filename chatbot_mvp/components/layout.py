@@ -10,9 +10,6 @@ def layout(
     hide_header: bool = False,
     full_width: bool = False,
 ) -> rx.Component:
-    # Load theme on layout render
-    ThemeState.load_theme()
-    
     header = rx.box(
         rx.hstack(
             rx.hstack(

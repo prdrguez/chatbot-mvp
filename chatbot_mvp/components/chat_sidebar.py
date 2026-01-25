@@ -2,8 +2,8 @@ import reflex as rx
 from chatbot_mvp.state.chat_state import ChatState
 
 SIDEBAR_STYLE = {
-    "background": "rgba(2, 6, 23, 0.98)",
-    "border_right": "1px solid rgba(148, 163, 184, 0.2)",
+    "background": "rgba(18, 18, 18, 0.98)",
+    "border_right": "1px solid rgba(255, 255, 255, 0.08)",
 }
 SIDEBAR_HEADER_STYLE = {
     "padding_bottom": "0.75rem",
@@ -20,7 +20,7 @@ SIDEBAR_ITEM_ACTIVE_STYLE = {
     "border": "1px solid rgba(45, 212, 191, 0.25)",
 }
 SIDEBAR_ITEM_HOVER_STYLE = {
-    "background": "rgba(148, 163, 184, 0.12)",
+    "background": "rgba(255, 255, 255, 0.06)",
 }
 SIDEBAR_TEXT_TITLE = {
     "color": "white",

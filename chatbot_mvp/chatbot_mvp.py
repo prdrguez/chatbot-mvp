@@ -17,6 +17,7 @@ from chatbot_mvp.state.theme_state import ThemeState
 from chatbot_mvp.config.settings import is_demo_mode, get_admin_password
 
 
+_ = chatbot_mvp.state.ALL_STATES
 app = rx.App(theme=APP_THEME, style=GLOBAL_STYLE, stylesheets=STYLESHEETS)
 app.add_page(home, route="/", on_load=ThemeState.load_theme)
 app.add_page(
