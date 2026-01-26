@@ -15,4 +15,5 @@ def admin() -> rx.Component:
             align="start",
             width="100%",
         ),
+        active_route="/admin",
     )

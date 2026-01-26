@@ -2,7 +2,6 @@ import reflex as rx
 
 from chatbot_mvp.components.layout import layout
 from chatbot_mvp.components.typing_indicator import typing_indicator, skeleton_loader
-from chatbot_mvp.config.settings import get_admin_password
 from chatbot_mvp.state.chat_state import ChatState
 from chatbot_mvp.ui.tokens import (
     CHAT_INPUT_STYLE,
@@ -11,11 +10,6 @@ from chatbot_mvp.ui.tokens import (
 
 CHAT_APP_STYLE = {
     "background": "rgba(17, 17, 17, 0.98)",
-}
-CHAT_TOPBAR_STYLE = {
-    "padding": "1rem 1.5rem",
-    "border_bottom": "1px solid rgba(148, 163, 184, 0.15)",
-    "background": "rgba(20, 20, 20, 0.98)",
 }
 CHAT_MESSAGES_STYLE = {
     "padding": "1.5rem 1.75rem",
@@ -73,139 +67,98 @@ def _message_row(message: dict[str, str], index: int) -> rx.Component:
 from chatbot_mvp.components.chat_sidebar import chat_sidebar
 
 def chat() -> rx.Component:
+    header_actions = rx.hstack(
+        rx.button(
+            "Exportar",
+            on_click=lambda: ChatState.export_session("json"),
+            variant="outline",
+            size="2",
+        ),
+        rx.button(
+            "Nuevo Chat",
+            on_click=ChatState.clear_chat,
+            variant="soft",
+            size="2",
+        ),
+        spacing="2",
+        align="center",
+    )
+
     return layout(
         rx.box(
-            rx.hstack(
-                chat_sidebar(),
+            rx.vstack(
                 rx.box(
                     rx.vstack(
-                        rx.box(
-                            rx.hstack(
-                                rx.hstack(
-                                    rx.heading("Chat", size="6", color="var(--gray-50)"),
-                                    rx.hstack(
-                                        rx.link("Inicio", href="/", color="var(--gray-300)", size="2"),
-                                        rx.link("Evaluación", href="/evaluacion", color="var(--gray-300)", size="2"),
-                                        rx.cond(
-                                            get_admin_password(),
-                                            rx.link("Admin", href="/admin", color="var(--gray-300)", size="2"),
-                                            rx.box(),
-                                        ),
-                                        spacing="3",
-                                        align="center",
-                                        flex_wrap="wrap",
-                                    ),
-                                    spacing="4",
-                                    align="center",
-                                    flex_wrap="wrap",
-                                ),
-                                rx.hstack(
-                                    rx.button(
-                                        "Exportar",
-                                        on_click=lambda: ChatState.export_session("json"),
-                                        variant="outline",
-                                        size="2",
-                                    ),
-                                    rx.button(
-                                        "Nuevo Chat",
-                                        on_click=ChatState.clear_chat,
-                                        variant="soft",
-                                        size="2",
-                                    ),
-                                    spacing="2",
-                                ),
-                                justify="between",
-                                align="center",
-                                width="100%",
-                                flex_wrap="wrap",
-                            ),
-                            width="100%",
-                            **CHAT_TOPBAR_STYLE,
+                        rx.foreach(
+                            ChatState.messages,
+                            lambda message, index: _message_row(message, index),
                         ),
-                        rx.box(
-                            rx.vstack(
-                                rx.foreach(
-                                    ChatState.messages,
-                                    lambda message, index: _message_row(message, index),
-                                ),
-                                rx.cond(ChatState.typing, typing_indicator()),
-                                rx.cond(ChatState.loading, skeleton_loader()),
-                                spacing="3",
-                                width="100%",
-                            ),
-                            width="100%",
-                            flex="1",
-                            min_height="0",
-                            **CHAT_MESSAGES_STYLE,
-                        ),
-                        rx.cond(
-                            ChatState.last_error != "",
-                            rx.box(
-                                rx.callout(
-                                    ChatState.last_error,
-                                    icon="triangle_alert",
-                                    color_scheme="orange",
-                                    width="100%",
-                                    style={
-                                        "background": "rgba(124, 45, 18, 0.92)",
-                                        "color": "var(--gray-50)",
-                                        "border": "1px solid rgba(251, 191, 36, 0.4)",
-                                    },
-                                ),
-                                padding="0 1.5rem 1rem",
-                            ),
-                            rx.box(),
-                        ),
-                        rx.box(
-                            rx.hstack(
-                                rx.input(
-                                    value=ChatState.current_input,
-                                    on_change=ChatState.set_input,
-                                    on_key_down=ChatState.handle_key_down,
-                                    placeholder="Escribe tu mensaje...",
-                                    width="100%",
-                                    disabled=ChatState.loading,
-                                    style=CHAT_INPUT_LEGIBLE_STYLE,
-                                ),
-                                rx.button(
-                                    rx.icon("send", size=18),
-                                    on_click=ChatState.send_message,
-                                    **CHAT_SEND_BUTTON_STYLE,
-                                    loading=ChatState.loading,
-                                    disabled=ChatState.loading,
-                                ),
-                                spacing="2",
-                                width="100%",
-                            ),
-                            width="100%",
-                            **CHAT_COMPOSER_STYLE,
-                        ),
-                        spacing="0",
-                        align="stretch",
+                        rx.cond(ChatState.typing, typing_indicator()),
+                        rx.cond(ChatState.loading, skeleton_loader()),
+                        spacing="3",
                         width="100%",
-                        height="100%",
-                        min_height="0",
                     ),
+                    width="100%",
                     flex="1",
-                    min_width="0",
-                    height="100%",
-                    overflow="hidden",
+                    min_height="0",
+                    **CHAT_MESSAGES_STYLE,
                 ),
+                rx.cond(
+                    ChatState.last_error != "",
+                    rx.box(
+                        rx.callout(
+                            ChatState.last_error,
+                            icon="triangle_alert",
+                            color_scheme="orange",
+                            width="100%",
+                            style={
+                                "background": "rgba(124, 45, 18, 0.92)",
+                                "color": "var(--gray-50)",
+                                "border": "1px solid rgba(251, 191, 36, 0.4)",
+                            },
+                        ),
+                        padding="0 1.5rem 1rem",
+                    ),
+                    rx.box(),
+                ),
+                rx.box(
+                    rx.hstack(
+                        rx.input(
+                            value=ChatState.current_input,
+                            on_change=ChatState.set_input,
+                            on_key_down=ChatState.handle_key_down,
+                            placeholder="Escribe tu mensaje...",
+                            width="100%",
+                            disabled=ChatState.loading,
+                            style=CHAT_INPUT_LEGIBLE_STYLE,
+                        ),
+                        rx.button(
+                            rx.icon("send", size=18),
+                            on_click=ChatState.send_message,
+                            **CHAT_SEND_BUTTON_STYLE,
+                            loading=ChatState.loading,
+                            disabled=ChatState.loading,
+                        ),
+                        spacing="2",
+                        width="100%",
+                    ),
+                    width="100%",
+                    **CHAT_COMPOSER_STYLE,
+                ),
+                spacing="0",
+                align="stretch",
                 width="100%",
                 height="100%",
                 min_height="0",
-                align_items="stretch",
-                spacing="0",
-                flex="1",
             ),
             **CHAT_APP_STYLE,
             width="100%",
-            height="100vh",
+            height="100%",
             min_height="0",
             overflow="hidden",
-            display="flex",
-            flex_direction="column",
         ),
-        hide_header=True,
-        full_width=True,
+        active_route="/chat",
+        sidebar=chat_sidebar(),
+        header_actions=header_actions,
+        content_scroll=False,
     )

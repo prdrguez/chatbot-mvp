@@ -221,5 +221,6 @@ def evaluacion() -> rx.Component:
                 **EVAL_SECTION_STACK_STYLE,
             ),
             **EVAL_CONTAINER_STYLE,
-        )
+        ),
+        active_route="/evaluacion",
     )
