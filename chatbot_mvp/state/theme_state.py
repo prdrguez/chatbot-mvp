@@ -232,6 +232,9 @@ class ThemeState(rx.State):
             "--theme-secondary": self.secondary_color,
             "--theme-accent": self.accent_color,
             "--theme-border-radius": self._get_border_radius_value(),
+            "background": "rgba(17, 17, 17, 0.98)",
+            "color": "var(--gray-50)",
+            "color_scheme": "dark",
         }
         theme_vars = self._generate_css_variables()
         return {**theme_vars, **base_vars, **self.applied_overrides}

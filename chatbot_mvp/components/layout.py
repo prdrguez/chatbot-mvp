@@ -4,12 +4,6 @@ from chatbot_mvp.config.settings import is_demo_mode, get_admin_password
 from chatbot_mvp.state.theme_state import ThemeState
 from chatbot_mvp.ui.tokens import CONTENT_BOX_STYLE, HEADER_BOX_STYLE
 
-BASE_APP_STYLE = {
-    "background": "rgba(17, 17, 17, 0.98)",
-    "color": "var(--gray-50)",
-    "color_scheme": "dark",
-}
-
 
 def layout(
     content: rx.Component,
@@ -74,7 +68,7 @@ def layout(
     if hide_header:
         return rx.vstack(
             body,
-            style={**BASE_APP_STYLE, **ThemeState.applied_theme},
+            style=ThemeState.applied_theme,
             width="100%",
             min_height="100vh",
             spacing="0",
@@ -83,7 +77,7 @@ def layout(
     return rx.vstack(
         header,
         body,
-        style={**BASE_APP_STYLE, **ThemeState.applied_theme},
+        style=ThemeState.applied_theme,
         width="100%",
         min_height="100vh",
         spacing="0",
