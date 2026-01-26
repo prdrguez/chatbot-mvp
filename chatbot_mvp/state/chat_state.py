@@ -153,7 +153,7 @@ class ChatState(rx.State):
     @rx.event(background=True)
     async def stream_assistant_response(self, full_text: str, message_index: int) -> None:
         chunk_size = 12
-        delay = 0.03
+        delay = 0.036
         async with self:
             self.stream_active = True
             self.stream_message_index = message_index

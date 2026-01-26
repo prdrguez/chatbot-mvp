@@ -221,7 +221,7 @@ class EvaluacionState(rx.State):
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
         chunk_size = 12
-        delay = 0.03
+        delay = 0.036
         async with self:
             self.eval_stream_active = True
             self.eval_stream_text = ""

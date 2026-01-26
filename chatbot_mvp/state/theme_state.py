@@ -24,7 +24,7 @@ class ThemeState(rx.State):
     error: str = ""
 
     # Simplified theme settings
-    mode: str = "light"
+    mode: str = "dark"
     primary_color: str = "#60a5fa"
     secondary_color: str = "#34d399"
     accent_color: str = "#fbbf24"
@@ -154,7 +154,7 @@ class ThemeState(rx.State):
             if _THEME_PATH.exists():
                 data = json.loads(_THEME_PATH.read_text())
                 if isinstance(data, dict):
-                    self.mode = data.get("mode", "light")
+                    self.mode = data.get("mode", "dark")
                     self.primary_color = data.get("primary_color", "#60a5fa")
                     self.secondary_color = data.get("secondary_color", "#34d399")
                     self.accent_color = data.get("accent_color", "#fbbf24")
@@ -204,7 +204,7 @@ class ThemeState(rx.State):
             self.theme_updated = False
 
     def reset_theme(self) -> None:
-        self.mode = "light"
+        self.mode = "dark"
         self.primary_color = "#60a5fa"
         self.secondary_color = "#34d399"
         self.accent_color = "#fbbf24"
