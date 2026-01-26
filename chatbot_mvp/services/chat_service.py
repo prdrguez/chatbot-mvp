@@ -13,7 +13,7 @@ import logging
 from typing import Dict, List, Optional, Protocol
 from abc import ABC, abstractmethod
 
-from chatbot_mvp.config.settings import get_ai_provider
+from chatbot_mvp.config.settings import get_runtime_ai_provider
 from chatbot_mvp.services.openai_client import AIClientError
 
 # Configure logging
@@ -74,8 +74,23 @@ class DemoResponseStrategy(BaseResponseStrategy):
             return "Entendido. Contame un poco mas para ayudarte mejor."
 
 
+class StaticResponseStrategy(BaseResponseStrategy):
+    """Static response strategy for configuration errors."""
+
+    def __init__(self, message: str):
+        self.message = message
+
+    def generate_response(
+        self,
+        message: str,
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None,
+    ) -> str:
+        return self.message
+
+
 class AIResponseStrategy(BaseResponseStrategy):
-    """AI-powered response strategy using configurable AI client (OpenAI/Gemini)."""
+    """AI-powered response strategy using configurable AI client (OpenAI/Gemini/Groq)."""
     
     def __init__(self, ai_client):
         """
@@ -172,7 +187,7 @@ class ChatService:
         Returns:
             Configured response strategy
         """
-        provider = get_ai_provider()
+        provider = get_runtime_ai_provider()
         
         if provider == "demo":
             logger.info("Using demo response strategy")
@@ -204,6 +219,35 @@ class ChatService:
                         )
                     return DemoResponseStrategy()
             logger.info("Using provider: gemini")
+            return AIResponseStrategy(ai_client)
+        elif provider == "groq":
+            if not ai_client:
+                from chatbot_mvp.services.groq_client import (
+                    create_groq_client,
+                    get_groq_api_key,
+                )
+
+                api_key = get_groq_api_key()
+                if not api_key:
+                    logger.warning(
+                        "Groq API key missing (set GROQ_API_KEY), returning error response"
+                    )
+                    return StaticResponseStrategy(
+                        "Falta GROQ_API_KEY para usar Groq. Configurala en tu entorno."
+                    )
+                try:
+                    ai_client = create_groq_client()
+                except Exception as exc:
+                    logger.warning(f"Groq client init failed: {exc}")
+                    return StaticResponseStrategy(
+                        str(exc) or "Error al inicializar cliente Groq."
+                    )
+                if not ai_client:
+                    logger.warning("Groq client unavailable, returning error response")
+                    return StaticResponseStrategy(
+                        "No se pudo inicializar el cliente Groq."
+                    )
+            logger.info("Using provider: groq")
             return AIResponseStrategy(ai_client)
         else:
             logger.warning(f"Provider {provider} not available, falling back to demo")

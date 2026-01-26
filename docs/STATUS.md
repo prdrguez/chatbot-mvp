@@ -38,6 +38,8 @@
 - GEMINI_MAX_BACKOFF_SECONDS
 - GEMINI_COOLDOWN_SECONDS
 - GEMINI_MAX_COOLDOWN_SECONDS
+- GROQ_API_KEY
+- GROQ_MODEL
 - OPENAI_API_KEY
 - OPENAI_MODEL
 
@@ -60,3 +62,6 @@
 - Mejoras UI admin (login y cards de KPIs/graphs).
 - Manejo de errores en chat (callout sin bubble) y rate limit Gemini (cache/backoff/cooldown).
 - Registro y carga temprana de ThemeState.
+
+## PRs abiertos
+- OPEN: feat/admin-provider-selector (selector global de provider AI persistido en data/app_settings.json).

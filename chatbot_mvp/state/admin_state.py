@@ -11,7 +11,10 @@ from chatbot_mvp.services.submissions_store import (
     read_submissions,
     summarize,
 )
+from chatbot_mvp.config.settings import get_env_value, get_runtime_ai_provider
+from chatbot_mvp.services.app_settings_store import set_provider_override
 
+_ADMIN_PROVIDERS = {"gemini", "groq"}
 
 def _dict_to_items(data: dict[str, int]) -> list[dict[str, Any]]:
     return [{"label": key, "count": data[key]} for key in sorted(data.keys())]
@@ -74,6 +77,10 @@ class AdminState(rx.State):
     reset_confirm_open: bool = False
     reset_message: str = ""
     reset_error: str = ""
+    selected_ai_provider: str = ""
+    active_ai_provider: str = ""
+    provider_message: str = ""
+    provider_error: str = ""
 
     @rx.var
     def has_data(self) -> bool:
@@ -357,6 +364,13 @@ class AdminState(rx.State):
             f"Schema v{schema_version}"
         )
 
+    @rx.var
+    def groq_key_missing(self) -> bool:
+        return (
+            self.selected_ai_provider == "groq"
+            and get_env_value("GROQ_API_KEY") == ""
+        )
+
     def _breakdown(self, key: str) -> dict[str, int]:
         breakdowns = self.summary.get("breakdowns", {})
         if not isinstance(breakdowns, dict):
@@ -366,10 +380,16 @@ class AdminState(rx.State):
 
     @rx.event(background=True)
     async def load_summary(self) -> None:
+        provider = get_runtime_ai_provider()
+        selected = provider if provider in _ADMIN_PROVIDERS else "gemini"
         async with self:
             self.loading = True
             self.error = ""
             self.summary = {}
+            self.active_ai_provider = provider
+            self.selected_ai_provider = selected
+            self.provider_message = ""
+            self.provider_error = ""
 
         try:
             submissions = read_submissions()
@@ -384,6 +404,18 @@ class AdminState(rx.State):
             self.summary = summary
             self.error = error
             self.loading = False
+
+    @rx.event
+    def save_ai_provider(self) -> None:
+        self.provider_message = ""
+        self.provider_error = ""
+        try:
+            selected = set_provider_override(self.selected_ai_provider)
+        except Exception as exc:
+            self.provider_error = f"No se pudo guardar el proveedor: {exc}"
+            return
+        self.active_ai_provider = selected
+        self.provider_message = f"Proveedor activo: {selected}"
 
     @rx.event(background=True)
     async def do_export_json(self) -> None:

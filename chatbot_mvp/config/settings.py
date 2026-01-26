@@ -18,6 +18,24 @@ else:
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _DEFAULT_AI_PROVIDER = "gemini"
+_VALID_AI_PROVIDERS = {"demo", "openai", "gemini", "groq"}
+
+
+def sanitize_env_value(value: str | None) -> str:
+    if value is None:
+        return ""
+    cleaned = value.strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {"'", '"'}:
+        cleaned = cleaned[1:-1].strip()
+    return cleaned
+
+
+def get_env_value(name: str, default: str = "") -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    cleaned = sanitize_env_value(raw)
+    return cleaned if cleaned != "" else default
 
 
 def get_ai_provider() -> str:
@@ -25,12 +43,25 @@ def get_ai_provider() -> str:
     Get the configured AI provider.
     
     Returns:
-        'demo', 'openai', or 'gemini' based on AI_PROVIDER env var
+        'demo', 'openai', 'gemini', or 'groq' based on AI_PROVIDER env var
         Defaults to 'gemini' if not set
     """
-    provider = os.getenv("AI_PROVIDER", _DEFAULT_AI_PROVIDER).strip().lower()
-    valid_providers = {"demo", "openai", "gemini"}
-    return provider if provider in valid_providers else _DEFAULT_AI_PROVIDER
+    provider = get_env_value("AI_PROVIDER", _DEFAULT_AI_PROVIDER).lower()
+    return provider if provider in _VALID_AI_PROVIDERS else _DEFAULT_AI_PROVIDER
+
+
+def get_runtime_ai_provider() -> str:
+    """
+    Get the AI provider for runtime usage.
+
+    Prioritizes persisted app settings when available, otherwise falls back to env.
+    """
+    try:
+        from chatbot_mvp.services.app_settings_store import get_provider_override
+    except Exception:
+        return get_ai_provider()
+    override = get_provider_override()
+    return override if override else get_ai_provider()
 
 
 def is_demo_mode() -> bool:
@@ -44,20 +75,20 @@ def is_demo_mode() -> bool:
     Returns:
         True if demo mode is enabled
     """
-    value = os.getenv("DEMO_MODE")
-    if value is None:
+    value = get_env_value("DEMO_MODE")
+    if value == "":
         return True
     return value.strip().lower() in _TRUE_VALUES
 
 
 def is_openai_mode() -> bool:
     """Check if OpenAI is configured as the AI provider."""
-    return get_ai_provider() == "openai"
+    return get_runtime_ai_provider() == "openai"
 
 
 def is_gemini_mode() -> bool:
     """Check if Gemini is configured as the AI provider."""
-    return get_ai_provider() == "gemini"
+    return get_runtime_ai_provider() == "gemini"
 
 
 def get_admin_password() -> str:
@@ -67,7 +98,7 @@ def get_admin_password() -> str:
     Returns:
         Admin password string or empty string if not set
     """
-    value = os.getenv("ADMIN_PASSWORD")
-    if value is None or value.strip() == "":
+    value = get_env_value("ADMIN_PASSWORD")
+    if value == "":
         return "123" if is_demo_mode() else ""
-    return value.strip()
+    return value
