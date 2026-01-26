@@ -167,6 +167,11 @@ def _finished_view() -> rx.Component:
         "background": "rgba(17, 17, 17, 0.98)",
         "border": "1px solid rgba(255, 255, 255, 0.08)",
     }
+    display_text = rx.cond(
+        EvaluacionState.eval_stream_active,
+        EvaluacionState.eval_stream_text + "▍",
+        EvaluacionState.ai_simulated_text,
+    )
     return rx.card(
         rx.vstack(
             rx.heading("Completado", **EVAL_TITLE_STYLE),
@@ -179,7 +184,7 @@ def _finished_view() -> rx.Component:
             ),
             rx.box(
                 rx.text(
-                    EvaluacionState.ai_simulated_text,
+                    display_text,
                     white_space="pre-wrap",
                     color="var(--gray-50)",
                 ),

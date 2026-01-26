@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -23,6 +24,8 @@ class EvaluacionState(rx.State):
     score_percent: int = 0
     level: str = ""
     ai_simulated_text: str = ""
+    eval_stream_active: bool = False
+    eval_stream_text: str = ""
 
     @rx.var
     def progress_label(self) -> str:
@@ -87,6 +90,8 @@ class EvaluacionState(rx.State):
         self.score_percent = 0
         self.level = ""
         self.ai_simulated_text = ""
+        self.eval_stream_active = False
+        self.eval_stream_text = ""
 
     def ensure_initialized(self) -> None:
         if self.finished:
@@ -145,8 +150,7 @@ class EvaluacionState(rx.State):
 
         self.error_message = ""
         if self.current_index >= len(QUESTIONS) - 1:
-            self.finish()
-            return
+            return self.finish()
 
         self.current_index += 1
 
@@ -157,6 +161,9 @@ class EvaluacionState(rx.State):
         self.error_message = ""
 
     def finish(self) -> None:
+        if self.eval_stream_active:
+            self.eval_stream_active = False
+            self.eval_stream_text = ""
         score = 0
         total_scored = 0
         for question in QUESTIONS:
@@ -209,6 +216,32 @@ class EvaluacionState(rx.State):
             len(self.responses),
         )
         self._save_submission()
+        return self.stream_evaluation_text(self.ai_simulated_text)
+
+    @rx.event(background=True)
+    async def stream_evaluation_text(self, full_text: str) -> None:
+        chunk_size = 12
+        delay = 0.03
+        async with self:
+            self.eval_stream_active = True
+            self.eval_stream_text = ""
+
+        if not full_text:
+            async with self:
+                self.eval_stream_active = False
+                self.eval_stream_text = ""
+            return
+
+        for idx in range(0, len(full_text), chunk_size):
+            async with self:
+                if not self.eval_stream_active:
+                    return
+                self.eval_stream_text = full_text[: idx + chunk_size]
+            await asyncio.sleep(delay)
+
+        async with self:
+            self.eval_stream_text = full_text
+            self.eval_stream_active = False
 
     def _is_valid_response(self, question: dict[str, Any], response: Any) -> bool:
         if not question.get("required"):

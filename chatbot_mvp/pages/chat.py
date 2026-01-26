@@ -37,8 +37,18 @@ CHAT_INPUT_LEGIBLE_STYLE = {
 }
 
 
-def _message_row(message: dict[str, str]) -> rx.Component:
+def _message_row(message: dict[str, str], index: int) -> rx.Component:
     is_user = message["role"] == "user"
+    is_streaming = (
+        (message["role"] == "assistant")
+        & ChatState.stream_active
+        & (ChatState.stream_message_index == index)
+    )
+    display_text = rx.cond(
+        is_streaming,
+        ChatState.stream_text + "▍",
+        message["content"],
+    )
     return rx.vstack(
         rx.text(
             rx.cond(is_user, "Tú", "Asistente"),
@@ -47,7 +57,7 @@ def _message_row(message: dict[str, str]) -> rx.Component:
             color=rx.cond(is_user, "var(--teal-8)", "var(--gray-400)"),
         ),
         rx.text(
-            message["content"],
+            display_text,
             white_space="pre-wrap",
             word_break="break-word",
             color="var(--gray-50)",
@@ -114,7 +124,10 @@ def chat() -> rx.Component:
                         ),
                         rx.box(
                             rx.vstack(
-                                rx.foreach(ChatState.messages, _message_row),
+                                rx.foreach(
+                                    ChatState.messages,
+                                    lambda message, index: _message_row(message, index),
+                                ),
                                 rx.cond(ChatState.typing, typing_indicator()),
                                 rx.cond(ChatState.loading, skeleton_loader()),
                                 spacing="3",
