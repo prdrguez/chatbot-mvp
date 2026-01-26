@@ -148,7 +148,7 @@ class ChatState(rx.State):
             self._save_conversation()
         
         if should_stream:
-            return self.stream_assistant_response(response, message_index)
+            return type(self).stream_assistant_response(response, message_index)
 
     @rx.event(background=True)
     async def stream_assistant_response(self, full_text: str, message_index: int) -> None:
