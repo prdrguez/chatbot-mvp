@@ -97,7 +97,7 @@ class ChatState(rx.State):
     def handle_key_down(self, key: str) -> None:
         """Handle key down events."""
         if key == "Enter":
-            return self.send_message()
+            return type(self).send_message
 
     @rx.event
     def send_message(self) -> None:
