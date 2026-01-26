@@ -3,7 +3,7 @@
 import reflex as rx
 
 import chatbot_mvp.state
-from chatbot_mvp.ui.theme import APP_THEME, GLOBAL_STYLE, STYLESHEETS
+from chatbot_mvp.ui.theme import GLOBAL_STYLE, STYLESHEETS
 from chatbot_mvp.pages.admin import admin
 from chatbot_mvp.pages.chat import chat
 from chatbot_mvp.pages.evaluacion import evaluacion
@@ -18,7 +18,13 @@ from chatbot_mvp.config.settings import is_demo_mode, get_admin_password
 
 
 _ = chatbot_mvp.state.ALL_STATES
-app = rx.App(theme=APP_THEME, style=GLOBAL_STYLE, stylesheets=STYLESHEETS)
+APP_THEME_DARK = rx.theme(
+    appearance="dark",
+    has_background=True,
+    radius="large",
+    accent_color="teal",
+)
+app = rx.App(theme=APP_THEME_DARK, style=GLOBAL_STYLE, stylesheets=STYLESHEETS)
 app.add_page(home, route="/", on_load=ThemeState.load_theme)
 app.add_page(
     evaluacion,

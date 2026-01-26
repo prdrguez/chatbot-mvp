@@ -1,3 +1,4 @@
+import asyncio
 import reflex as rx
 from typing import Any
 
@@ -19,6 +20,9 @@ class ChatState(rx.State):
     current_input: str = ""
     loading: bool = False
     typing: bool = False
+    stream_active: bool = False
+    stream_message_index: int = -1
+    stream_text: str = ""
     user_context: dict = {}
     session_id: str = ""
     session_list: list[dict[str, Any]] = []
@@ -93,12 +97,18 @@ class ChatState(rx.State):
     def handle_key_down(self, key: str) -> None:
         """Handle key down events."""
         if key == "Enter":
-            self.send_message()
+            return type(self).send_message
 
+    @rx.event
     def send_message(self) -> None:
         content = self.current_input.strip()
         if not content:
             return
+        
+        if self.stream_active:
+            self.stream_active = False
+            self.stream_message_index = -1
+            self.stream_text = ""
 
         # Add user message immediately
         self.messages = [
@@ -109,6 +119,8 @@ class ChatState(rx.State):
         self.loading = True
         self.typing = True
         self.last_error = ""
+        should_stream = False
+        message_index = -1
 
         # Get response from chat service
         chat_service = self._get_chat_service()
@@ -126,12 +138,44 @@ class ChatState(rx.State):
                 *self.messages,
                 {"role": "assistant", "content": response},
             ]
+            message_index = len(self.messages) - 1
+            should_stream = True
         self.loading = False
         self.typing = False
         
         # Auto-save conversation
         if self.auto_save_enabled:
             self._save_conversation()
+        
+        if should_stream:
+            return type(self).stream_assistant_response(response, message_index)
+
+    @rx.event(background=True)
+    async def stream_assistant_response(self, full_text: str, message_index: int) -> None:
+        chunk_size = 12
+        delay = 0.036
+        async with self:
+            self.stream_active = True
+            self.stream_message_index = message_index
+            self.stream_text = ""
+
+        if not full_text:
+            async with self:
+                self.stream_active = False
+                self.stream_text = ""
+            return
+
+        for idx in range(0, len(full_text), chunk_size):
+            async with self:
+                if not self.stream_active or self.stream_message_index != message_index:
+                    return
+                self.stream_text = full_text[: idx + chunk_size]
+            await asyncio.sleep(delay)
+
+        async with self:
+            if self.stream_message_index == message_index:
+                self.stream_text = full_text
+                self.stream_active = False
 
     def _is_error_response(self, response: str) -> bool:
         if not response:
@@ -169,6 +213,9 @@ class ChatState(rx.State):
         self.current_input = ""
         self.loading = False
         self.typing = False
+        self.stream_active = False
+        self.stream_message_index = -1
+        self.stream_text = ""
         self.last_error = ""
         self.export_content = ""
         self.export_error = ""
@@ -201,6 +248,9 @@ class ChatState(rx.State):
                 self.session_id = session_id
                 self.messages = session_data.get("messages", [])
                 self.user_context = session_data.get("user_context", {})
+                self.stream_active = False
+                self.stream_message_index = -1
+                self.stream_text = ""
                 self.export_content = ""
                 self.export_error = ""
                 self.export_format = ""

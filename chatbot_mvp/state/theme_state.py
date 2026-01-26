@@ -24,7 +24,7 @@ class ThemeState(rx.State):
     error: str = ""
 
     # Simplified theme settings
-    mode: str = "light"
+    mode: str = "dark"
     primary_color: str = "#60a5fa"
     secondary_color: str = "#34d399"
     accent_color: str = "#fbbf24"
@@ -154,7 +154,7 @@ class ThemeState(rx.State):
             if _THEME_PATH.exists():
                 data = json.loads(_THEME_PATH.read_text())
                 if isinstance(data, dict):
-                    self.mode = data.get("mode", "light")
+                    self.mode = "dark"
                     self.primary_color = data.get("primary_color", "#60a5fa")
                     self.secondary_color = data.get("secondary_color", "#34d399")
                     self.accent_color = data.get("accent_color", "#fbbf24")
@@ -204,7 +204,7 @@ class ThemeState(rx.State):
             self.theme_updated = False
 
     def reset_theme(self) -> None:
-        self.mode = "light"
+        self.mode = "dark"
         self.primary_color = "#60a5fa"
         self.secondary_color = "#34d399"
         self.accent_color = "#fbbf24"
@@ -232,6 +232,9 @@ class ThemeState(rx.State):
             "--theme-secondary": self.secondary_color,
             "--theme-accent": self.accent_color,
             "--theme-border-radius": self._get_border_radius_value(),
+            "background": "rgba(17, 17, 17, 0.98)",
+            "color": "var(--gray-50)",
+            "color_scheme": "dark",
         }
         theme_vars = self._generate_css_variables()
         return {**theme_vars, **base_vars, **self.applied_overrides}
