@@ -154,7 +154,7 @@ class ThemeState(rx.State):
             if _THEME_PATH.exists():
                 data = json.loads(_THEME_PATH.read_text())
                 if isinstance(data, dict):
-                    self.mode = data.get("mode", "dark")
+                    self.mode = "dark"
                     self.primary_color = data.get("primary_color", "#60a5fa")
                     self.secondary_color = data.get("secondary_color", "#34d399")
                     self.accent_color = data.get("accent_color", "#fbbf24")

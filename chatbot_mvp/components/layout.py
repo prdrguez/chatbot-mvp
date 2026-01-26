@@ -7,6 +7,7 @@ from chatbot_mvp.ui.tokens import CONTENT_BOX_STYLE, HEADER_BOX_STYLE
 BASE_APP_STYLE = {
     "background": "rgba(17, 17, 17, 0.98)",
     "color": "var(--gray-50)",
+    "color_scheme": "dark",
 }
 
 
