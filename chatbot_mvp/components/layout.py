@@ -1,6 +1,5 @@
 import reflex as rx
 
-from chatbot_mvp.config.settings import is_demo_mode, get_admin_password
 from chatbot_mvp.state.theme_state import ThemeState
 
 APP_HEADER_STYLE = {
@@ -33,8 +32,16 @@ def _nav_item(label: str, href: str, is_active: bool) -> rx.Component:
             label,
             variant="ghost",
             style=NAV_ITEM_STYLE,
-            background=NAV_ITEM_ACTIVE_STYLE["background"] if is_active else "transparent",
-            border=NAV_ITEM_ACTIVE_STYLE["border"] if is_active else "1px solid transparent",
+            background=rx.cond(
+                is_active,
+                NAV_ITEM_ACTIVE_STYLE["background"],
+                "transparent",
+            ),
+            border=rx.cond(
+                is_active,
+                NAV_ITEM_ACTIVE_STYLE["border"],
+                "1px solid transparent",
+            ),
             _hover=NAV_ITEM_HOVER_STYLE,
         ),
         href=href,
@@ -48,9 +55,8 @@ def _nav_section(active_route: str) -> rx.Component:
         ("Inicio", "/"),
         ("Evaluación", "/evaluacion"),
         ("Chat", "/chat"),
+        ("Admin", "/admin"),
     ]
-    if get_admin_password():
-        items.append(("Admin", "/admin"))
 
     return rx.vstack(
         rx.heading("Navegación", size="3", color="white"),
@@ -79,15 +85,11 @@ def layout(
         rx.hstack(
             rx.hstack(
                 rx.heading("Chatbot MVP", size="6", color="var(--gray-50)"),
-                rx.cond(
-                    is_demo_mode(),
-                    rx.hstack(
-                        rx.badge("DEMO", variant="soft", color_scheme="yellow"),
-                        rx.badge("sin costos", variant="soft", color_scheme="yellow"),
-                        spacing="2",
-                        align="center",
-                    ),
-                    rx.box(),
+                rx.hstack(
+                    rx.badge("DEMO", variant="soft", color_scheme="yellow"),
+                    rx.badge("sin costos", variant="soft", color_scheme="yellow"),
+                    spacing="2",
+                    align="center",
                 ),
                 spacing="3",
                 align="center",
