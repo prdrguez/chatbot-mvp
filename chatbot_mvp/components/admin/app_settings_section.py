@@ -6,9 +6,9 @@ from chatbot_mvp.state.admin_state import AdminState
 def admin_app_settings_section() -> rx.Component:
     return rx.card(
         rx.vstack(
-            rx.heading("Ajustes", size="5"),
+            rx.heading("Ajustes", size="5", color="var(--gray-50)"),
             rx.vstack(
-                rx.text("Proveedor de IA", size="2", weight="medium"),
+                rx.text("Proveedor de IA", size="2", weight="medium", color="var(--gray-300)"),
                 rx.select.root(
                     rx.select.trigger(placeholder="Selecciona proveedor"),
                     rx.select.content(
@@ -29,7 +29,7 @@ def admin_app_settings_section() -> rx.Component:
                     "Activo: ",
                     rx.text.strong(AdminState.active_ai_provider),
                     size="2",
-                    color="var(--gray-600)",
+                    color="var(--gray-300)",
                 ),
                 spacing="3",
                 align="center",
@@ -70,7 +70,6 @@ def admin_app_settings_section() -> rx.Component:
             width="100%",
         ),
         width="100%",
-        background="var(--app-glass-bg)",
-        backdrop_filter="var(--app-glass-blur)",
-        border="var(--app-glass-border)",
+        background="rgba(17, 17, 17, 0.98)",
+        border="1px solid rgba(255, 255, 255, 0.08)",
     )

@@ -371,6 +371,10 @@ class AdminState(rx.State):
             and get_env_value("GROQ_API_KEY") == ""
         )
 
+    @rx.event
+    def set_selected_ai_provider(self, value: str) -> None:
+        self.selected_ai_provider = value
+
     def _breakdown(self, key: str) -> dict[str, int]:
         breakdowns = self.summary.get("breakdowns", {})
         if not isinstance(breakdowns, dict):
