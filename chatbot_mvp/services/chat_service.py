@@ -13,7 +13,7 @@ import logging
 from typing import Dict, List, Optional, Protocol
 from abc import ABC, abstractmethod
 
-from chatbot_mvp.config.settings import get_ai_provider
+from chatbot_mvp.config.settings import get_runtime_ai_provider
 from chatbot_mvp.services.openai_client import AIClientError
 
 # Configure logging
@@ -187,7 +187,7 @@ class ChatService:
         Returns:
             Configured response strategy
         """
-        provider = get_ai_provider()
+        provider = get_runtime_ai_provider()
         
         if provider == "demo":
             logger.info("Using demo response strategy")

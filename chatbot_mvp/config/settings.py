@@ -50,6 +50,20 @@ def get_ai_provider() -> str:
     return provider if provider in _VALID_AI_PROVIDERS else _DEFAULT_AI_PROVIDER
 
 
+def get_runtime_ai_provider() -> str:
+    """
+    Get the AI provider for runtime usage.
+
+    Prioritizes persisted app settings when available, otherwise falls back to env.
+    """
+    try:
+        from chatbot_mvp.services.app_settings_store import get_provider_override
+    except Exception:
+        return get_ai_provider()
+    override = get_provider_override()
+    return override if override else get_ai_provider()
+
+
 def is_demo_mode() -> bool:
     """
     Check if demo mode is enabled.
@@ -69,12 +83,12 @@ def is_demo_mode() -> bool:
 
 def is_openai_mode() -> bool:
     """Check if OpenAI is configured as the AI provider."""
-    return get_ai_provider() == "openai"
+    return get_runtime_ai_provider() == "openai"
 
 
 def is_gemini_mode() -> bool:
     """Check if Gemini is configured as the AI provider."""
-    return get_ai_provider() == "gemini"
+    return get_runtime_ai_provider() == "gemini"
 
 
 def get_admin_password() -> str:

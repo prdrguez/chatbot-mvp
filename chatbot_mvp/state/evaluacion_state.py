@@ -183,13 +183,23 @@ class EvaluacionState(rx.State):
 
         evaluation_payload = self._build_evaluation_payload()
         try:
-            from chatbot_mvp.services.gemini_client import generate_evaluation_feedback
+            from chatbot_mvp.config.settings import get_runtime_ai_provider
+
+            provider = get_runtime_ai_provider()
+            if provider == "groq":
+                from chatbot_mvp.services.groq_client import (
+                    generate_evaluation_feedback,
+                )
+            else:
+                from chatbot_mvp.services.gemini_client import (
+                    generate_evaluation_feedback,
+                )
 
             ai_text = generate_evaluation_feedback(evaluation_payload)
             if ai_text:
                 self.ai_simulated_text = ai_text
         except Exception as exc:
-            logger.warning("Gemini evaluation feedback failed: %s", exc)
+            logger.warning("Evaluation feedback failed: %s", exc)
 
         self.finished = True
         self.error_message = ""

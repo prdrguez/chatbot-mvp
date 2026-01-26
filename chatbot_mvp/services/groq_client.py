@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from chatbot_mvp.config.settings import get_env_value, sanitize_env_value
 from chatbot_mvp.services.openai_client import AIClientError
@@ -122,6 +122,97 @@ class GroqChatClient:
 
         return base_prompt
 
+    def _generate_text(self, prompt: str, max_tokens: int, temperature: float) -> str:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return self._extract_response_text(response)
+
+    def generate_evaluation(self, answers: Dict[str, Any]) -> str:
+        if not self._initialized:
+            raise AIClientError("Cliente Groq no inicializado")
+
+        try:
+            prompt = self._build_evaluation_prompt(answers)
+            return self._generate_text(prompt, max_tokens=300, temperature=0.4)
+        except Exception as exc:
+            logger.error("Error generating Groq evaluation: %s", exc)
+            raise AIClientError(f"Error al generar evaluación: {exc}")
+
+    def _build_evaluation_prompt(self, answers: Dict[str, Any]) -> str:
+        lines = [
+            "Eres un evaluador experto en ética e inteligencia artificial. "
+            "Da una evaluación personalizada, breve y útil en español basada en las siguientes respuestas a un cuestionario de ética.",
+            "\nRespuestas del usuario:",
+        ]
+
+        for key, value in answers.items():
+            if value:
+                val_str = ", ".join(value) if isinstance(value, list) else str(value)
+                lines.append(f"- {key}: {val_str}")
+
+        lines.append(
+            "\nPor favor entrega 6-10 líneas con un tono profesional, claro y accionable. "
+            "Enfócate en consejos prácticos basados en sus respuestas específicas. "
+            "No uses formato markdown excesivo, prefiere texto plano."
+        )
+        return "\n".join(lines)
+
+    def generate_evaluation_feedback(self, evaluation: Dict[str, Any]) -> str:
+        if not self._initialized:
+            raise AIClientError("Cliente Groq no inicializado")
+
+        try:
+            prompt = self._build_evaluation_feedback_prompt(evaluation)
+            return self._generate_text(prompt, max_tokens=350, temperature=0.4)
+        except Exception as exc:
+            logger.error("Error generating Groq evaluation feedback: %s", exc)
+            raise AIClientError(f"Error al generar evaluación: {exc}")
+
+    def _build_evaluation_feedback_prompt(self, evaluation: Dict[str, Any]) -> str:
+        summary = evaluation.get("summary", {}) if isinstance(evaluation, dict) else {}
+        questions = evaluation.get("questions", []) if isinstance(evaluation, dict) else []
+
+        score = summary.get("score")
+        total_scored = summary.get("total_scored")
+        score_percent = summary.get("score_percent")
+        level = summary.get("level")
+        correct_count = summary.get("correct_count")
+
+        lines = [
+            "Eres un evaluador experto en ética e inteligencia artificial. "
+            "Da una evaluación personalizada, breve y útil en español con base en los resultados y respuestas.",
+            "\nResumen del resultado:",
+        ]
+
+        if isinstance(level, str) and level:
+            lines.append(f"- Nivel: {level}")
+        if isinstance(score, int) and isinstance(total_scored, int):
+            percent_part = f" ({score_percent}%)" if isinstance(score_percent, int) else ""
+            lines.append(f"- Puntaje: {score}/{total_scored}{percent_part}")
+        if isinstance(correct_count, int):
+            lines.append(f"- Respuestas correctas: {correct_count}")
+
+        lines.append("\nPreguntas y respuestas:")
+        for item in questions:
+            if not isinstance(item, dict):
+                continue
+            section = item.get("section") or "Sin sección"
+            prompt = item.get("prompt") or ""
+            answer = item.get("answer") or "Sin respuesta"
+            lines.append(f"- [{section}] {prompt}")
+            lines.append(f"  Respuesta: {answer}")
+
+        lines.append(
+            "\nPor favor entrega 6-10 líneas con un tono profesional, claro y accionable. "
+            "Evita repetir literalmente todas las respuestas; sintetiza patrones y da recomendaciones concretas. "
+            "No uses formato markdown excesivo, prefiere texto plano."
+        )
+        return "\n".join(lines)
+
     def _extract_response_text(self, response: Dict) -> str:
         try:
             return response.choices[0].message.content.strip()
@@ -142,3 +233,27 @@ def create_groq_client(
     except Exception as exc:
         logger.warning("Failed to create Groq client: %s", exc)
         raise
+
+
+def generate_evaluation(answers: Dict[str, Any]) -> str:
+    client = create_groq_client()
+    if not client:
+        logger.warning("Groq client not available for evaluation.")
+        return "Falta GROQ_API_KEY para usar Groq en la evaluación."
+    try:
+        return client.generate_evaluation(answers)
+    except Exception as exc:
+        logger.error("Generate evaluation helper failed: %s", exc)
+        return "Error al generar evaluación con Groq. Por favor intenta de nuevo."
+
+
+def generate_evaluation_feedback(evaluation: Dict[str, Any]) -> str:
+    client = create_groq_client()
+    if not client:
+        logger.warning("Groq client not available for evaluation feedback.")
+        return "Falta GROQ_API_KEY para usar Groq en la evaluación."
+    try:
+        return client.generate_evaluation_feedback(evaluation)
+    except Exception as exc:
+        logger.error("Generate evaluation feedback helper failed: %s", exc)
+        return "Error al generar evaluación con Groq. Por favor intenta de nuevo."

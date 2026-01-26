@@ -5,11 +5,13 @@ from chatbot_mvp.services.chat_service import create_chat_service
 from chatbot_mvp.services.chat_persistence import create_chat_persistence
 from chatbot_mvp.services.openai_client import create_chat_client
 from chatbot_mvp.services.gemini_client import create_gemini_client
-from chatbot_mvp.config.settings import get_ai_provider
+from chatbot_mvp.services.groq_client import create_groq_client
+from chatbot_mvp.config.settings import get_runtime_ai_provider
 
 # Global service instances to avoid state variable issues
 _chat_service_global = None
 _chat_persistence_global = None
+_chat_provider_global = ""
 
 
 class ChatState(rx.State):
@@ -37,19 +39,23 @@ class ChatState(rx.State):
     
     def _initialize_services(self):
         """Initialize global services if not already initialized."""
-        global _chat_service_global, _chat_persistence_global
+        global _chat_service_global, _chat_persistence_global, _chat_provider_global
         
-        if _chat_service_global is None:
-            # Initialize appropriate AI client based on provider
+        provider = get_runtime_ai_provider()
+        if _chat_service_global is None or _chat_provider_global != provider:
             ai_client = None
-            provider = get_ai_provider()
-            
+
             if provider == "openai":
                 ai_client = create_chat_client()
             elif provider == "gemini":
                 ai_client = create_gemini_client()
-            
+            elif provider == "groq":
+                ai_client = create_groq_client()
+
             _chat_service_global = create_chat_service(ai_client)
+            _chat_provider_global = provider
+
+        if _chat_persistence_global is None:
             _chat_persistence_global = create_chat_persistence()
         
         # Generate session ID if not set
