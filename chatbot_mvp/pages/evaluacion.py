@@ -162,6 +162,11 @@ def _in_progress_view() -> rx.Component:
 
 
 def _finished_view() -> rx.Component:
+    result_box_style = {
+        **EVAL_RESULT_BOX_STYLE,
+        "background": "rgba(17, 17, 17, 0.98)",
+        "border": "1px solid rgba(255, 255, 255, 0.08)",
+    }
     return rx.card(
         rx.vstack(
             rx.heading("Completado", **EVAL_TITLE_STYLE),
@@ -173,8 +178,12 @@ def _finished_view() -> rx.Component:
                 **EVAL_LABEL_STACK_STYLE,
             ),
             rx.box(
-                rx.text(EvaluacionState.ai_simulated_text, white_space="pre-wrap"),  # unique
-                **EVAL_RESULT_BOX_STYLE,
+                rx.text(
+                    EvaluacionState.ai_simulated_text,
+                    white_space="pre-wrap",
+                    color="var(--gray-50)",
+                ),
+                **result_box_style,
             ),
             rx.button(
                 "Reiniciar",
