@@ -1,12 +1,13 @@
 import reflex as rx
 
+from chatbot_mvp.components.layout import layout
 from chatbot_mvp.state.auth_state import AuthState
 
 
 def login_page() -> rx.Component:
     """Login page for admin access."""
     
-    return rx.box(
+    return layout(
         rx.center(
             rx.card(
                 rx.vstack(
@@ -111,10 +112,8 @@ def login_page() -> rx.Component:
                 border_radius="16px",
                 padding="32px",
             ),
-            height="100vh",
-            width="100vw",
+            width="100%",
+            height="100%",
         ),
-        background="rgba(2, 6, 23, 0.98)",
-        width="100%",
-        min_height="100vh",
+        active_route="/login",
     )
