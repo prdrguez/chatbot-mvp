@@ -88,13 +88,7 @@ def _admin_content() -> rx.Component:
 def admin() -> rx.Component:
     """Admin page with authentication protection."""
     return layout(
-        rx.vstack(
-            admin_header(),
-            _admin_content(),
-            spacing="4",
-            align="start",
-            width="100%",
-        ),
+        _admin_content(),
         active_route="/admin",
         sidebar_extra=_admin_sidebar_menu(),
     )

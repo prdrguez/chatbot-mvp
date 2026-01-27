@@ -52,8 +52,11 @@ def _text_input() -> rx.Component:
         value=EvaluacionState.current_text_value,
         on_change=EvaluacionState.set_current_response,
         placeholder=EvaluacionState.current_placeholder,
-        color="var(--gray-900)",
-        background="white",
+        color="var(--gray-50)",
+        background="rgba(255, 255, 255, 0.08)",
+        border="1px solid rgba(255, 255, 255, 0.12)",
+        _placeholder={"color": "var(--gray-400)"},
+        _focus={"border": "1px solid rgba(96, 165, 250, 0.5)"},
         **EVAL_INPUT_PROPS,
     )
 
