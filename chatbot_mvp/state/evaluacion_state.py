@@ -12,6 +12,14 @@ from chatbot_mvp.services.submissions_store import append_submission
 
 logger = logging.getLogger(__name__)
 
+CONSENT_QUESTION = next(
+    (question for question in QUESTIONS if question.get("type") == "consent"),
+    None,
+)
+NON_CONSENT_QUESTIONS = [
+    question for question in QUESTIONS if question.get("type") != "consent"
+]
+
 
 class EvaluacionState(rx.State):
     current_index: int = 0
@@ -26,14 +34,16 @@ class EvaluacionState(rx.State):
     ai_simulated_text: str = ""
     eval_stream_active: bool = False
     eval_stream_text: str = ""
+    consent_checked: bool = False
+    consent_given: bool = False
 
     @rx.var
     def progress_label(self) -> str:
-        return f"Pregunta {self.current_index + 1} de {len(QUESTIONS)}"
+        return f"Pregunta {self.current_index + 1} de {len(NON_CONSENT_QUESTIONS)}"
 
     @rx.var
     def current_question(self) -> dict[str, Any]:
-        return QUESTIONS[self.current_index]
+        return NON_CONSENT_QUESTIONS[self.current_index]
 
     @rx.var
     def current_section(self) -> str:
@@ -92,6 +102,8 @@ class EvaluacionState(rx.State):
         self.ai_simulated_text = ""
         self.eval_stream_active = False
         self.eval_stream_text = ""
+        self.consent_checked = False
+        self.consent_given = False
 
     def ensure_initialized(self) -> None:
         if self.finished:
@@ -103,13 +115,18 @@ class EvaluacionState(rx.State):
         self.start()
 
     def set_current_response(self, value: Any) -> None:
-        question_id = QUESTIONS[self.current_index]["id"]
+        question_id = NON_CONSENT_QUESTIONS[self.current_index]["id"]
         self.responses = {**self.responses, question_id: value}
         if self.error_message:
             self.error_message = ""
 
+    def set_consent_checked(self, value: bool) -> None:
+        self.consent_checked = bool(value)
+        if self.error_message:
+            self.error_message = ""
+
     def toggle_multi(self, option: str) -> None:
-        question_id = QUESTIONS[self.current_index]["id"]
+        question_id = NON_CONSENT_QUESTIONS[self.current_index]["id"]
         current = self.responses.get(question_id)
         if not isinstance(current, list):
             current = []
@@ -122,7 +139,7 @@ class EvaluacionState(rx.State):
             self.error_message = ""
 
     def set_multi_option(self, option: str, checked: bool) -> None:
-        question_id = QUESTIONS[self.current_index]["id"]
+        question_id = NON_CONSENT_QUESTIONS[self.current_index]["id"]
         current = self.responses.get(question_id)
         if not isinstance(current, list):
             current = []
@@ -135,27 +152,37 @@ class EvaluacionState(rx.State):
             self.error_message = ""
 
     def is_checked(self, option: str) -> bool:
-        question_id = QUESTIONS[self.current_index]["id"]
+        question_id = NON_CONSENT_QUESTIONS[self.current_index]["id"]
         current = self.responses.get(question_id)
         if not isinstance(current, list):
             return False
         return option in current
 
     def next_step(self) -> None:
-        question = QUESTIONS[self.current_index]
+        if not self.consent_given:
+            if not self.consent_checked:
+                self.error_message = "Completa la respuesta antes de continuar."
+                return
+            self.error_message = ""
+            self.consent_given = True
+            return
+
+        question = NON_CONSENT_QUESTIONS[self.current_index]
         response = self.responses.get(question["id"])
         if not self._is_valid_response(question, response):
             self.error_message = "Completa la respuesta antes de continuar."
             return
 
         self.error_message = ""
-        if self.current_index >= len(QUESTIONS) - 1:
+        if self.current_index >= len(NON_CONSENT_QUESTIONS) - 1:
             return self.finish()
 
         self.current_index += 1
 
     def prev_step(self) -> None:
         if self.current_index <= 0:
+            self.consent_given = False
+            self.error_message = ""
             return
         self.current_index -= 1
         self.error_message = ""
@@ -289,7 +316,7 @@ class EvaluacionState(rx.State):
 
     def _build_evaluation_payload(self) -> dict[str, Any]:
         questions_payload: list[dict[str, Any]] = []
-        for question in QUESTIONS:
+        for question in NON_CONSENT_QUESTIONS:
             question_id = question.get("id")
             response = self.responses.get(question_id)
             if isinstance(response, list):
@@ -325,7 +352,7 @@ class EvaluacionState(rx.State):
 
     def _save_submission(self) -> None:
         append_submission(
-            answers=self.responses,
+            answers={**self.responses, "consent_given": self.consent_given},
             score=self.score,
             level=self.level,
             demo_mode=is_demo_mode(),

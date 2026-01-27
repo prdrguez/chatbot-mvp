@@ -1,7 +1,10 @@
 import reflex as rx
 
 from chatbot_mvp.components.layout import layout
-from chatbot_mvp.state.evaluacion_state import EvaluacionState
+from chatbot_mvp.state.evaluacion_state import (
+    CONSENT_QUESTION,
+    EvaluacionState,
+)
 from chatbot_mvp.ui.evaluacion_tokens import (
     EVAL_BADGE_ROW_STYLE,
     EVAL_BUTTON_ROW_STYLE,
@@ -30,13 +33,13 @@ from chatbot_mvp.ui.evaluacion_tokens import (
 def _consent_input() -> rx.Component:
     return rx.hstack(
         rx.checkbox(
-            is_checked=EvaluacionState.current_consent_value,
-            on_change=EvaluacionState.set_current_response,
+            is_checked=EvaluacionState.consent_checked,
+            on_change=EvaluacionState.set_consent_checked,
             size="2",
         ),
         rx.text(
-            EvaluacionState.current_options[0],
-            color="var(--gray-900)",
+            CONSENT_QUESTION["options"][0],
+            color="var(--gray-50)",
             size="2",
         ),
         spacing="2",
@@ -100,17 +103,48 @@ def _multi_input() -> rx.Component:
 
 def _question_input() -> rx.Component:
     return rx.cond(
-        EvaluacionState.current_type == "consent",
-        _consent_input(),
+        EvaluacionState.current_type == "text",
+        _text_input(),
         rx.cond(
-            EvaluacionState.current_type == "text",
-            _text_input(),
-            rx.cond(
-                EvaluacionState.current_type == "single",
-                _single_input(),
-                _multi_input(),
-            ),
+            EvaluacionState.current_type == "single",
+            _single_input(),
+            _multi_input(),
         ),
+    )
+
+
+def _consent_view() -> rx.Component:
+    return rx.vstack(
+        rx.card(
+            rx.vstack(
+                rx.text(
+                    CONSENT_QUESTION["prompt"],
+                    **EVAL_PROMPT_TEXT_STYLE,
+                ),
+                _consent_input(),
+                rx.cond(
+                    EvaluacionState.error_message != "",
+                    rx.text(EvaluacionState.error_message, **EVAL_ERROR_TEXT_STYLE),
+                    rx.box(),
+                ),
+                spacing="3",
+                align="start",
+                width="100%",
+            ),
+            **EVAL_CARD_STYLE,
+        ),
+        rx.card(
+            rx.hstack(
+                rx.button(
+                    "Continuar",
+                    on_click=EvaluacionState.next_step,
+                    **EVAL_PRIMARY_BUTTON_PROPS,
+                ),
+                **EVAL_BUTTON_ROW_STYLE,
+            ),
+            **EVAL_CARD_STYLE,
+        ),
+        **EVAL_PROGRESS_STACK_STYLE,
     )
 
 
@@ -208,16 +242,33 @@ def evaluacion() -> rx.Component:
                 rx.card(
                     rx.vstack(
                         rx.heading("Juego Ético", **EVAL_TITLE_STYLE),
-                        rx.hstack(
-                            rx.badge(EvaluacionState.current_section, variant="soft"),
-                            rx.badge(EvaluacionState.progress_label, variant="soft"),
-                            **EVAL_BADGE_ROW_STYLE,
+                        rx.text(
+                            "El AI Act no busca frenar la innovación, sino garantizar que la inteligencia artificial se desarrolle al servicio de las personas, con equidad, transparencia y responsabilidad.",
+                            color="var(--gray-300)",
+                            size="3",
+                        ),
+                        rx.cond(
+                            EvaluacionState.consent_given,
+                            rx.hstack(
+                                rx.badge(EvaluacionState.current_section, variant="soft"),
+                                rx.badge(EvaluacionState.progress_label, variant="soft"),
+                                **EVAL_BADGE_ROW_STYLE,
+                            ),
+                            rx.box(),
                         ),
                         **EVAL_CARD_HEADER_STYLE,
                     ),
                     **EVAL_CARD_STYLE,
                 ),
-                rx.cond(EvaluacionState.finished, _finished_view(), _in_progress_view()),
+                rx.cond(
+                    EvaluacionState.finished,
+                    _finished_view(),
+                    rx.cond(
+                        EvaluacionState.consent_given,
+                        _in_progress_view(),
+                        _consent_view(),
+                    ),
+                ),
                 **EVAL_SECTION_STACK_STYLE,
             ),
             **EVAL_CONTAINER_STYLE,

@@ -132,6 +132,7 @@ def layout(
         height="100%",
         min_height="0",
         overflow_y="auto" if content_scroll else "hidden",
+        padding="1.5rem",
     )
 
     main = rx.hstack(

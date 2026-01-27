@@ -13,6 +13,7 @@ ADMIN_MENU_ITEM_STYLE = {
     "border_radius": "0.6rem",
     "width": "100%",
     "justify_content": "start",
+    "padding_left": "1.5rem",
 }
 ADMIN_MENU_ITEM_ACTIVE_STYLE = {
     "background": "rgba(20, 184, 166, 0.12)",
@@ -46,7 +47,6 @@ def _admin_menu_item(label: str, value: str) -> rx.Component:
 
 def _admin_sidebar_menu() -> rx.Component:
     return rx.vstack(
-        rx.heading("Admin", size="3", color="white"),
         rx.vstack(
             _admin_menu_item("KPIs", "kpis"),
             _admin_menu_item("Ajustes", "settings"),
@@ -55,7 +55,7 @@ def _admin_sidebar_menu() -> rx.Component:
             spacing="1",
             width="100%",
         ),
-        spacing="3",
+        spacing="2",
         width="100%",
         align="start",
     )
