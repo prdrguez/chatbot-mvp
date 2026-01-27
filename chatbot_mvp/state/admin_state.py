@@ -81,6 +81,7 @@ class AdminState(rx.State):
     active_ai_provider: str = ""
     provider_message: str = ""
     provider_error: str = ""
+    active_section: str = "kpis"
 
     @rx.var
     def has_data(self) -> bool:
@@ -374,6 +375,10 @@ class AdminState(rx.State):
     @rx.event
     def set_selected_ai_provider(self, value: str) -> None:
         self.selected_ai_provider = value
+
+    @rx.event
+    def set_active_section(self, value: str) -> None:
+        self.active_section = value
 
     def _breakdown(self, key: str) -> dict[str, int]:
         breakdowns = self.summary.get("breakdowns", {})

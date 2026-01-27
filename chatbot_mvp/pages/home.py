@@ -14,5 +14,6 @@ def home() -> rx.Component:
             ),
             spacing="4",
             align="start",
-        )
+        ),
+        active_route="/",
     )
