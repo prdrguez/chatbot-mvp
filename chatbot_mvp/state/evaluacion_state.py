@@ -243,7 +243,9 @@ class EvaluacionState(rx.State):
             len(self.responses),
         )
         self._save_submission()
-        return self.stream_evaluation_text(self.ai_simulated_text)
+        # Limpiar asteriscos markdown del texto y luego streamear
+        clean_text = self.ai_simulated_text.replace("**", "").replace("*", "")
+        self.stream_evaluation_text(clean_text)
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:

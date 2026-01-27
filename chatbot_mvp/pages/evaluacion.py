@@ -203,6 +203,7 @@ def _finished_view() -> rx.Component:
         **EVAL_RESULT_BOX_STYLE,
         "background": "rgba(17, 17, 17, 0.98)",
         "border": "1px solid rgba(255, 255, 255, 0.08)",
+        "padding": "1.5rem",
     }
     display_text = rx.cond(
         EvaluacionState.eval_stream_active,
@@ -224,6 +225,7 @@ def _finished_view() -> rx.Component:
                     display_text,
                     white_space="pre-wrap",
                     color="var(--gray-50)",
+                    line_height="1.6",
                 ),
                 **result_box_style,
             ),
