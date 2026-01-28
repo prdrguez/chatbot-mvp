@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 
 from chatbot_mvp.config.settings import get_env_value, sanitize_env_value
 from chatbot_mvp.services.openai_client import AIClientError
+from chatbot_mvp.data.evaluation_context import build_evaluation_feedback_prompt
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
@@ -166,52 +168,11 @@ class GroqChatClient:
             raise AIClientError("Cliente Groq no inicializado")
 
         try:
-            prompt = self._build_evaluation_feedback_prompt(evaluation)
-            return self._generate_text(prompt, max_tokens=350, temperature=0.4)
+            prompt = build_evaluation_feedback_prompt(evaluation)
+            return self._generate_text(prompt, max_tokens=250, temperature=0.5)
         except Exception as exc:
             logger.error("Error generating Groq evaluation feedback: %s", exc)
             raise AIClientError(f"Error al generar evaluación: {exc}")
-
-    def _build_evaluation_feedback_prompt(self, evaluation: Dict[str, Any]) -> str:
-        summary = evaluation.get("summary", {}) if isinstance(evaluation, dict) else {}
-        questions = evaluation.get("questions", []) if isinstance(evaluation, dict) else []
-
-        score = summary.get("score")
-        total_scored = summary.get("total_scored")
-        score_percent = summary.get("score_percent")
-        level = summary.get("level")
-        correct_count = summary.get("correct_count")
-
-        lines = [
-            "Eres un evaluador experto en ética e inteligencia artificial. "
-            "Da una evaluación personalizada, breve y útil en español con base en los resultados y respuestas.",
-            "\nResumen del resultado:",
-        ]
-
-        if isinstance(level, str) and level:
-            lines.append(f"- Nivel: {level}")
-        if isinstance(score, int) and isinstance(total_scored, int):
-            percent_part = f" ({score_percent}%)" if isinstance(score_percent, int) else ""
-            lines.append(f"- Puntaje: {score}/{total_scored}{percent_part}")
-        if isinstance(correct_count, int):
-            lines.append(f"- Respuestas correctas: {correct_count}")
-
-        lines.append("\nPreguntas y respuestas:")
-        for item in questions:
-            if not isinstance(item, dict):
-                continue
-            section = item.get("section") or "Sin sección"
-            prompt = item.get("prompt") or ""
-            answer = item.get("answer") or "Sin respuesta"
-            lines.append(f"- [{section}] {prompt}")
-            lines.append(f"  Respuesta: {answer}")
-
-        lines.append(
-            "\nPor favor entrega 6-10 líneas con un tono profesional, claro y accionable. "
-            "Evita repetir literalmente todas las respuestas; sintetiza patrones y da recomendaciones concretas. "
-            "No uses formato markdown excesivo, prefiere texto plano."
-        )
-        return "\n".join(lines)
 
     def _extract_response_text(self, response: Dict) -> str:
         try:
