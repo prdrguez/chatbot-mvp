@@ -231,8 +231,6 @@ def _loading_analysis_view() -> rx.Component:
             justify="center",
         ),
         padding="4rem 2rem",
-        width="100%",
-        align="center",
         **EVAL_CARD_STYLE,
     )
 
