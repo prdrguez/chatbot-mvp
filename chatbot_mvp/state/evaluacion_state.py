@@ -276,10 +276,16 @@ class EvaluacionState(rx.State):
         # Esperar 2 segundos para que se vea la pantalla de "Analizando..."
         await asyncio.sleep(2.0)
         
+        # Desactivar show_loading y preparar para el streaming
+        async with self:
+            self.show_loading = False
+        
+        # Pequeño delay para asegurar que el estado se actualiza
+        await asyncio.sleep(0.1)
+        
         chunk_size = 6
         delay = 0.1
         async with self:
-            self.show_loading = False
             self.eval_stream_active = True
             self.eval_stream_text = ""
 
@@ -287,7 +293,6 @@ class EvaluacionState(rx.State):
             async with self:
                 self.eval_stream_active = False
                 self.eval_stream_text = ""
-                self.processing_result = False
             return
 
         for idx in range(0, len(full_text), chunk_size):
