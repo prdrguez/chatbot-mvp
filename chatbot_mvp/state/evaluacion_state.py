@@ -204,8 +204,8 @@ class EvaluacionState(rx.State):
 
     def finish(self) -> None:
         self.processing_result = True
-        self.show_loading = True
-        logger.info("finish(): processing_result True, show_loading set to True")
+        self.show_loading = False
+        logger.info("finish(): processing_result True")
         if self.eval_stream_active:
             self.eval_stream_active = False
             self.eval_stream_text = ""
@@ -255,6 +255,7 @@ class EvaluacionState(rx.State):
 
         self.finished = True
         self.error_message = ""
+        self.show_loading = False
         logger.info(
             "Evaluacion finished: score=%s, answers_count=%s",
             self.score,
@@ -295,14 +296,6 @@ class EvaluacionState(rx.State):
                 self.eval_stream_text = ""
                 logger.info("eval_stream_active set True (pre-wait)")
 
-            # Esperar 2 segundos para que se vea la pantalla de "Analizando..."
-            await asyncio.sleep(2.0)
-
-            # SIEMPRE desactivar show_loading después de la espera
-            async with self:
-                self.show_loading = False
-                logger.info(f"After sleep: show_loading set to {self.show_loading}")
-
             # Si no hay texto, terminar aquí
             if not full_text:
                 async with self:
@@ -312,8 +305,8 @@ class EvaluacionState(rx.State):
                 return
 
             # Streaming del texto
-            chunk_size = 6
-            delay = 0.1
+            chunk_size = 12
+            delay = 0.036
             total = len(full_text)
             logger.info(f"Beginning chunked streaming: total chars={total}, chunk_size={chunk_size}")
             for idx in range(0, len(full_text), chunk_size):
