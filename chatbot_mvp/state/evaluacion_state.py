@@ -268,10 +268,17 @@ class EvaluacionState(rx.State):
         # Programar el streaming en background (una sola vez desde finish)
         try:
             logger.info(f"Scheduling stream_evaluation_text with text length: {len(self.ai_simulated_text)}")
-            return type(self).stream_evaluation_text(self.ai_simulated_text)
+            type(self).stream_evaluation_text(self.ai_simulated_text)
         except Exception:
             logger.exception("Failed scheduling stream_evaluation_text from finish()")
-            return
+
+        # Programar fallback rápido que muestre el texto completo si el stream
+        # nunca llega a marcarse como activo (p. ej. por cancelaciones)
+        try:
+            type(self).stream_evaluation_fallback()
+        except Exception:
+            logger.info("Failed to schedule stream_evaluation_fallback")
+
         # Programar un fallback para limpiar el loading si el streaming se cancela
         try:
             type(self).clear_loading_timeout()
@@ -282,6 +289,12 @@ class EvaluacionState(rx.State):
     async def stream_evaluation_text(self, full_text: str) -> None:
         logger.info(f"stream_evaluation_text started with text: {len(full_text)} chars")
         try:
+            # Marcar el stream como activo inmediatamente para evitar fallbacks
+            async with self:
+                self.eval_stream_active = True
+                self.eval_stream_text = ""
+                logger.info("eval_stream_active set True (pre-wait)")
+
             # Esperar 2 segundos para que se vea la pantalla de "Analizando..."
             await asyncio.sleep(2.0)
 
@@ -289,10 +302,6 @@ class EvaluacionState(rx.State):
             async with self:
                 self.show_loading = False
                 logger.info(f"After sleep: show_loading set to {self.show_loading}")
-                if full_text:
-                    self.eval_stream_active = True
-                    self.eval_stream_text = ""
-                    logger.info("eval_stream_active set True, starting stream chunks")
 
             # Si no hay texto, terminar aquí
             if not full_text:
@@ -418,6 +427,29 @@ class EvaluacionState(rx.State):
             },
             "questions": questions_payload,
         }
+
+    @rx.event(background=True)
+    async def stream_evaluation_fallback(self, delay: float = 1.5) -> None:
+        """Fallback to show full text if streaming never begins.
+
+        If `stream_evaluation_text` is cancelled before marking the stream active,
+        this routine will reveal the AI text after `delay` seconds so the UI
+        doesn't remain stuck showing the spinner.
+        """
+        try:
+            await asyncio.sleep(delay)
+            async with self:
+                if self.eval_stream_active:
+                    logger.info("stream_evaluation_fallback: stream already active, aborting fallback")
+                    return
+                logger.info("stream_evaluation_fallback: no stream started — showing full text")
+                self.eval_stream_text = self.ai_simulated_text
+                self.eval_stream_active = False
+                self.show_loading = False
+                self.processing_result = False
+        except asyncio.CancelledError:
+            logger.info("stream_evaluation_fallback cancelled")
+            raise
 
     @rx.event(background=True)
     async def clear_loading_timeout(self, timeout: float = 8.0) -> None:
