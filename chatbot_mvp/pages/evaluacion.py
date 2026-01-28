@@ -215,6 +215,28 @@ def _in_progress_view() -> rx.Component:
     )
 
 
+def _loading_analysis_view() -> rx.Component:
+    """Pantalla intermedia mientras se analiza la evaluación."""
+    return rx.card(
+        rx.vstack(
+            rx.spinner(size="3", color="var(--teal-9)"),
+            rx.text(
+                "Analizando tu evaluación...",
+                size="4",
+                color="var(--gray-50)",
+                font_weight="600",
+            ),
+            spacing="4",
+            align="center",
+            justify="center",
+        ),
+        padding="4rem 2rem",
+        width="100%",
+        align="center",
+        **EVAL_CARD_STYLE,
+    )
+
+
 def _finished_view() -> rx.Component:
     result_box_style = {
         **EVAL_RESULT_BOX_STYLE,
@@ -295,7 +317,11 @@ def evaluacion() -> rx.Component:
                 ),
                 rx.cond(
                     EvaluacionState.finished,
-                    _finished_view(),
+                    rx.cond(
+                        EvaluacionState.show_loading,
+                        _loading_analysis_view(),
+                        _finished_view(),
+                    ),
                     rx.cond(
                         EvaluacionState.consent_given,
                         _in_progress_view(),

@@ -27,6 +27,7 @@ class EvaluacionState(rx.State):
     error_message: str = ""
     finished: bool = False
     processing_result: bool = False
+    show_loading: bool = False
     score: int = 0
     correct_count: int = 0
     total_scored: int = 0
@@ -100,6 +101,7 @@ class EvaluacionState(rx.State):
         self.error_message = ""
         self.finished = False
         self.processing_result = False
+        self.show_loading = False
         self.score = 0
         self.correct_count = 0
         self.total_scored = 0
@@ -188,19 +190,23 @@ class EvaluacionState(rx.State):
 
         self.current_index += 1
         self.processing_result = False
+        self.show_loading = False
 
     def prev_step(self) -> None:
         if self.current_index <= 0:
             self.consent_given = False
             self.error_message = ""
             self.processing_result = False
+            self.show_loading = False
             return
         self.current_index -= 1
         self.error_message = ""
         self.processing_result = False
+        self.show_loading = False
 
     def finish(self) -> None:
         self.processing_result = True
+        self.show_loading = True
         if self.eval_stream_active:
             self.eval_stream_active = False
             self.eval_stream_text = ""
@@ -267,9 +273,13 @@ class EvaluacionState(rx.State):
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
-        chunk_size = 8
-        delay = 0.12
+        # Esperar 2 segundos para que se vea la pantalla de "Analizando..."
+        await asyncio.sleep(2.0)
+        
+        chunk_size = 6
+        delay = 0.1
         async with self:
+            self.show_loading = False
             self.eval_stream_active = True
             self.eval_stream_text = ""
 
