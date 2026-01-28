@@ -99,6 +99,7 @@ class EvaluacionState(rx.State):
         self.responses = {}
         self.error_message = ""
         self.finished = False
+        self.processing_result = False
         self.score = 0
         self.correct_count = 0
         self.total_scored = 0
@@ -183,14 +184,17 @@ class EvaluacionState(rx.State):
             return self.finish()
 
         self.current_index += 1
+        self.processing_result = False
 
     def prev_step(self) -> None:
         if self.current_index <= 0:
             self.consent_given = False
             self.error_message = ""
+            self.processing_result = False
             return
         self.current_index -= 1
         self.error_message = ""
+        self.processing_result = False
 
     def finish(self) -> None:
         self.processing_result = True
