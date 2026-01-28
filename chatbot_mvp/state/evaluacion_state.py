@@ -184,9 +184,8 @@ class EvaluacionState(rx.State):
         self.error_message = ""
         if self.current_index >= len(NON_CONSENT_QUESTIONS) - 1:
             self.finish()
-            # Lanzar el streaming después de que finish() complete
-            self._trigger_evaluation_stream()
-            return
+            # Lanzar el streaming correctamente en Reflex
+            return type(self).stream_evaluation_text(self.ai_simulated_text)
 
         self.current_index += 1
         self.processing_result = False
@@ -266,11 +265,6 @@ class EvaluacionState(rx.State):
         # Limpiar asteriscos markdown del texto
         clean_text = self.ai_simulated_text.replace("**", "").replace("*", "")
         self.ai_simulated_text = clean_text
-
-    def _trigger_evaluation_stream(self) -> None:
-        """Trigger streaming after finish completes."""
-        logger.info(f"Triggering stream with text length: {len(self.ai_simulated_text)}")
-        self.stream_evaluation_text(self.ai_simulated_text)
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
