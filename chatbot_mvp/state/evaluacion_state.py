@@ -26,6 +26,7 @@ class EvaluacionState(rx.State):
     responses: dict[str, Any] = {}
     error_message: str = ""
     finished: bool = False
+    processing_result: bool = False
     score: int = 0
     correct_count: int = 0
     total_scored: int = 0
@@ -40,6 +41,10 @@ class EvaluacionState(rx.State):
     @rx.var
     def progress_label(self) -> str:
         return f"Pregunta {self.current_index + 1} de {len(NON_CONSENT_QUESTIONS)}"
+
+    @rx.var
+    def is_last_question(self) -> bool:
+        return self.current_index >= len(NON_CONSENT_QUESTIONS) - 1
 
     @rx.var
     def current_question(self) -> dict[str, Any]:
@@ -188,6 +193,7 @@ class EvaluacionState(rx.State):
         self.error_message = ""
 
     def finish(self) -> None:
+        self.processing_result = True
         if self.eval_stream_active:
             self.eval_stream_active = False
             self.eval_stream_text = ""
@@ -249,8 +255,8 @@ class EvaluacionState(rx.State):
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
-        chunk_size = 12
-        delay = 0.036
+        chunk_size = 6
+        delay = 0.08
         async with self:
             self.eval_stream_active = True
             self.eval_stream_text = ""
@@ -271,6 +277,7 @@ class EvaluacionState(rx.State):
         async with self:
             self.eval_stream_text = full_text
             self.eval_stream_active = False
+            self.processing_result = False
 
     def _is_valid_response(self, question: dict[str, Any], response: Any) -> bool:
         if not question.get("required"):

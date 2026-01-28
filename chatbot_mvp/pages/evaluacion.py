@@ -185,10 +185,27 @@ def _in_progress_view() -> rx.Component:
                     is_disabled=EvaluacionState.current_index == 0,
                     **EVAL_SECONDARY_BUTTON_PROPS,
                 ),
-                rx.button(
-                    "Siguiente",
-                    on_click=EvaluacionState.next_step,
-                    **EVAL_PRIMARY_BUTTON_PROPS,
+                rx.cond(
+                    EvaluacionState.is_last_question,
+                    rx.button(
+                        rx.cond(
+                            EvaluacionState.processing_result,
+                            rx.hstack(
+                                rx.spinner(size="1"),
+                                rx.text("Analizando..."),
+                                spacing="2",
+                            ),
+                            "Finalizar",
+                        ),
+                        on_click=EvaluacionState.next_step,
+                        is_disabled=EvaluacionState.processing_result,
+                        **EVAL_PRIMARY_BUTTON_PROPS,
+                    ),
+                    rx.button(
+                        "Siguiente",
+                        on_click=EvaluacionState.next_step,
+                        **EVAL_PRIMARY_BUTTON_PROPS,
+                    ),
                 ),
                 **EVAL_BUTTON_ROW_STYLE,
             ),
@@ -229,10 +246,21 @@ def _finished_view() -> rx.Component:
                 ),
                 **result_box_style,
             ),
-            rx.button(
-                "Reiniciar",
-                on_click=EvaluacionState.start,
-                **EVAL_PRIMARY_BUTTON_PROPS,
+            rx.hstack(
+                rx.button(
+                    "Reiniciar",
+                    on_click=EvaluacionState.start,
+                    **EVAL_PRIMARY_BUTTON_PROPS,
+                ),
+                rx.link(
+                    rx.button(
+                        "Ir a Inicio",
+                        **EVAL_SECONDARY_BUTTON_PROPS,
+                    ),
+                    href="/",
+                    text_decoration="none",
+                ),
+                spacing="3",
             ),
             **EVAL_SECTION_STACK_STYLE,
         ),
