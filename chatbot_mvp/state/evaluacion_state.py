@@ -271,35 +271,45 @@ class EvaluacionState(rx.State):
         logger.info(f"stream_evaluation_text started with text: {len(full_text)} chars")
         # Esperar 2 segundos para que se vea la pantalla de "Analizando..."
         await asyncio.sleep(2.0)
-        
+
         # SIEMPRE desactivar show_loading después de la espera
         async with self:
             self.show_loading = False
+            logger.info(f"After sleep: show_loading set to {self.show_loading}")
             if full_text:
                 self.eval_stream_active = True
                 self.eval_stream_text = ""
-        
+                logger.info("eval_stream_active set True, starting stream chunks")
+
         # Si no hay texto, terminar aquí
         if not full_text:
             async with self:
                 self.eval_stream_active = False
                 self.eval_stream_text = ""
+                logger.info("No full_text provided: eval_stream_active forced False")
             return
 
         # Streaming del texto
         chunk_size = 6
         delay = 0.1
+        total = len(full_text)
+        logger.info(f"Beginning chunked streaming: total chars={total}, chunk_size={chunk_size}")
         for idx in range(0, len(full_text), chunk_size):
             async with self:
                 if not self.eval_stream_active:
+                    logger.info("Streaming aborted early (eval_stream_active False)")
                     return
                 self.eval_stream_text = full_text[: idx + chunk_size]
+                # Log periodically to avoid spamming
+                if (idx // chunk_size) % 5 == 0 or idx + chunk_size >= total:
+                    logger.info(f"Stream progress: chars={len(self.eval_stream_text)}/{total}")
             await asyncio.sleep(delay)
 
         async with self:
             self.eval_stream_text = full_text
             self.eval_stream_active = False
             self.processing_result = False
+            logger.info("Streaming complete: eval_stream_active False, processing_result False")
 
     def _is_valid_response(self, question: dict[str, Any], response: Any) -> bool:
         if not question.get("required"):
