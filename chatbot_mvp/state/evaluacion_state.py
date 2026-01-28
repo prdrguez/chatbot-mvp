@@ -181,7 +181,10 @@ class EvaluacionState(rx.State):
 
         self.error_message = ""
         if self.current_index >= len(NON_CONSENT_QUESTIONS) - 1:
-            return self.finish()
+            self.finish()
+            # Lanzar el streaming después de que finish() complete
+            self._trigger_evaluation_stream()
+            return
 
         self.current_index += 1
         self.processing_result = False
@@ -253,17 +256,19 @@ class EvaluacionState(rx.State):
             len(self.responses),
         )
         self._save_submission()
-        # Limpiar asteriscos markdown del texto y luego streamear
+        # No lanzar streaming aquí; lo haremos desde next_step
+        # Limpiar asteriscos markdown del texto
         clean_text = self.ai_simulated_text.replace("**", "").replace("*", "")
-        self.stream_evaluation_text(clean_text)
+        self.ai_simulated_text = clean_text
+
+    def _trigger_evaluation_stream(self) -> None:
+        """Trigger streaming after finish completes."""
+        self.stream_evaluation_text(self.ai_simulated_text)
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
-        # Esperar mínimo 2 segundos para que se vea el indicador "Analizando..."
-        await asyncio.sleep(2.0)
-        
         chunk_size = 8
-        delay = 0.15
+        delay = 0.12
         async with self:
             self.eval_stream_active = True
             self.eval_stream_text = ""
