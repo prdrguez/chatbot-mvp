@@ -315,11 +315,7 @@ def evaluacion() -> rx.Component:
                 ),
                 rx.cond(
                     EvaluacionState.finished,
-                    rx.cond(
-                        EvaluacionState.show_loading,
-                        _loading_analysis_view(),
-                        _finished_view(),
-                    ),
+                    _finished_view(),
                     rx.cond(
                         EvaluacionState.consent_given,
                         _in_progress_view(),
