@@ -265,6 +265,11 @@ class EvaluacionState(rx.State):
         # Limpiar asteriscos markdown del texto
         clean_text = self.ai_simulated_text.replace("**", "").replace("*", "")
         self.ai_simulated_text = clean_text
+        # Programar un fallback para limpiar el loading si el streaming se cancela
+        try:
+            type(self).clear_loading_timeout()
+        except Exception:
+            logger.info("Failed to schedule clear_loading_timeout fallback")
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
