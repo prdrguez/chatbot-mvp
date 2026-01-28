@@ -255,8 +255,11 @@ class EvaluacionState(rx.State):
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
-        chunk_size = 6
-        delay = 0.08
+        # Esperar mínimo 2 segundos para que se vea el indicador "Analizando..."
+        await asyncio.sleep(2.0)
+        
+        chunk_size = 8
+        delay = 0.15
         async with self:
             self.eval_stream_active = True
             self.eval_stream_text = ""
@@ -265,6 +268,7 @@ class EvaluacionState(rx.State):
             async with self:
                 self.eval_stream_active = False
                 self.eval_stream_text = ""
+                self.processing_result = False
             return
 
         for idx in range(0, len(full_text), chunk_size):
