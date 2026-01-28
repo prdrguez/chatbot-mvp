@@ -269,32 +269,32 @@ class EvaluacionState(rx.State):
 
     def _trigger_evaluation_stream(self) -> None:
         """Trigger streaming after finish completes."""
+        logger.info(f"Triggering stream with text length: {len(self.ai_simulated_text)}")
         self.stream_evaluation_text(self.ai_simulated_text)
 
     @rx.event(background=True)
     async def stream_evaluation_text(self, full_text: str) -> None:
+        logger.info(f"stream_evaluation_text started with text: {len(full_text)} chars")
         # Esperar 2 segundos para que se vea la pantalla de "Analizando..."
         await asyncio.sleep(2.0)
         
-        # Desactivar show_loading y preparar para el streaming
+        # SIEMPRE desactivar show_loading después de la espera
         async with self:
             self.show_loading = False
+            if full_text:
+                self.eval_stream_active = True
+                self.eval_stream_text = ""
         
-        # Pequeño delay para asegurar que el estado se actualiza
-        await asyncio.sleep(0.1)
-        
-        chunk_size = 6
-        delay = 0.1
-        async with self:
-            self.eval_stream_active = True
-            self.eval_stream_text = ""
-
+        # Si no hay texto, terminar aquí
         if not full_text:
             async with self:
                 self.eval_stream_active = False
                 self.eval_stream_text = ""
             return
 
+        # Streaming del texto
+        chunk_size = 6
+        delay = 0.1
         for idx in range(0, len(full_text), chunk_size):
             async with self:
                 if not self.eval_stream_active:
