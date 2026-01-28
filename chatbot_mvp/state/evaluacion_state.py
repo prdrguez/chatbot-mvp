@@ -184,8 +184,7 @@ class EvaluacionState(rx.State):
         self.error_message = ""
         if self.current_index >= len(NON_CONSENT_QUESTIONS) - 1:
             self.finish()
-            # Lanzar el streaming correctamente en Reflex
-            return type(self).stream_evaluation_text(self.ai_simulated_text)
+            return
 
         self.current_index += 1
         self.processing_result = False
@@ -206,6 +205,7 @@ class EvaluacionState(rx.State):
     def finish(self) -> None:
         self.processing_result = True
         self.show_loading = True
+        logger.info("finish(): processing_result True, show_loading set to True")
         if self.eval_stream_active:
             self.eval_stream_active = False
             self.eval_stream_text = ""
@@ -265,6 +265,13 @@ class EvaluacionState(rx.State):
         # Limpiar asteriscos markdown del texto
         clean_text = self.ai_simulated_text.replace("**", "").replace("*", "")
         self.ai_simulated_text = clean_text
+        # Programar el streaming en background (una sola vez desde finish)
+        try:
+            logger.info(f"Scheduling stream_evaluation_text with text length: {len(self.ai_simulated_text)}")
+            return type(self).stream_evaluation_text(self.ai_simulated_text)
+        except Exception:
+            logger.exception("Failed scheduling stream_evaluation_text from finish()")
+            return
         # Programar un fallback para limpiar el loading si el streaming se cancela
         try:
             type(self).clear_loading_timeout()
