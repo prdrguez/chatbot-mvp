@@ -78,48 +78,57 @@ def submit_quiz():
         "score_percent": int((score / total_scored) * 100) if total_scored else 0
     }
     
-    # Generate AI Feedback
-    with st.spinner("Generando feedback personalizado con IA..."):
-        try:
-            from chatbot_mvp.services.gemini_client import generate_evaluation_feedback
-            
-            # Prepare payload matching the service expectation
-            questions_payload = []
-            for q in NON_CONSENT_QUESTIONS:
-                q_id = q["id"]
-                resp = st.session_state.responses.get(q_id)
-                answer_text = str(resp) if resp is not None else ""
-                if isinstance(resp, list):
-                    answer_text = ", ".join(resp)
-                elif isinstance(resp, bool):
-                    answer_text = "Acepto" if resp else "No acepto"
+    
+    # Static feedback templates based on level
+    FEEDBACK_TEMPLATES = {
+        "Bajo": """Tu resultado indica que estás en un nivel inicial de comprensión sobre ética en IA. 
+        
+**Fortalezas:**  
+Has dado el primer paso al completar esta evaluación, lo cual demuestra tu interés en el tema.
 
-                questions_payload.append({
-                    "id": q_id,
-                    "section": q.get("section", ""),
-                    "prompt": q.get("prompt", ""),
-                    "answer": answer_text,
-                    "type": q.get("type", ""),
-                    "scored": q.get("scored", False)
-                })
+**Áreas de mejora:**  
+Es importante profundizar en conceptos clave como la discriminación algorítmica, los sesgos en datos de entrenamiento y la importancia de la transparencia en los sistemas de IA.
 
-            payload = {
-                "summary": {
-                    "score": score,
-                    "correct_count": score,
-                    "total_scored": total_scored,
-                    "score_percent": st.session_state.quiz_result["score_percent"],
-                    "level": level
-                },
-                "questions": questions_payload
-            }
-            
-            feedback = generate_evaluation_feedback(payload)
-            st.session_state.quiz_result["ai_feedback"] = feedback
-            
-        except Exception as e:
-            st.error(f"Error generando feedback IA: {e}")
-            st.session_state.quiz_result["ai_feedback"] = "No se pudo generar el feedback automático."
+**Recomendaciones:**  
+1. Revisa los conceptos de sesgo algorítmico y cómo los datos históricos pueden perpetuar desigualdades.  
+2. Aprende sobre principios éticos fundamentales como justicia, transparencia y supervisión humana en IA.  
+3. Explora casos reales de discriminación algorítmica para comprender sus impactos.
+
+¡No te desanimes! La ética en IA es un campo complejo, y este ejercicio es el inicio de tu aprendizaje. Continúa estudiando y estarás mejor preparado para usar IA de manera responsable.""",
+        
+        "Medio": """Has alcanzado un nivel medio de comprensión sobre ética en IA, lo cual refleja que tienes una base sólida en los principios fundamentales.
+
+**Fortalezas:**  
+Comprendes conceptos clave como la discriminación algorítmica y los principios éticos básicos. Esto te posiciona bien para seguir avanzando.
+
+**Áreas de mejora:**  
+Aún quedan aspectos por reforzar, especialmente en temas de mitigación de sesgos, marcos de gobernanza y la aplicación práctica de la transparencia algorítmica.
+
+**Recomendaciones:**  
+1. Profundiza en estrategias para reducir sesgos: diversificación de datos, auditorías y supervisión humana.  
+2. Investiga frameworks legales como el AI Act de la UE y su impacto en el desarrollo responsable de IA.  
+3. Practica el análisis crítico de salidas de IA para detectar posibles sesgos.
+
+Sigue trabajando en estas áreas y pronto tendrás el conocimiento necesario para abordar desafíos más complejos en ética de IA.""",
+        
+        "Alto": """¡Felicitaciones! Has alcanzado un nivel alto de comprensión sobre ética en inteligencia artificial.
+
+**Fortalezas:**  
+Demuestras un conocimiento sólido sobre discriminación algorítmica, principios éticos, transparencia y responsabilidad. Comprendes la importancia de la supervisión humana y las auditorías de modelos.
+
+**Oportunidades de crecimiento:**  
+Aunque tu nivel es alto, la ética en IA es un campo en constante evolución. Mantente actualizado sobre nuevas regulaciones, técnicas de mitigación y casos emergentes.
+
+**Recomendaciones:**  
+1. Participa en comunidades de ética en IA para compartir conocimientos y aprender de casos reales.  
+2. Aplica tus conocimientos en proyectos prácticos, auditando modelos o diseñando sistemas con enfoque ético.  
+3. Mantente al día con marcos legales como el AI Act y guías de desarrollo responsable.
+
+Tu comprensión te permite liderar conversaciones críticas sobre el uso justo e inclusivo de la IA. ¡Sigue adelante!"""
+    }
+    
+    # Assign feedback based on level
+    st.session_state.quiz_result["ai_feedback"] = FEEDBACK_TEMPLATES.get(level, "Evaluación completada.")
 
     # Save submission
     try:
