@@ -12,10 +12,11 @@ if str(root_path) not in sys.path:
 from chatbot_mvp.data.juego_etico import QUESTIONS
 from chatbot_mvp.services.submissions_store import append_submission
 from chatbot_mvp.config.settings import is_demo_mode
-from streamlit_app.components.sidebar import sidebar_branding
+from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 # --- Page Config ---
 st.set_page_config(page_title="Evaluación - IA Ética", page_icon="📝")
+load_custom_css()
 sidebar_branding()
 
 # --- Constants & Helpers ---

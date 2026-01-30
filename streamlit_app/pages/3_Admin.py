@@ -13,9 +13,10 @@ if str(root_path) not in sys.path:
 
 from chatbot_mvp.services.submissions_store import read_submissions, summarize
 from chatbot_mvp.config.settings import get_admin_password, is_demo_mode
-from streamlit_app.components.sidebar import sidebar_branding
+from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(page_title="Admin Panel", page_icon="📊", layout="wide")
+load_custom_css()
 
 # Simple Auth
 def check_password():

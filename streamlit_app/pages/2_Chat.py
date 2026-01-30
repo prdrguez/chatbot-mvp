@@ -10,13 +10,12 @@ if str(root_path) not in sys.path:
 
 from chatbot_mvp.services.chat_service import create_chat_service
 from chatbot_mvp.config.settings import is_demo_mode
-from streamlit_app.components.sidebar import sidebar_branding, sidebar_demo_badge
+from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(page_title="Asistente IA - Chat", page_icon="💬")
 
-# Sidebar Branding & Demo Badge
+load_custom_css()
 sidebar_branding()
-sidebar_demo_badge()
 
 # Sidebar History
 with st.sidebar:

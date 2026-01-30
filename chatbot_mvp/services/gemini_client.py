@@ -294,7 +294,13 @@ class GeminiChatClient:
             
             for chunk in stream:
                 if chunk.text:
-                    yield chunk.text
+                    # Split into words for smoother typing effect
+                    words = chunk.text.split(' ')
+                    for i, word in enumerate(words):
+                        if i < len(words) - 1:
+                            yield word + ' '
+                        else:
+                            yield word
                     
         except Exception as exc:
             logger.error(f"Error generating Gemini stream: {exc}")

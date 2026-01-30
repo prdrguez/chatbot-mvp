@@ -7,6 +7,7 @@ root_path = Path(__file__).parent.parent
 sys.path.append(str(root_path))
 
 from chatbot_mvp.config.settings import is_demo_mode
+from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(
     page_title="IA Ética - MVP",
@@ -15,13 +16,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-def load_css():
-    css_path = Path(__file__).parent / "assets" / "style.css"
-    if css_path.exists():
-        with open(css_path) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-load_css()
+# Load CSS and branding
+load_custom_css()
+sidebar_branding()
 
 st.title("IA Ética: Conceptos y Reflexión")
 
@@ -46,12 +43,3 @@ A través de esta herramienta podrás:
 
 if is_demo_mode():
     st.info("Modo DEMO activado. Algunas funciones pueden estar simuladas.", icon="ℹ️")
-
-from streamlit_app.components.sidebar import sidebar_branding
-
-# Sidebar Branding
-sidebar_branding()
-
-# No extra footer needed manually here as it is in the component
-# but kept just in case specific logic was there.
-
