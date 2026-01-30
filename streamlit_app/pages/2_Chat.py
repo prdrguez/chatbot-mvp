@@ -23,14 +23,15 @@ INITIAL_ASSISTANT_MESSAGE = (
 st.markdown(
     """
     <style>
-      .chat-row { display: flex; align-items: flex-start; gap: 0.5rem; width: 100%; }
-      .bubble { max-width: 70%; padding: 0.6rem 0.9rem; border-radius: 0.9rem; line-height: 1.4; }
-      .bubble.assistant { background: #21262d; color: #e6edf3; }
-      .bubble.user { background: #1f6feb; color: #f0f6fc; margin-left: auto; }
-      .avatar { width: 32px; height: 32px; border-radius: 999px; display: flex;
-                align-items: center; justify-content: center; font-size: 16px; }
-      .avatar.assistant { background: #30363d; }
-      .avatar.user { background: #1f6feb; }
+      .msg-row { display: flex; align-items: flex-start; gap: 12px; margin: 10px 0; }
+      .msg-row.user { justify-content: flex-end; }
+      .msg-row.assistant { justify-content: flex-start; }
+      .msg { max-width: 70%; padding: 0; background: transparent; border: none; }
+      .msg.user { text-align: right; }
+      .avatar { width: 38px; height: 38px; border-radius: 999px; display: flex;
+                align-items: center; justify-content: center; font-size: 20px; font-weight: 700; }
+      .avatar.user { background: #2f6fed; color: #ffffff; }
+      .avatar.assistant { background: #ff8a00; color: #111111; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -43,26 +44,21 @@ def reset_chat_messages() -> None:
     ]
 
 
-def render_message(role: str, content: str) -> None:
+def render_message_html(role: str, content: str) -> str:
     safe = html.escape(content).replace("\n", "<br/>")
     if role == "assistant":
-        col_avatar, col_bubble, col_spacer = st.columns([1, 6, 1])
-        col_avatar.markdown(
-            '<div class="avatar assistant">🤖</div>', unsafe_allow_html=True
+        return (
+            '<div class="msg-row assistant">'
+            '<div class="avatar assistant">🤖</div>'
+            f'<div class="msg assistant">{safe}</div>'
+            "</div>"
         )
-        col_bubble.markdown(
-            f'<div class="bubble assistant">{safe}</div>', unsafe_allow_html=True
-        )
-        col_spacer.empty()
-    else:
-        col_spacer, col_bubble, col_avatar = st.columns([1, 6, 1])
-        col_bubble.markdown(
-            f'<div class="bubble user">{safe}</div>', unsafe_allow_html=True
-        )
-        col_avatar.markdown(
-            '<div class="avatar user">🙂</div>', unsafe_allow_html=True
-        )
-        col_spacer.empty()
+    return (
+        '<div class="msg-row user">'
+        f'<div class="msg user">{safe}</div>'
+        '<div class="avatar user">🙂</div>'
+        "</div>"
+    )
 
 
 provider_labels = {"gemini": "Gemini", "groq": "Groq"}
@@ -99,11 +95,9 @@ elif active_provider == "groq":
     except Exception:
         st.error("Falta openai para Groq. Instala: pip install openai.")
 
-# Initial message
 if "messages" not in st.session_state:
     reset_chat_messages()
 
-# Initialize Chat Service
 if (
     "chat_service" not in st.session_state
     or st.session_state.get("chat_service_provider") != active_provider
@@ -114,23 +108,14 @@ if (
     except Exception as e:
         st.error(f"Error inicializando servicio de chat: {e}")
 
-# Display chat history
 for msg in st.session_state.messages:
-    render_message(msg["role"], msg["content"])
+    st.markdown(render_message_html(msg["role"], msg["content"]), unsafe_allow_html=True)
 
-# Chat Input
 if prompt := st.chat_input("Escribe tu pregunta..."):
-    # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
-    render_message("user", prompt)
+    st.markdown(render_message_html("user", prompt), unsafe_allow_html=True)
 
-    # Generate response
-    col_avatar, col_bubble, col_spacer = st.columns([1, 6, 1])
-    col_avatar.markdown(
-        '<div class="avatar assistant">🤖</div>', unsafe_allow_html=True
-    )
-    bubble_placeholder = col_bubble.empty()
-    col_spacer.empty()
+    placeholder = st.empty()
     try:
         history = [
             {"role": m["role"], "content": m["content"]}
@@ -147,9 +132,8 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
         response_text = ""
         for chunk in stream:
             response_text += chunk
-            safe = html.escape(response_text).replace("\n", "<br/>")
-            bubble_placeholder.markdown(
-                f'<div class="bubble assistant">{safe}</div>',
+            placeholder.markdown(
+                render_message_html("assistant", response_text),
                 unsafe_allow_html=True,
             )
 

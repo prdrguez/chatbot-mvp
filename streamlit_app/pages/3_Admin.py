@@ -64,6 +64,9 @@ def get_chart_config(fig):
 
 if check_password():
     st.title("Panel de Administración")
+    toast_message = st.session_state.pop("provider_toast", None)
+    if toast_message:
+        st.toast(toast_message, icon="✅")
     sidebar_branding()
     
     # Load Data
@@ -294,13 +297,14 @@ if check_password():
         with col_status:
             st.caption("Cambia el motor de IA del chat y evaluación.")
         
+        st.caption(f"Proveedor activo: {current_p}")
+
         if new_provider != current_p:
              st.session_state.ai_provider = new_provider
              set_provider_override(new_provider)
              st.session_state.pop("chat_service", None)
              st.session_state.pop("chat_service_provider", None)
-             st.toast(f"Proveedor actualizado: {new_provider}")
-             st.success(f"Proveedor cambiado a: {new_provider}")
+             st.session_state.provider_toast = f"Proveedor actualizado: {new_provider}"
              st.rerun()
         
         st.divider()
