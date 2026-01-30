@@ -8,26 +8,80 @@ if str(root_path) not in sys.path:
     sys.path.append(str(root_path))
 
 from chatbot_mvp.services.chat_service import create_chat_service
-from chatbot_mvp.config.settings import is_demo_mode
+from chatbot_mvp.config.settings import get_runtime_ai_provider
+from chatbot_mvp.services.groq_client import get_groq_api_key
 from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(page_title="Asistente IA - Chat", page_icon="💬", layout="wide")
 
 load_custom_css()
 
-st.title("Conversa con la IA")
-st.markdown("Pregunta sobre ética, sesgos o los resultados de tu evaluación.")
+INITIAL_ASSISTANT_MESSAGE = (
+    "¡Hola! Soy tu asistente de ética en IA. ¿En qué puedo ayudarte hoy?"
+)
+
+
+def reset_chat_messages() -> None:
+    st.session_state.messages = [
+        {"role": "assistant", "content": INITIAL_ASSISTANT_MESSAGE}
+    ]
+
+
+provider_labels = {"gemini": "Gemini", "groq": "Groq"}
+provider_options = list(provider_labels.keys())
+
+with st.sidebar:
+    st.subheader("Proveedor IA")
+    runtime_provider = get_runtime_ai_provider()
+    ui_provider = runtime_provider if runtime_provider in provider_options else "gemini"
+    selected_provider = st.selectbox(
+        "Proveedor",
+        provider_options,
+        index=provider_options.index(ui_provider),
+        format_func=lambda value: provider_labels.get(value, value),
+        key="ai_provider_select",
+    )
+
+    if selected_provider == "groq" and not get_groq_api_key():
+        st.warning("Falta GROQ_API_KEY. Se mantiene Gemini.")
+        st.session_state.ai_provider_select = "gemini"
+        st.session_state.ai_provider = "gemini"
+        st.session_state.pop("chat_service", None)
+        st.session_state.pop("chat_service_provider", None)
+        st.rerun()
+
+    if selected_provider != runtime_provider:
+        st.session_state.ai_provider = selected_provider
+        st.session_state.pop("chat_service", None)
+        st.session_state.pop("chat_service_provider", None)
+        st.rerun()
+
+title_col, action_col = st.columns([6, 1])
+with title_col:
+    st.title("Conversa con la IA")
+    st.markdown("Pregunta sobre ética, sesgos o los resultados de tu evaluación.")
+
+with action_col:
+    with st.popover("⋯", use_container_width=True):
+        if st.button("Nuevo chat", use_container_width=True):
+            reset_chat_messages()
+            st.rerun()
+
+active_provider = get_runtime_ai_provider()
+st.caption(f"Proveedor activo: {provider_labels.get(active_provider, active_provider)}")
 
 # Initial message
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "¡Hola! Soy tu asistente de ética en IA. ¿En qué puedo ayudarte hoy?"}
-    ]
+    reset_chat_messages()
 
 # Initialize Chat Service
-if "chat_service" not in st.session_state:
+if (
+    "chat_service" not in st.session_state
+    or st.session_state.get("chat_service_provider") != active_provider
+):
     try:
         st.session_state.chat_service = create_chat_service()
+        st.session_state.chat_service_provider = active_provider
     except Exception as e:
         st.error(f"Error inicializando servicio de chat: {e}")
 
@@ -45,43 +99,25 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
 
     # Generate response
     with st.chat_message("assistant"):
-        # Stream response
         try:
-            # Prepare history for service
             history = [
                 {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages[:-1] 
+                for m in st.session_state.messages[:-1]
             ]
-            
+
             service = st.session_state.chat_service
-            
-            # Use streaming method
             stream = service.send_message_stream(
                 message=prompt,
                 conversation_history=history,
-                user_context={} 
+                user_context={},
             )
-            
-            # Render stream
+
             response_text = st.write_stream(stream)
-            
-            # Save full response to history
-            st.session_state.messages.append({"role": "assistant", "content": response_text})
-            
+            st.session_state.messages.append(
+                {"role": "assistant", "content": response_text}
+            )
+
         except Exception as e:
             st.error(f"Error en el servicio de chat: {e}")
 
-# Sidebar - must be AFTER main content to ensure branding is at bottom
-with st.sidebar:
-    st.divider()
-    # Compact "Nuevo Chat" button
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        if st.button("🔄 Reiniciar", key="reset_chat_btn"):
-            st.session_state.messages = [
-                {"role": "assistant", "content": "¡Hola! Soy tu asistente de ética en IA. ¿En qué puedo ayudarte hoy?"}
-            ]
-            st.rerun()
-
-# Sidebar branding at the end (bottom)
 sidebar_branding()

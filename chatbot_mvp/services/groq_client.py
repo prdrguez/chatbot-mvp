@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Iterator
 
 from chatbot_mvp.config.settings import get_env_value, sanitize_env_value
 from chatbot_mvp.services.openai_client import AIClientError
@@ -7,7 +7,8 @@ from chatbot_mvp.data.evaluation_context import build_evaluation_feedback_prompt
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
+_DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
 def get_groq_api_key() -> str:
@@ -15,7 +16,7 @@ def get_groq_api_key() -> str:
 
 
 class GroqChatClient:
-    """Groq client for chat interactions."""
+    """Groq client using OpenAI SDK with Groq base_url."""
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         api_key_value = sanitize_env_value(api_key) if isinstance(api_key, str) else ""
@@ -33,18 +34,35 @@ class GroqChatClient:
             return True
 
         try:
-            from groq import Groq
+            from openai import OpenAI
 
-            self.client = Groq(api_key=self.api_key)
+            self.client = OpenAI(api_key=self.api_key, base_url=_GROQ_BASE_URL)
             self._initialized = True
             logger.info("Groq client initialized successfully with model: %s", self.model)
             return True
         except ImportError as exc:
-            logger.error("Groq SDK not installed: %s", exc)
-            raise AIClientError(f"SDK de Groq no instalado: {exc}")
+            logger.error("OpenAI SDK not installed: %s", exc)
+            raise AIClientError(f"SDK de OpenAI no instalado para Groq: {exc}")
         except Exception as exc:
             logger.error("Failed to initialize Groq client: %s", exc)
             raise AIClientError(f"Error al inicializar cliente Groq: {exc}")
+
+    def generate(
+        self,
+        prompt: str,
+        max_tokens: int = 150,
+        temperature: float = 0.7,
+    ) -> str:
+        if not self._initialized:
+            raise AIClientError("Cliente Groq no inicializado")
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return self._extract_response_text(response)
 
     def generate_chat_response(
         self,
@@ -70,6 +88,34 @@ class GroqChatClient:
             return self._extract_response_text(response)
         except Exception as exc:
             logger.error("Error generating Groq response: %s", exc)
+            raise AIClientError(f"Error al generar respuesta: {exc}")
+
+    def generate_chat_response_stream(
+        self,
+        message: str,
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None,
+        max_tokens: int = 150,
+        temperature: float = 0.7,
+    ) -> Iterator[str]:
+        if not self._initialized:
+            raise AIClientError("Cliente Groq no inicializado")
+
+        messages = self._build_chat_messages(message, conversation_history, user_context)
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+            for chunk in stream:
+                text = self._extract_response_text(chunk)
+                if text:
+                    yield text
+        except Exception as exc:
+            logger.error("Error streaming Groq response: %s", exc)
             raise AIClientError(f"Error al generar respuesta: {exc}")
 
     def _build_chat_messages(
@@ -101,9 +147,9 @@ class GroqChatClient:
 
     def _build_system_prompt(self, user_context: Optional[Dict] = None) -> str:
         base_prompt = (
-            "Eres un asistente útil y amigable que responde en español. "
-            "Sé conciso pero informativo. Mantén un tono profesional pero cercano. "
-            "Si no sabes algo, admítelo claramente."
+            "Eres un asistente util y amigable que responde en espanol. "
+            "Se conciso pero informativo. Manten un tono profesional pero cercano. "
+            "Si no sabes algo, admitalo claramente."
         )
 
         if user_context:
@@ -113,7 +159,7 @@ class GroqChatClient:
                 if demografia.get("edad"):
                     context_info.append(f"Edad: {demografia['edad']}")
                 if demografia.get("ocupacion"):
-                    context_info.append(f"Ocupación: {demografia['ocupacion']}")
+                    context_info.append(f"Ocupacion: {demografia['ocupacion']}")
                 if demografia.get("nivel_conocimiento_ia"):
                     context_info.append(
                         f"Nivel conocimiento IA: {demografia['nivel_conocimiento_ia']}"
@@ -124,30 +170,21 @@ class GroqChatClient:
 
         return base_prompt
 
-    def _generate_text(self, prompt: str, max_tokens: int, temperature: float) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        return self._extract_response_text(response)
-
     def generate_evaluation(self, answers: Dict[str, Any]) -> str:
         if not self._initialized:
             raise AIClientError("Cliente Groq no inicializado")
 
         try:
             prompt = self._build_evaluation_prompt(answers)
-            return self._generate_text(prompt, max_tokens=300, temperature=0.4)
+            return self.generate(prompt, max_tokens=300, temperature=0.4)
         except Exception as exc:
             logger.error("Error generating Groq evaluation: %s", exc)
-            raise AIClientError(f"Error al generar evaluación: {exc}")
+            raise AIClientError(f"Error al generar evaluacion: {exc}")
 
     def _build_evaluation_prompt(self, answers: Dict[str, Any]) -> str:
         lines = [
-            "Eres un evaluador experto en ética e inteligencia artificial. "
-            "Da una evaluación personalizada, breve y útil en español basada en las siguientes respuestas a un cuestionario de ética.",
+            "Eres un evaluador experto en etica e inteligencia artificial. "
+            "Da una evaluacion personalizada, breve y util en espanol basada en las siguientes respuestas a un cuestionario de etica.",
             "\nRespuestas del usuario:",
         ]
 
@@ -157,8 +194,8 @@ class GroqChatClient:
                 lines.append(f"- {key}: {val_str}")
 
         lines.append(
-            "\nPor favor entrega 6-10 líneas con un tono profesional, claro y accionable. "
-            "Enfócate en consejos prácticos basados en sus respuestas específicas. "
+            "\nPor favor entrega 6-10 lineas con un tono profesional, claro y accionable. "
+            "Enfocate en consejos practicos basados en sus respuestas especificas. "
             "No uses formato markdown excesivo, prefiere texto plano."
         )
         return "\n".join(lines)
@@ -169,17 +206,33 @@ class GroqChatClient:
 
         try:
             prompt = build_evaluation_feedback_prompt(evaluation)
-            return self._generate_text(prompt, max_tokens=250, temperature=0.5)
+            return self.generate(prompt, max_tokens=250, temperature=0.5)
         except Exception as exc:
             logger.error("Error generating Groq evaluation feedback: %s", exc)
-            raise AIClientError(f"Error al generar evaluación: {exc}")
+            raise AIClientError(f"Error al generar evaluacion: {exc}")
 
-    def _extract_response_text(self, response: Dict) -> str:
-        try:
-            return response.choices[0].message.content.strip()
-        except (AttributeError, IndexError, KeyError) as exc:
-            logger.error("Failed to extract Groq response text: %s", exc)
-            raise AIClientError("Respuesta vacía o malformed")
+    def _extract_response_text(self, response: Any) -> str:
+        if response is None:
+            return ""
+
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
+
+        choices = getattr(response, "choices", None)
+        if choices:
+            first = choices[0]
+            delta = getattr(first, "delta", None)
+            if delta and getattr(delta, "content", None):
+                return str(delta.content)
+            message = getattr(first, "message", None)
+            if message and getattr(message, "content", None):
+                return str(message.content).strip()
+            text = getattr(first, "text", None)
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+
+        return ""
 
     def is_available(self) -> bool:
         return self._initialized and self.client is not None
@@ -200,21 +253,21 @@ def generate_evaluation(answers: Dict[str, Any]) -> str:
     client = create_groq_client()
     if not client:
         logger.warning("Groq client not available for evaluation.")
-        return "Falta GROQ_API_KEY para usar Groq en la evaluación."
+        return "Falta GROQ_API_KEY para usar Groq en la evaluacion."
     try:
         return client.generate_evaluation(answers)
     except Exception as exc:
         logger.error("Generate evaluation helper failed: %s", exc)
-        return "Error al generar evaluación con Groq. Por favor intenta de nuevo."
+        return "Error al generar evaluacion con Groq. Por favor intenta de nuevo."
 
 
 def generate_evaluation_feedback(evaluation: Dict[str, Any]) -> str:
     client = create_groq_client()
     if not client:
         logger.warning("Groq client not available for evaluation feedback.")
-        return "Falta GROQ_API_KEY para usar Groq en la evaluación."
+        return "Falta GROQ_API_KEY para usar Groq en la evaluacion."
     try:
         return client.generate_evaluation_feedback(evaluation)
     except Exception as exc:
         logger.error("Generate evaluation feedback helper failed: %s", exc)
-        return "Error al generar evaluación con Groq. Por favor intenta de nuevo."
+        return "Error al generar evaluacion con Groq. Por favor intenta de nuevo."
