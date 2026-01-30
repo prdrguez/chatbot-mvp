@@ -282,16 +282,23 @@ if check_password():
         from chatbot_mvp.services.app_settings_store import set_provider_override
         
         current_p = get_runtime_ai_provider()
-        new_provider = st.selectbox(
-            "Proveedor de IA",
-            ["gemini", "groq"],
-            index=0 if current_p == "gemini" else 1,
-            help="Cambia el motor de IA del chat y evaluación."
-        )
+        col_provider, col_status = st.columns([2, 4])
+        with col_provider:
+            new_provider = st.radio(
+                "Proveedor de IA",
+                ["gemini", "groq"],
+                index=0 if current_p == "gemini" else 1,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+        with col_status:
+            st.caption("Cambia el motor de IA del chat y evaluación.")
         
         if new_provider != current_p:
              st.session_state.ai_provider = new_provider
              set_provider_override(new_provider)
+             st.session_state.pop("chat_service", None)
+             st.session_state.pop("chat_service_provider", None)
              st.success(f"Proveedor cambiado a: {new_provider}")
              st.info("La aplicación se actualizará para aplicar el cambio.")
              st.rerun()

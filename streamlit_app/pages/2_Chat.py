@@ -8,8 +8,7 @@ if str(root_path) not in sys.path:
     sys.path.append(str(root_path))
 
 from chatbot_mvp.services.chat_service import create_chat_service
-from chatbot_mvp.config.settings import get_runtime_ai_provider
-from chatbot_mvp.services.groq_client import get_groq_api_key
+from chatbot_mvp.config.settings import get_runtime_ai_provider, get_env_value
 from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(page_title="Asistente IA - Chat", page_icon="💬", layout="wide")
@@ -28,33 +27,6 @@ def reset_chat_messages() -> None:
 
 
 provider_labels = {"gemini": "Gemini", "groq": "Groq"}
-provider_options = list(provider_labels.keys())
-
-with st.sidebar:
-    st.subheader("Proveedor IA")
-    runtime_provider = get_runtime_ai_provider()
-    ui_provider = runtime_provider if runtime_provider in provider_options else "gemini"
-    selected_provider = st.selectbox(
-        "Proveedor",
-        provider_options,
-        index=provider_options.index(ui_provider),
-        format_func=lambda value: provider_labels.get(value, value),
-        key="ai_provider_select",
-    )
-
-    if selected_provider == "groq" and not get_groq_api_key():
-        st.warning("Falta GROQ_API_KEY. Se mantiene Gemini.")
-        st.session_state.ai_provider_select = "gemini"
-        st.session_state.ai_provider = "gemini"
-        st.session_state.pop("chat_service", None)
-        st.session_state.pop("chat_service_provider", None)
-        st.rerun()
-
-    if selected_provider != runtime_provider:
-        st.session_state.ai_provider = selected_provider
-        st.session_state.pop("chat_service", None)
-        st.session_state.pop("chat_service_provider", None)
-        st.rerun()
 
 title_col, action_col = st.columns([6, 1])
 with title_col:
@@ -69,6 +41,24 @@ with action_col:
 
 active_provider = get_runtime_ai_provider()
 st.caption(f"Proveedor activo: {provider_labels.get(active_provider, active_provider)}")
+
+if active_provider == "gemini":
+    if not get_env_value("GEMINI_API_KEY") and not get_env_value("GOOGLE_API_KEY"):
+        st.warning("Falta GEMINI_API_KEY/GOOGLE_API_KEY. Se usara modo demo.")
+    try:
+        from google import genai  # noqa: F401
+    except Exception:
+        st.error(
+            "Falta google-genai o hay conflicto con el paquete google. "
+            "Recomendado: pip uninstall google y pip install google-genai."
+        )
+elif active_provider == "groq":
+    if not get_env_value("GROQ_API_KEY"):
+        st.warning("Falta GROQ_API_KEY. Se usara modo demo.")
+    try:
+        import openai  # noqa: F401
+    except Exception:
+        st.error("Falta openai para Groq. Instala: pip install openai.")
 
 # Initial message
 if "messages" not in st.session_state:

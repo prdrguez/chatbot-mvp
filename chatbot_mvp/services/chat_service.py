@@ -318,23 +318,17 @@ class ChatService:
                 api_key = get_groq_api_key()
                 if not api_key:
                     logger.warning(
-                        "Groq API key missing (set GROQ_API_KEY), returning error response"
+                        "Groq API key missing (set GROQ_API_KEY), falling back to demo"
                     )
-                    return StaticResponseStrategy(
-                        "Falta GROQ_API_KEY para usar Groq. Configurala en tu entorno."
-                    )
+                    return DemoResponseStrategy()
                 try:
                     ai_client = create_groq_client()
                 except Exception as exc:
                     logger.warning(f"Groq client init failed: {exc}")
-                    return StaticResponseStrategy(
-                        str(exc) or "Error al inicializar cliente Groq."
-                    )
+                    return DemoResponseStrategy()
                 if not ai_client:
-                    logger.warning("Groq client unavailable, returning error response")
-                    return StaticResponseStrategy(
-                        "No se pudo inicializar el cliente Groq."
-                    )
+                    logger.warning("Groq client unavailable, falling back to demo")
+                    return DemoResponseStrategy()
             logger.info("Using provider: groq")
             return AIResponseStrategy(ai_client)
         else:

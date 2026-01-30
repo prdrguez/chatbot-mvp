@@ -15,13 +15,12 @@
 ## Qué funciona hoy
 - Navegacion multipage Streamlit implementada (Inicio, Evaluacion, Chat, Admin).
 - Cuestionario usa `chatbot_mvp.data.juego_etico` y guarda resultados via `submissions_store`.
-- Chat usa streaming con Gemini o Groq si hay API keys; selector de provider en el sidebar del Chat.
+- Chat usa streaming con Gemini o Groq si hay API keys; el provider se elige en Admin.
 - Admin autentica con password y muestra KPIs desde `data/submissions.jsonl`.
 - Estilos cargan desde `streamlit_app/assets/style.css`.
 
 ## Que NO funciona hoy
 - Componentes Reflex importan modulos inexistentes (`chatbot_mvp.state`, `chatbot_mvp.ui`) y no son compatibles con Streamlit.
-- Proveedor `openai` no esta en `requirements.txt` (falla si se activa).
 - Test legacy Reflex (`tests/test_auth_state.py`) esta skippeado (sin coverage real).
 - `chatbot_mvp/data/app_settings.json` fija `groq` y puede sobreescribir `AI_PROVIDER`.
 
@@ -36,6 +35,8 @@
   - `GROQ_MODEL` (default: `openai/gpt-oss-20b`).
   - `OPENAI_API_KEY` (si openai).
   - `ADMIN_PASSWORD`, `DEMO_MODE`.
+- Dependencias clave:
+  - `google-genai` (Gemini) y `openai` (Groq/OpenAI).
 - Datos/archivos requeridos:
   - `data/submissions.jsonl` (se crea automaticamente al guardar).
   - `chatbot_mvp/data/app_settings.json` (override de proveedor).
@@ -44,7 +45,8 @@
 - Notas de troubleshooting:
   - Si el chat no responde, validar API keys y `AI_PROVIDER`.
   - Si el proveedor no cambia, borrar `chatbot_mvp/data/app_settings.json` o usar el selector en Admin.
-  - En Chat, el selector de provider revierte a Gemini si falta `GROQ_API_KEY`.
+  - Si aparece "cannot import name genai from google", desinstalar el paquete `google` y reinstalar `google-genai`.
+  - Si falta `openai`, instalar el SDK con `pip install openai`.
 
 ## Arquitectura actual
 - Estructura (alto nivel):
