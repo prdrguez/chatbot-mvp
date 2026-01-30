@@ -174,12 +174,11 @@ def show_results():
     if "ai_feedback" in res:
         # Simulate typing effect
         import time
-        def typing_effect(text, delay=0.001):
+        def typing_effect(text):
             """Generator that yields text character by character for typing effect."""
             for char in text:
                 yield char
-                # Optional: delay can be 0 for instant or increased for slower typing
-                # time.sleep(delay) # Removed to avoid blocking
+                time.sleep(0.01) # Small delay for natural feel
         
         st.write_stream(typing_effect(res["ai_feedback"]))
     

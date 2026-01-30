@@ -301,6 +301,7 @@ class GeminiChatClient:
                             yield word + ' '
                         else:
                             yield word
+                        time.sleep(0.02) # Small delay for natural feel
                     
         except Exception as exc:
             logger.error(f"Error generating Gemini stream: {exc}")

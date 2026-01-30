@@ -15,8 +15,8 @@ def sidebar_branding():
     Logo and badge positioned at the BOTTOM of sidebar.
     """
     with st.sidebar:
-        # Spacer to push content to bottom
-        st.markdown("<br>" * 10, unsafe_allow_html=True)
+        # We use a container with a class to fix it at the bottom via CSS
+        st.markdown('<div class="sidebar-footer-container">', unsafe_allow_html=True)
         
         # Divider before footer section
         st.markdown("---")
@@ -58,3 +58,5 @@ def sidebar_branding():
                 """, 
                 unsafe_allow_html=True
             )
+        
+        st.markdown('</div>', unsafe_allow_html=True)

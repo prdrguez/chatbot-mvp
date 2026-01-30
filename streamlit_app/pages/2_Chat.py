@@ -75,9 +75,9 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
 with st.sidebar:
     st.divider()
     # Compact "Nuevo Chat" button
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("🔄 Nuevo", use_container_key="reset_chat"):
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("🔄 Reiniciar", key="reset_chat_btn"):
             st.session_state.messages = [
                 {"role": "assistant", "content": "¡Hola! Soy tu asistente de ética en IA. ¿En qué puedo ayudarte hoy?"}
             ]
