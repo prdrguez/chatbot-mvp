@@ -15,7 +15,7 @@
 ## Qué funciona hoy
 - Navegacion multipage Streamlit implementada (Inicio, Evaluacion, Chat, Admin).
 - Cuestionario usa `chatbot_mvp.data.juego_etico` y guarda resultados via `submissions_store`.
-- Chat usa streaming con Gemini o Groq si hay API keys; fallback a demo si faltan.
+- Chat usa streaming con Gemini o Groq si hay API keys; selector de provider en el sidebar del Chat.
 - Admin autentica con password y muestra KPIs desde `data/submissions.jsonl`.
 - Estilos cargan desde `streamlit_app/assets/style.css`.
 
@@ -33,6 +33,7 @@
   - `AI_PROVIDER` (gemini|groq|openai|demo).
   - `GEMINI_API_KEY` o `GOOGLE_API_KEY` (si gemini).
   - `GROQ_API_KEY` (si groq).
+  - `GROQ_MODEL` (default: `openai/gpt-oss-20b`).
   - `OPENAI_API_KEY` (si openai).
   - `ADMIN_PASSWORD`, `DEMO_MODE`.
 - Datos/archivos requeridos:
@@ -43,6 +44,7 @@
 - Notas de troubleshooting:
   - Si el chat no responde, validar API keys y `AI_PROVIDER`.
   - Si el proveedor no cambia, borrar `chatbot_mvp/data/app_settings.json` o usar el selector en Admin.
+  - En Chat, el selector de provider revierte a Gemini si falta `GROQ_API_KEY`.
 
 ## Arquitectura actual
 - Estructura (alto nivel):
@@ -66,7 +68,7 @@
   - `AI_PROVIDER`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`,
     `GEMINI_MODEL`, `GROQ_MODEL`, `OPENAI_MODEL`, `ADMIN_PASSWORD`, `DEMO_MODE`.
 - Servicios externos (si hay):
-  - Google Gemini (google-genai), Groq, OpenAI (opcional).
+  - Google Gemini (google-genai), Groq (via OpenAI SDK + base_url), OpenAI (opcional).
 
 ## Calidad (tests/lint/CI)
 - Checks disponibles:
@@ -78,7 +80,7 @@
 - Resultados locales:
   - `python -m pytest`: 6 passed, 1 skipped (legacy Reflex).
   - `python -m streamlit run streamlit_app/Inicio.py --server.headless true --server.port 8510`: arranca y expone URL local.
-  - Nota: puerto 8501 estaba en uso en una prueba previa.
+  - Nota: puerto 8510 estaba en uso y se libero antes de la prueba.
 
 ## Migracion Reflex -> Streamlit
 - Migrado:

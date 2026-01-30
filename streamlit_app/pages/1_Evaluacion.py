@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 import time
 import asyncio
+import uuid
 
 # Ensure project root is in path
 root_path = Path(__file__).parent.parent.parent
@@ -78,6 +79,7 @@ def submit_quiz():
         "level": level,
         "score_percent": int((score / total_scored) * 100) if total_scored else 0
     }
+    st.session_state.quiz_result["result_id"] = str(uuid.uuid4())
     
     
     # Static feedback templates based on level
@@ -171,22 +173,40 @@ def show_results():
     st.divider()
     
     st.subheader("Análisis de IA")
+    result_id = res.get("result_id")
+    already_streamed = (
+        result_id
+        and st.session_state.get("analysis_streamed_for_eval_id") == result_id
+    )
     if "ai_feedback" in res:
-        # Simulate typing effect
-        import time
-        def typing_effect(text):
-            """Generator that yields text character by character for typing effect."""
-            for char in text:
-                yield char
-                time.sleep(0.01) # Small delay for natural feel
-        
-        st.write_stream(typing_effect(res["ai_feedback"]))
+        if not already_streamed:
+            # Simulate typing effect
+            import time
+            def typing_effect(text):
+                """Generator that yields text character by character for typing effect."""
+                for char in text:
+                    yield char
+                    time.sleep(0.01) # Small delay for natural feel
+
+            st.write_stream(typing_effect(res["ai_feedback"]))
+            if result_id:
+                st.session_state.analysis_streamed_for_eval_id = result_id
+        else:
+            st.markdown(res["ai_feedback"])
     
     if st.button("Volver al inicio"):
         # Reset state
-        for key in ["responses", "step", "current_index", "quiz_result"]:
+        for key in [
+            "responses",
+            "step",
+            "current_index",
+            "quiz_result",
+            "analysis_streamed_for_eval_id",
+        ]:
+            if key in st.session_state:
                 del st.session_state[key]
         st.switch_page("Inicio.py")
+        st.stop()
 
 def show_question_form():
     idx = get_current_question_index()
