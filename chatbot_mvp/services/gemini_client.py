@@ -156,6 +156,16 @@ def get_gemini_api_key() -> str:
     return get_env_value("GOOGLE_API_KEY")
 
 
+def get_gemini_max_output_tokens() -> int:
+    value = _get_env_int("GEMINI_MAX_OUTPUT_TOKENS", 260)
+    return value if value > 0 else 260
+
+
+def get_gemini_temperature() -> float:
+    value = _get_env_float("GEMINI_TEMPERATURE", 0.4)
+    return max(0.0, min(1.0, value))
+
+
 # Import AIClientError from openai_client to maintain consistency
 from chatbot_mvp.services.openai_client import AIClientError
 
@@ -239,8 +249,8 @@ class GeminiChatClient:
             # Generate response with retries
             return self._generate_text(
                 prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
+                max_tokens=get_gemini_max_output_tokens(),
+                temperature=get_gemini_temperature(),
             )
             
         except Exception as exc:
@@ -287,8 +297,8 @@ class GeminiChatClient:
                 model=self.model,
                 contents=prompt,
                 config={
-                    'max_output_tokens': max_tokens,
-                    'temperature': temperature,
+                    'max_output_tokens': get_gemini_max_output_tokens(),
+                    'temperature': get_gemini_temperature(),
                 }
             )
             
@@ -352,9 +362,11 @@ class GeminiChatClient:
             System prompt string
         """
         base_prompt = (
-            "Eres un asistente útil y amigable que responde en español. "
-            "Sé conciso pero informativo. Mantén un tono profesional pero cercano. "
-            "Si no sabes algo, admítelo claramente."
+            "Eres un asistente util y amigable que responde en espanol. "
+            "Se conciso pero informativo. Manten un tono profesional pero cercano. "
+            "Responde en 4 a 8 oraciones maximo. "
+            "Si falta informacion, pide una aclaracion concreta. "
+            "Si no sabes algo, admitalo claramente."
         )
         
         if user_context:
