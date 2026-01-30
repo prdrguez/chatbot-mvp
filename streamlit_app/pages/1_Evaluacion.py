@@ -15,7 +15,7 @@ from chatbot_mvp.config.settings import is_demo_mode
 from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 # --- Page Config ---
-st.set_page_config(page_title="Evaluación - IA Ética", page_icon="📝")
+st.set_page_config(page_title="Evaluación - IA Ética", page_icon="📝", layout="wide")
 load_custom_css()
 sidebar_branding()
 

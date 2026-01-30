@@ -275,21 +275,26 @@ if check_password():
 
     # --- TAB SETTINGS ---
     with tab_settings:
-        st.header("Configuración del Sistema")
+        st.subheader("Configuración de Sistema")
         
-        st.subheader("Proveedor de IA")
-        curr_provider = st.session_state.get("ai_provider", "gemini")
+        # AI Provider Selection
+        st.write("### Inteligencia Artificial")
+        from chatbot_mvp.services.app_settings_store import set_provider_override
         
-        new_provider = st.radio(
-            "Selecciona el motor de IA activo:",
+        current_p = get_runtime_ai_provider()
+        new_provider = st.selectbox(
+            "Proveedor de IA",
             ["gemini", "groq"],
-            index=0 if curr_provider == "gemini" else 1,
-            format_func=lambda x: x.capitalize()
+            index=0 if current_p == "gemini" else 1,
+            help="Cambia el motor de IA del chat y evaluación."
         )
         
-        if new_provider != curr_provider:
-            st.session_state["ai_provider"] = new_provider
-            st.success(f"Proveedor cambiado a: {new_provider.capitalize()}")
+        if new_provider != current_p:
+             st.session_state.ai_provider = new_provider
+             set_provider_override(new_provider)
+             st.success(f"Proveedor cambiado a: {new_provider}")
+             st.info("La aplicación se actualizará para aplicar el cambio.")
+             st.rerun()
         
         st.divider()
         
