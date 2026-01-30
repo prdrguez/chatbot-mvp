@@ -14,7 +14,7 @@ Instrucciones persistentes para este repo (Streamlit + Python). Seguir estas reg
 - Mantener UI "Premium" (Dark mode friendly, `style.css`).
 
 ## Verificación
-- Correr la app con `streamlit run streamlit_app/app.py`.
+- Correr la app con `streamlit run streamlit_app/Inicio.py`.
 - Chequear rutas: Home, Evaluación, Chat.
 
 ## Commits

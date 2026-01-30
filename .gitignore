@@ -19,3 +19,4 @@ exports/
 assets/external/
 .vscode/
 .venv_st/
+.venv_st_bkp_python_ref

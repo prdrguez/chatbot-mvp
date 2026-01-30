@@ -23,7 +23,7 @@
 PROMPT BASE
 - Trabajamos paso a paso y sin refactors masivos.
 - Respetá estrictamente el scope: SOLO tocá los archivos permitidos.
-- No agregues cambios “de más”. Si ves algo mejorable fuera de scope, anotarlo en docs/STATUS.md como “Backlog” y no lo implementes.
+- No agregues cambios "de mas". Si ves algo mejorable fuera de scope, anotarlo en docs/STATUS_REPORT.md como "Backlog" y no lo implementes.
 - Al finalizar: dejá git status limpio, hacé commit(s) con mensaje corto, push y abrí PR a main.
 - Entregá salida concreta: (1) archivos tocados, (2) comandos para verificar, (3) link del PR.
 
@@ -39,10 +39,10 @@ ARCHIVOS PERMITIDOS
 
 ## Política de limpieza
 - Si el working tree está sucio: decidir entre stash/commit/revert.
-- Documentar la decisión en `docs/STATUS.md` antes de ejecutar cambios.
+- Documentar la decision en `docs/STATUS_REPORT.md` antes de ejecutar cambios.
 
 ## Cómo retomar después
-1) Leer `docs/STATUS.md`.
+1) Leer `docs/STATUS_REPORT.md`.
 2) Revisar PRs abiertos en GitHub.
 3) Confirmar branch actual y últimos commits:
    - `git status -sb`

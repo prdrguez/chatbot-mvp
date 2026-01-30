@@ -1,3 +1,7 @@
+import pytest
+
+pytest.skip("Legacy Reflex tests; Streamlit migration", allow_module_level=True)
+
 import time
 
 from chatbot_mvp.state.auth_state import AuthState
