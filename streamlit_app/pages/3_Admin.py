@@ -299,8 +299,8 @@ if check_password():
              set_provider_override(new_provider)
              st.session_state.pop("chat_service", None)
              st.session_state.pop("chat_service_provider", None)
+             st.toast(f"Proveedor actualizado: {new_provider}")
              st.success(f"Proveedor cambiado a: {new_provider}")
-             st.info("La aplicación se actualizará para aplicar el cambio.")
              st.rerun()
         
         st.divider()
