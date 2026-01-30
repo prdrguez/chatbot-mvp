@@ -1,0 +1,135 @@
+/* Global Styles & Reset */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+html,
+body,
+[class*="css"] {
+    font-family: 'Inter', sans-serif;
+    color: #e0e0e0;
+}
+
+/* Streamlit Main Container Adjustment */
+.stApp {
+    background-color: #0e1117;
+}
+
+/* Sidebar Styling */
+[data-testid="stSidebar"] {
+    background-color: #161b22;
+    border-right: 1px solid #30363d;
+}
+
+[data-testid="stSidebar"] .stMarkdown h1,
+[data-testid="stSidebar"] .stMarkdown h2,
+[data-testid="stSidebar"] .stMarkdown h3 {
+    color: #4facfe;
+}
+
+/* Headings */
+h1,
+h2,
+h3 {
+    color: #ffffff;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+h1 {
+    background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1.5rem;
+}
+
+/* Botones & Inputs */
+.stButton button {
+    background: linear-gradient(90deg, #2e3a59 0%, #212836 100%);
+    color: white;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.stButton button:hover {
+    border-color: #4facfe;
+    box-shadow: 0 0 10px rgba(79, 172, 254, 0.3);
+    transform: translateY(-1px);
+}
+
+.stButton button[kind="primary"] {
+    background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+    border: none;
+    color: #000;
+}
+
+.stTextInput input,
+.stTextArea textarea {
+    background-color: #0d1117;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    border-radius: 6px;
+}
+
+.stTextInput input:focus,
+.stTextArea textarea:focus {
+    border-color: #4facfe;
+    box-shadow: 0 0 0 1px #4facfe;
+}
+
+/* Chat Message Bubbles */
+[data-testid="stChatMessage"] {
+    background-color: transparent;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+[data-testid="stChatMessage"][data-testid="user"] {
+    background-color: #1f242d;
+    /* Slightly lighter for user */
+    border: 1px solid #30363d;
+}
+
+[data-testid="stChatMessage"]:has([data-testid="stMarkdownContainer"] p:contains("Assistant")) {
+    background-color: #1a1e26;
+}
+
+/* Cards / Metrics */
+[data-testid="stMetric"] {
+    background-color: #161b22;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+[data-testid="stMetricLabel"] {
+    color: #8b949e;
+    font-size: 0.9rem;
+}
+
+[data-testid="stMetricValue"] {
+    color: #4facfe;
+    font-weight: 700;
+}
+
+/* Divider */
+hr {
+    border-color: #30363d;
+    margin: 2rem 0;
+}
+
+/* Custom Classes */
+.card-container {
+    background-color: #161b22;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+    margin-bottom: 1rem;
+}
+
+.highlight-text {
+    color: #4facfe;
+    font-weight: bold;
+}

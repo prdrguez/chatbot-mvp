@@ -54,8 +54,22 @@ def get_runtime_ai_provider() -> str:
     """
     Get the AI provider for runtime usage.
 
-    Prioritizes persisted app settings when available, otherwise falls back to env.
+    Prioritizes Streamlit Session State -> App Settings Store -> Env.
     """
+    # Check Streamlit Session State (Hot switch)
+    try:
+        import streamlit as st
+        # Verify we are running in streamlit context
+        if hasattr(st, "session_state") and "ai_provider" in st.session_state:
+            override = st.session_state["ai_provider"]
+            if override in _VALID_AI_PROVIDERS:
+                return override
+    except ImportError:
+       pass
+    except Exception:
+        # e.g. run outside of streamlit context
+        pass
+        
     try:
         from chatbot_mvp.services.app_settings_store import get_provider_override
     except Exception:

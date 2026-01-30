@@ -1,20 +1,21 @@
 # AGENTS.md
 
-Instrucciones persistentes para este repo (Reflex + Python). Seguir estas reglas en todas las tareas futuras.
+Instrucciones persistentes para este repo (Streamlit + Python). Seguir estas reglas en todas las tareas futuras.
 
 ## Alcance y stack
-- Mantener el stack actual: **Python + Reflex**.
-- No introducir frameworks nuevos.
-- Default AI: **Gemini**.
-- No arreglar OpenAI salvo que una tarea lo pida explícitamente.
+- Mantener el stack actual: **Python + Streamlit**.
+- No reintroducir Reflex salvo pedido explícito.
+- Default AI: **Gemini** (vía `google-genai`).
+- Streaming enabled por defecto en Chat.
 
 ## Estilo de cambios
 - Cambios pequeños y diffs acotados.
 - Nombres claros y consistentes.
+- Mantener UI "Premium" (Dark mode friendly, `style.css`).
 
 ## Verificación
-- Correr la app con `reflex run`.
-- Chequear rutas: `/chat`, `/evaluacion`, `/admin`.
+- Correr la app con `streamlit run streamlit_app/app.py`.
+- Chequear rutas: Home, Evaluación, Chat.
 
 ## Commits
 - Si hacés commits: mensajes **MUY cortos** (1 línea).
@@ -33,4 +34,4 @@ Instrucciones persistentes para este repo (Reflex + Python). Seguir estas reglas
 
 ## Output al finalizar
 - Listar archivos tocados.
-- Indicar cómo verificar.
+- Indicar cómo verificar (comandos de Streamlit).

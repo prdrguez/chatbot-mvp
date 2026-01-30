@@ -246,6 +246,60 @@ class GeminiChatClient:
         except Exception as exc:
             logger.error(f"Error generating Gemini response: {exc}")
             raise AIClientError(f"Error al generar respuesta: {exc}")
+
+    def generate_chat_response_stream(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None,
+        max_tokens: int = 150,
+        temperature: float = 0.7
+    ) -> Iterator[str]:
+        """
+        Generate streaming chat response using Gemini API.
+        
+        Args:
+            message: Current user message
+            conversation_history: Previous messages for context
+            user_context: Optional user metadata
+            max_tokens: Response length limit
+            temperature: Response creativity
+            
+        Yields:
+            Chunks of generated response text
+        """
+        if not self._initialized:
+            raise AIClientError("Cliente Gemini no inicializado")
+            
+        try:
+            prompt = self._build_chat_prompt(
+                message, conversation_history, user_context
+            )
+            
+            # Note: Streaming doesn't use the simple cache/retry wrapper 
+            # effectively without buffering, so we call client directly but 
+            # should respect rate limits.
+            
+            with _GEMINI_LOCK:
+                _respect_min_interval()
+                
+            stream = self.client.models.generate_content_stream(
+                model=self.model,
+                contents=prompt,
+                config={
+                    'max_output_tokens': max_tokens,
+                    'temperature': temperature,
+                }
+            )
+            
+            for chunk in stream:
+                if chunk.text:
+                    yield chunk.text
+                    
+        except Exception as exc:
+            logger.error(f"Error generating Gemini stream: {exc}")
+            # Map common errors to user friendly messages if possible
+            yield f"Error al generar respuesta: {str(exc)}"
     
     def _build_chat_prompt(
         self, 
@@ -455,7 +509,7 @@ class GeminiChatClient:
         
         try:
             prompt = self._build_evaluation_prompt(answers)
-            return self._generate_text(prompt, max_tokens=300, temperature=0.4)
+            return self._generate_text(prompt, max_tokens=800, temperature=0.7)
         except Exception as exc:
             logger.error(f"Error generating Gemini evaluation: {exc}")
             raise AIClientError(f"Error al generar evaluación: {exc}")
@@ -472,7 +526,7 @@ class GeminiChatClient:
         """
         lines = [
             "Eres un evaluador experto en ética e inteligencia artificial. "
-            "Da una evaluación personalizada, breve y útil en español basada en las siguientes respuestas a un cuestionario de ética.",
+            "Da una evaluación personalizada, completa y útil en español basada en las siguientes respuestas a un cuestionario de ética.",
             "\nRespuestas del usuario:"
         ]
         
@@ -483,9 +537,9 @@ class GeminiChatClient:
                 lines.append(f"- {key}: {val_str}")
         
         lines.append(
-            "\nPor favor entrega 6-10 líneas con un tono profesional, claro y accionable. "
+            "\nPor favor entrega un análisis detallado (aprox 150-200 palabras) con un tono profesional, claro y accionable. "
             "Enfócate en consejos prácticos basados en sus respuestas específicas. "
-            "No uses formato markdown excesivo, prefiere texto plano."
+            "Usa parrafos claros."
         )
         return "\n".join(lines)
 
@@ -504,7 +558,7 @@ class GeminiChatClient:
         
         try:
             prompt = build_evaluation_feedback_prompt(evaluation)
-            return self._generate_text(prompt, max_tokens=250, temperature=0.5)
+            return self._generate_text(prompt, max_tokens=800, temperature=0.7)
         except Exception as exc:
             logger.error(f"Error generating Gemini evaluation feedback: {exc}")
             raise AIClientError(f"Error al generar evaluación: {exc}")

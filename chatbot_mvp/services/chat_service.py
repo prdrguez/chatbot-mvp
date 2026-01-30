@@ -10,7 +10,7 @@ This module separates chat logic from UI state, implementing:
 
 import time
 import logging
-from typing import Dict, List, Optional, Protocol
+from typing import Dict, List, Optional, Protocol, Iterator, Union
 from abc import ABC, abstractmethod
 
 from chatbot_mvp.config.settings import get_runtime_ai_provider
@@ -33,6 +33,15 @@ class ResponseStrategy(Protocol):
         """Generate a response for given message."""
         ...
 
+    def generate_response_stream(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> Iterator[str]:
+        """Generate a streaming response for given message."""
+        ...
+
 
 class BaseResponseStrategy(ABC):
     """Base class for response strategies."""
@@ -47,6 +56,16 @@ class BaseResponseStrategy(ABC):
         """Generate a response for given message."""
         pass
 
+    def generate_response_stream(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> Iterator[str]:
+        """Generate a streaming response for given message. Default implementation acts as mock stream."""
+        response = self.generate_response(message, conversation_history, user_context)
+        yield response
+
 
 class DemoResponseStrategy(BaseResponseStrategy):
     """Demo mode response strategy with hardcoded replies."""
@@ -58,6 +77,23 @@ class DemoResponseStrategy(BaseResponseStrategy):
         user_context: Optional[Dict] = None
     ) -> str:
         """Generate demo response based on message content."""
+        return self._get_demo_response(message)
+        
+    def generate_response_stream(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> Iterator[str]:
+        """Generate demo response stream."""
+        response = self._get_demo_response(message)
+        # Simulate typing effect
+        for word in response.split(" "):
+            yield word + " "
+            time.sleep(0.05)
+
+    def _get_demo_response(self, message: str) -> str:
+        """Internal helper for demo responses."""
         lower = message.lower()
         
         if "hola" in lower or "buenas" in lower:
@@ -137,6 +173,44 @@ class AIResponseStrategy(BaseResponseStrategy):
                 return str(exc)
             return "Lo siento, tuve un problema para responder. ¿Podrías reformular tu pregunta?"
 
+    def generate_response_stream(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> Iterator[str]:
+        """
+        Generate AI streaming response for given message.
+        """
+        try:
+            if hasattr(self.ai_client, "generate_chat_response_stream"):
+                stream = self.ai_client.generate_chat_response_stream(
+                    message=message,
+                    conversation_history=conversation_history,
+                    user_context=user_context,
+                    max_tokens=250,
+                    temperature=0.7
+                )
+                for chunk in stream:
+                    yield chunk
+            else:
+                # Fallback for clients without stream support
+                response = self.ai_client.generate_chat_response(
+                    message=message,
+                    conversation_history=conversation_history,
+                    user_context=user_context,
+                )
+                yield response
+            
+            self.last_response_time = time.time()
+            
+        except Exception as exc:
+            logger.warning(f"AI stream response failed: {exc}")
+            if isinstance(exc, AIClientError) and str(exc):
+                yield str(exc)
+            else:
+                yield "Lo siento, tuve un problema para responder. ¿Podrías reformular tu pregunta?"
+
 
 class MessageProcessor:
     """Processes chat messages and manages conversation flow."""
@@ -162,6 +236,20 @@ class MessageProcessor:
         )
         
         return response
+
+    def process_message_stream(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> Iterator[str]:
+        """Process a message and return streaming response."""
+        # Generating response stream
+        return self.strategy.generate_response_stream(
+             message, 
+             conversation_history, 
+             user_context
+        )
     
     def change_strategy(self, strategy: BaseResponseStrategy):
         """Change response strategy."""
@@ -281,6 +369,25 @@ class ChatService:
         )
         
         return response
+
+    def send_message_stream(
+        self, 
+        message: str, 
+        conversation_history: List[Dict[str, str]],
+        user_context: Optional[Dict] = None
+    ) -> Iterator[str]:
+        """
+        Send a message and get streaming response.
+        """
+        # Update conversation context
+        self._update_context(conversation_history, user_context)
+        
+        # Process message
+        return self.processor.process_message_stream(
+            message, 
+            conversation_history, 
+            user_context
+        )
     
     def _update_context(
         self, 

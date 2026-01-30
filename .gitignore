@@ -18,3 +18,4 @@ exports/
 # Assets auto
 assets/external/
 .vscode/
+.venv_st/

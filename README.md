@@ -1,101 +1,50 @@
-# Chatbot MVP (Reflex)
+# Chatbot MVP (Streamlit Edition)
 
-Este repositorio contiene un MVP de una app web en Reflex para una experiencia
-educativa con evaluacion, chat y panel de admin.
-El objetivo es validar flujo completo: onboarding simple, evaluacion guiada,
-registro de respuestas y visualizacion basica de KPIs.
-El MVP tambien incluye un modo demo para mostrar UI extra (Admin y UI Gallery).
-No hay integraciones externas obligatorias; los datos se guardan localmente.
-Esta documentacion apunta a desarrollo y mantenimiento del estado actual.
+Este repositorio contiene un MVP de una app web en **Streamlit** para una experiencia educativa con evaluación, chat inteligente y panel de admin.
 
-## Correr local
+**Stack**: Python 3.10+, Streamlit, Google Gemini (GenAI SDK).
 
-1) Crear y activar entorno virtual
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+## Funcionalidades
+- **Evaluación**: Cuestionario interactivo con feedback generado por IA.
+- **Chat**: Asistente virtual con respuestas en **Streaming** sobre ética en IA.
+- **Diseño Premium**: Interfaz moderna con modo oscuro y estilos personalizados.
 
-2) Instalar dependencias
-```bash
-pip install -r requirements.txt
-```
+## Instalación y Ejecución
 
-3) (Opcional) Variables de entorno
-```bash
-cp .env.example .env
-# DEMO_MODE=1 para demo, DEMO_MODE=0 para ocultar /ui y el link a /admin
+1. **Crear entorno virtual**:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
 
-# Configuración de AI
-export GEMINI_API_KEY="tu_clave_aqui"  # Requerido para chat y evaluaciones reales
-export AI_PROVIDER="gemini"            # "gemini" (default), "openai" o "demo"
+2. **Instalar dependencias**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Credenciales
-# ADMIN_PASSWORD por defecto es "123"
-```
+3. **Configurar Variables de Entorno**:
+   ```bash
+   cp .env.example .env
+   # Editar .env con tus claves (GEMINI_API_KEY, etc.)
+   ```
 
-4) Ejecutar
-```bash
-reflex run
-```
+4. **Ejecutar App**:
+   ```bash
+   streamlit run streamlit_app/app.py
+   ```
 
-5) Abrir en el navegador
-- Frontend: http://localhost:3000 (verificar en consola)
-- Backend API: http://localhost:8000 (verificar en consola)
-
-## Rutas principales
-
-- `/` inicio con links a evaluacion y chat.
-- `/evaluacion` juego etico con preguntas y resultado final.
-- `/chat` chat de demo con respuestas predefinidas.
-- `/admin` panel de KPIs, theme editor y export (visible en demo).
-- `/ui` catalogo de componentes (solo demo).
-
-## Modo demo
-
-El demo se activa con `DEMO_MODE=1` (por defecto si no se define).
-Habilita:
-- Link y acceso a `/ui` (UI Gallery).
-- Link visible a `/admin` en el header.
-- Mensajes de demo en el chat.
-
-Definicion: `chatbot_mvp/config/settings.py -> is_demo_mode()`.
-
-## Estructura de carpetas (resumen)
+## Estructura
 
 ```
 .
-├── chatbot_mvp/
-│   ├── chatbot_mvp.py
-│   ├── components/
-│   ├── pages/
-│   ├── state/
-│   ├── services/
-│   ├── ui/
-│   └── data/
-├── assets/
-├── data/
-├── exports/
-├── requirements.txt
-├── rxconfig.py
-└── .env.example
+├── streamlit_app/         # Aplicación Streamlit
+│   ├── app.py             # Entry point
+│   ├── pages/             # Páginas (Evaluación, Chat, Admin)
+│   └── assets/            # Recursos estáticos (CSS, Imágenes)
+├── chatbot_mvp/           # Lógica de Negocio (Backend)
+│   ├── core/              # Config y Utiles
+│   ├── data/              # Definición de preguntas
+│   └── services/          # Clientes IA (Gemini Streaming)
+├── data/                  # Almacenamiento local (submissions.jsonl)
+└── requirements.txt
 ```
-
-## Troubleshooting
-
-- `reflex: command not found`:
-  instala dependencias y usa `python3 -m reflex run` si el binario no esta en PATH.
-- `Address already in use` en puertos 3000/8000:
-  cerrar el proceso previo o cambiar puertos (ver salida de `reflex run`).
-- Error por usar Vars en `if`:
-  en Reflex no hagas `if state_var:`; usa `rx.cond(...)`.
-- Props invalidas en grid (`columns=["1","2"]`):
-  usar `columns="2"` o `columns=rx.breakpoints(...)`.
-- Charts que colapsan en alto:
-  usar `recharts.responsive_container` con `height` fijo.
-
-## Documentacion adicional
-
-- Estado del proyecto: `docs/STATUS.md`
-- Notas de desarrollo: `docs/DEV_NOTES.md`
-- Changelog reciente: `docs/CHANGELOG_RECENT.md`
