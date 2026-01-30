@@ -9,6 +9,15 @@ Este repositorio contiene un MVP de una app web en **Streamlit** para una experi
 - **Chat**: Asistente virtual con respuestas en **Streaming** sobre ética en IA.
 - **Diseño Premium**: Interfaz moderna con modo oscuro y estilos personalizados.
 
+## Quickstart (local)
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+streamlit run streamlit_app/Inicio.py
+```
+
 ## Instalación y Ejecución
 
 1. **Crear entorno virtual**:
@@ -30,21 +39,25 @@ Este repositorio contiene un MVP de una app web en **Streamlit** para una experi
 
 4. **Ejecutar App**:
    ```bash
-   streamlit run streamlit_app/app.py
+   streamlit run streamlit_app/Inicio.py
    ```
+
+Notas:
+- `AI_PROVIDER` por defecto es `gemini` (requiere `GEMINI_API_KEY` o `GOOGLE_API_KEY`).
+- Admin usa `ADMIN_PASSWORD` (en demo, default `123`).
 
 ## Estructura
 
 ```
 .
-├── streamlit_app/         # Aplicación Streamlit
-│   ├── app.py             # Entry point
-│   ├── pages/             # Páginas (Evaluación, Chat, Admin)
-│   └── assets/            # Recursos estáticos (CSS, Imágenes)
-├── chatbot_mvp/           # Lógica de Negocio (Backend)
-│   ├── core/              # Config y Utiles
-│   ├── data/              # Definición de preguntas
-│   └── services/          # Clientes IA (Gemini Streaming)
-├── data/                  # Almacenamiento local (submissions.jsonl)
-└── requirements.txt
+|-- streamlit_app/          # Aplicacion Streamlit
+|   |-- Inicio.py           # Entry point (Home)
+|   |-- pages/              # Paginas (Evaluacion, Chat, Admin)
+|   `-- assets/             # Recursos estaticos (CSS, imagenes)
+|-- chatbot_mvp/            # Logica de negocio
+|   |-- config/
+|   |-- data/               # Preguntas y settings locales
+|   `-- services/           # Servicios IA y persistencia
+|-- data/                   # submissions.jsonl (runtime)
+`-- requirements.txt
 ```

@@ -1,13 +1,22 @@
 # Dev Notes
 
-## Convenciones y estilo
+Nota: este repo corre en Streamlit. Las secciones marcadas como "Legacy (Reflex)"
+son solo referencia historica y no aplican al runtime actual.
+
+## Streamlit (actual)
+
+- UI en `streamlit_app/` (Inicio + pages).
+- Logica en `chatbot_mvp/services` y `chatbot_mvp/data`.
+- Estilos globales en `streamlit_app/assets/style.css`.
+
+## Legacy (Reflex) - Convenciones y estilo
 
 - Evitar logica en componentes; delegar a `state/` y `services/`.
 - Reutilizar tokens en `chatbot_mvp/ui/tokens.py` y `ui/evaluacion_tokens.py`.
 - `components/layout.py` aplica overrides globales via `ThemeState`.
 - Preferir `rx.cond` para render condicional con `rx.Var`.
 
-## Reflex Vars: como evitar errores tipicos
+## Legacy (Reflex) - Reflex Vars: como evitar errores tipicos
 
 - Mal:
   ```python
@@ -21,7 +30,7 @@
 
 Reflex no permite evaluar `rx.Var` en un `if` de Python porque no es un bool real.
 
-## Como agregar un KPI nuevo (guia corta)
+## Legacy (Reflex) - Como agregar un KPI nuevo (guia corta)
 
 1) Contar el dato en `services/submissions_store.summarize`.
    - Agrega el bucket en `breakdowns` o una seccion nueva en `summary`.
