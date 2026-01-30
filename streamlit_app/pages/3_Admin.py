@@ -107,7 +107,7 @@ if check_password():
                      df_gen = df["demo_gender"].value_counts().reset_index()
                      df_gen.columns = ["Género", "Cantidad"]
                      fig = px.bar(df_gen, x="Género", y="Cantidad", title="Género", color="Cantidad")
-                     st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                     st.plotly_chart(get_chart_config(fig), width="stretch")
             
             with r1c2:
                 if "demo_age" in df.columns:
@@ -115,7 +115,7 @@ if check_password():
                      df_age.columns = ["Edad", "Cantidad"]
                      # Sort ranges if possible, usually lexicographical sort works ok for "18-25" etc
                      fig = px.bar(df_age, x="Edad", y="Cantidad", title="Rango Etario", color="Cantidad")
-                     st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                     st.plotly_chart(get_chart_config(fig), width="stretch")
 
             # --- ROW 2: CONTEXT (Education, Occupation, Area) ---
             st.subheader("Perfil Profesional y Educativo")
@@ -190,7 +190,7 @@ if check_password():
                         df_em.columns = ["Emoción", "Frecuencia"]
                         df_em = df_em.sort_values(by="Frecuencia", ascending=True)
                         fig = px.bar(df_em, x="Frecuencia", y="Emoción", orientation='h', title="Emociones Generadas", color="Frecuencia")
-                        st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                        st.plotly_chart(get_chart_config(fig), width="stretch")
 
             with r4c2:
                 if "eval_reflect" in df.columns:
@@ -230,7 +230,7 @@ if check_password():
                      cols.insert(0, cols.pop(cols.index(p)))
              
              df_final = df_dump[cols]
-             st.dataframe(df_final, use_container_width=True)
+             st.dataframe(df_final, width="stretch")
              
              # Timestamped filename
              timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

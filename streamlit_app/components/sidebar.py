@@ -9,7 +9,7 @@ def sidebar_branding():
     with st.sidebar:
         # Logo at the top (if available)
         try:
-            st.image("streamlit_app/assets/logo.png", use_container_width=True)
+            st.image("streamlit_app/assets/logo.png", width="stretch")
         except:
             st.title("Jano")
 
@@ -41,14 +41,14 @@ def sidebar_demo_badge():
             <div style="
                 background-color: #f63366; 
                 color: white; 
-                padding: 4px 10px; 
-                border-radius: 4px; 
+                padding: 2px 8px; 
+                border-radius: 3px; 
                 text-align: center; 
                 font-weight: bold; 
-                margin-bottom: 20px;
-                font-size: 0.8rem;
+                margin-bottom: 16px;
+                font-size: 0.65rem;
                 text-transform: uppercase;
-                letter-spacing: 1px;
+                letter-spacing: 0.5px;
             ">
                 MODO DEMO
             </div>

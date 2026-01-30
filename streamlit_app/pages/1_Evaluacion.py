@@ -171,7 +171,16 @@ def show_results():
     
     st.subheader("Análisis de IA")
     if "ai_feedback" in res:
-        st.info(res["ai_feedback"])
+        # Simulate typing effect
+        import time
+        def typing_effect(text, delay=0.001):
+            """Generator that yields text character by character for typing effect."""
+            for char in text:
+                yield char
+                # Optional: delay can be 0 for instant or increased for slower typing
+                # time.sleep(delay) # Removed to avoid blocking
+        
+        st.write_stream(typing_effect(res["ai_feedback"]))
     
     if st.button("Volver al inicio"):
         # Reset state

@@ -28,7 +28,7 @@ with st.sidebar:
         st.caption("No hay chats previos.")
     else:
         for idx, session in enumerate(st.session_state.chat_history_sessions):
-            st.button(f"Chat {idx+1}", key=f"hist_{idx}", use_container_width=True)
+            st.button(f"Chat {idx+1}", key=f"hist_{idx}", width="stretch")
 
 st.title("Conversa con la IA")
 st.markdown("Pregunta sobre ética, sesgos o los resultados de tu evaluación.")
@@ -91,7 +91,7 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
 with st.sidebar:
     st.divider()
     # Standard Chat Actions
-    if st.button("Nuevo Chat", use_container_width=True, type="primary"):
+    if st.button("Nuevo Chat", width="stretch", type="primary"):
         # Save current session to history if not empty
         if len(st.session_state.messages) > 1:
             st.session_state.chat_history_sessions.append(st.session_state.messages)
