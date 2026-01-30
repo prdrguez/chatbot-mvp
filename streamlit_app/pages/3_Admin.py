@@ -127,21 +127,21 @@ if check_password():
                     df_edu = df["context_education"].value_counts().reset_index()
                     df_edu.columns = ["Nivel Educativo", "Cantidad"]
                     fig = px.pie(df_edu, values="Cantidad", names="Nivel Educativo", title="Nivel Educativo", hole=0.4)
-                    st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                    st.plotly_chart(get_chart_config(fig), width="stretch")
 
             with r2c2:
                 if "context_role" in df.columns:
                     df_occ = df["context_role"].value_counts().reset_index()
                     df_occ.columns = ["Ocupación", "Cantidad"]
                     fig = px.bar(df_occ, x="Ocupación", y="Cantidad", title="Ocupación Actual", color="Cantidad")
-                    st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                    st.plotly_chart(get_chart_config(fig), width="stretch")
 
             with r2c3:
                 if "context_area" in df.columns:
                     df_area = df["context_area"].value_counts().reset_index()
                     df_area.columns = ["Área", "Cantidad"]
                     fig = px.bar(df_area, x="Cantidad", y="Área", orientation='h', title="Área de Formación/Trabajo")
-                    st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                    st.plotly_chart(get_chart_config(fig), width="stretch")
 
             # --- ROW 3: LOCATION & USAGE ---
             st.subheader("Geografía y Uso de IA")
@@ -153,14 +153,14 @@ if check_password():
                     top_cities = df["context_city"].str.title().value_counts().nlargest(10).reset_index()
                     top_cities.columns = ["Ciudad", "Cantidad"]
                     fig = px.bar(top_cities, x="Ciudad", y="Cantidad", title="Top Ciudades", color="Cantidad")
-                    st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                    st.plotly_chart(get_chart_config(fig), width="stretch")
 
             with r3c2:
                 if "context_frequency" in df.columns:
                     df_freq = df["context_frequency"].value_counts().reset_index()
                     df_freq.columns = ["Frecuencia", "Cantidad"]
                     fig = px.bar(df_freq, x="Frecuencia", y="Cantidad", title="Uso de Herramientas IA", color="Cantidad")
-                    st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                    st.plotly_chart(get_chart_config(fig), width="stretch")
 
 
             # --- ROW 4: EMOTIONS & FAIRNESS ---
@@ -198,7 +198,7 @@ if check_password():
                     df_fair = df["eval_reflect"].value_counts().reset_index()
                     df_fair.columns = ["Respuesta", "Cantidad"]
                     fig = px.pie(df_fair, values="Cantidad", names="Respuesta", title="¿Consideras que la IA puede ser justa?", hole=0.6)
-                    st.plotly_chart(get_chart_config(fig), use_container_width=True)
+                    st.plotly_chart(get_chart_config(fig), width="stretch")
 
     # --- TAB DATA ---
     with tab_data:

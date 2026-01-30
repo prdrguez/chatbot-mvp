@@ -1,6 +1,5 @@
 import streamlit as st
 import sys
-import time
 from pathlib import Path
 
 # Add project root
@@ -15,19 +14,6 @@ from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 st.set_page_config(page_title="Asistente IA - Chat", page_icon="💬")
 
 load_custom_css()
-sidebar_branding()
-
-# Sidebar History
-with st.sidebar:
-    st.markdown("### Historial")
-    if "chat_history_sessions" not in st.session_state:
-        st.session_state.chat_history_sessions = []
-    
-    if not st.session_state.chat_history_sessions:
-        st.caption("No hay chats previos.")
-    else:
-        for idx, session in enumerate(st.session_state.chat_history_sessions):
-            st.button(f"Chat {idx+1}", key=f"hist_{idx}", width="stretch")
 
 st.title("Conversa con la IA")
 st.markdown("Pregunta sobre ética, sesgos o los resultados de tu evaluación.")
@@ -85,17 +71,17 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
         except Exception as e:
             st.error(f"Error en el servicio de chat: {e}")
 
-# Sidebar info
-# Sidebar info
+# Sidebar - must be AFTER main content to ensure branding is at bottom
 with st.sidebar:
     st.divider()
-    # Standard Chat Actions
-    if st.button("Nuevo Chat", width="stretch", type="primary"):
-        # Save current session to history if not empty
-        if len(st.session_state.messages) > 1:
-            st.session_state.chat_history_sessions.append(st.session_state.messages)
-        
-        st.session_state.messages = [
-            {"role": "assistant", "content": "¡Hola! Soy tu asistente de ética en IA. ¿En qué puedo ayudarte hoy?"}
-        ]
-        st.rerun()
+    # Compact "Nuevo Chat" button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🔄 Nuevo", use_container_key="reset_chat"):
+            st.session_state.messages = [
+                {"role": "assistant", "content": "¡Hola! Soy tu asistente de ética en IA. ¿En qué puedo ayudarte hoy?"}
+            ]
+            st.rerun()
+
+# Sidebar branding at the end (bottom)
+sidebar_branding()
