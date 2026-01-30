@@ -16,7 +16,7 @@
 - Navegacion multipage Streamlit implementada (Inicio, Evaluacion, Chat, Admin).
 - Cuestionario usa `chatbot_mvp.data.juego_etico` y guarda resultados via `submissions_store`.
 - Chat usa streaming con Gemini o Groq si hay API keys; el provider se elige en Admin.
-- Chat renderiza burbujas con usuario a la derecha y asistente a la izquierda.
+- Chat renderiza mensajes con flex left/right sin burbujas (usuario a la derecha).
 - Admin autentica con password y muestra KPIs desde `data/submissions.jsonl`.
 - Estilos cargan desde `streamlit_app/assets/style.css`.
 
@@ -32,7 +32,7 @@
 - Variables de entorno:
   - `AI_PROVIDER` (gemini|groq|openai|demo).
   - `GEMINI_API_KEY` o `GOOGLE_API_KEY` (si gemini).
-  - `GEMINI_MAX_OUTPUT_TOKENS` (default: 260).
+  - `GEMINI_MAX_OUTPUT_TOKENS` (default: 280).
   - `GROQ_API_KEY` (si groq).
   - `GROQ_MODEL` (default: `openai/gpt-oss-20b`).
   - `OPENAI_API_KEY` (si openai).
@@ -49,6 +49,7 @@
   - Si el proveedor no cambia, borrar `chatbot_mvp/data/app_settings.json` o usar el selector en Admin.
   - Si aparece "cannot import name genai from google", desinstalar el paquete `google` y reinstalar `google-genai`.
   - Si falta `openai`, instalar el SDK con `pip install openai`.
+  - Admin muestra toast y caption al cambiar provider.
 
 ## Arquitectura actual
 - Estructura (alto nivel):

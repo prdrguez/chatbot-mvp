@@ -157,8 +157,8 @@ def get_gemini_api_key() -> str:
 
 
 def get_gemini_max_output_tokens() -> int:
-    value = _get_env_int("GEMINI_MAX_OUTPUT_TOKENS", 260)
-    return value if value > 0 else 260
+    value = _get_env_int("GEMINI_MAX_OUTPUT_TOKENS", 280)
+    return value if value > 0 else 280
 
 
 def get_gemini_temperature() -> float:
@@ -301,17 +301,17 @@ class GeminiChatClient:
                     'temperature': get_gemini_temperature(),
                 }
             )
-            
+
+            full_text = ""
+            chunk_count = 0
             for chunk in stream:
-                if chunk.text:
-                    # Split into words for smoother typing effect
-                    words = chunk.text.split(' ')
-                    for i, word in enumerate(words):
-                        if i < len(words) - 1:
-                            yield word + ' '
-                        else:
-                            yield word
-                        time.sleep(0.02) # Small delay for natural feel
+                chunk_text = self._extract_stream_text(chunk)
+                if not chunk_text:
+                    continue
+                chunk_count += 1
+                full_text += chunk_text
+                yield chunk_text
+            logger.debug("Gemini stream chunks: %s", chunk_count)
                     
         except Exception as exc:
             logger.error(f"Error generating Gemini stream: {exc}")
@@ -350,6 +350,24 @@ class GeminiChatClient:
         prompt_parts.append("\nAsistente:")
         
         return "\n".join(prompt_parts)
+
+    def _extract_stream_text(self, chunk: Any) -> str:
+        if chunk is None:
+            return ""
+        text = getattr(chunk, "text", None)
+        if isinstance(text, str) and text:
+            return text
+        candidates = getattr(chunk, "candidates", None)
+        if candidates:
+            for cand in candidates:
+                content = getattr(cand, "content", None)
+                parts = getattr(content, "parts", None) if content else None
+                if parts:
+                    for part in parts:
+                        part_text = getattr(part, "text", None)
+                        if isinstance(part_text, str) and part_text:
+                            return part_text
+        return ""
     
     def _build_system_prompt(self, user_context: Optional[Dict] = None) -> str:
         """
