@@ -1,16 +1,16 @@
 # STATUS REPORT — Reflex → Streamlit
 
-## Resumen ejecutivo (10 líneas)
+## Resumen ejecutivo (10 lineas)
 - Repo activo en Streamlit con multipage en `streamlit_app/` (Inicio, Evaluacion, Chat, Admin).
-- Entry point real es `streamlit_app/Inicio.py`; README ya esta alineado a ese comando.
-- Lógica de negocio vive en `chatbot_mvp/` (config, services, data).
+- Entry point real es `streamlit_app/Inicio.py`; README y AGENTS.md ya estan alineados.
+- Fuente de verdad: `docs/STATUS_REPORT.md` (STATUS duplicados removidos).
+- Logica de negocio vive en `chatbot_mvp/` (config, services, data).
 - Chat usa `ChatService` con streaming; proveedores: gemini/groq/openai (segun env).
 - Evaluacion es local con scoring y feedback estatico; persiste en `data/submissions.jsonl`.
 - Admin lee submissions y genera dashboards con pandas/plotly; requiere `ADMIN_PASSWORD`.
-- Tests existen (pytest) pero fallan en coleccion por `chatbot_mvp.state` inexistente.
+- Tests corren: 6 passed, 1 skipped (legacy Reflex).
 - No se encontraron scripts de build ni CI configurada.
 - Quedan restos de Reflex: `chatbot_mvp/components`, `.states/`, docs/DEV_NOTES.
-- Documentacion principal alineada; queda ajustar AGENTS.md y limpiar legacy Reflex.
 
 ## Qué funciona hoy
 - Navegacion multipage Streamlit implementada (Inicio, Evaluacion, Chat, Admin).
@@ -19,12 +19,10 @@
 - Admin autentica con password y muestra KPIs desde `data/submissions.jsonl`.
 - Estilos cargan desde `streamlit_app/assets/style.css`.
 
-## Qué NO funciona hoy
-- AGENTS.md aun menciona `streamlit run streamlit_app/app.py` (archivo inexistente).
-- Tests fallan por `ModuleNotFoundError: chatbot_mvp.state` (resto de Reflex).
-- Componentes Reflex importan modulos inexistentes (`chatbot_mvp.state`, `chatbot_mvp.ui`).
-- Modulos sin uso detectados: `chatbot_mvp/services/chat_persistence.py`, `chatbot_mvp/data/questions.py`.
+## Que NO funciona hoy
+- Componentes Reflex importan modulos inexistentes (`chatbot_mvp.state`, `chatbot_mvp.ui`) y no son compatibles con Streamlit.
 - Proveedor `openai` no esta en `requirements.txt` (falla si se activa).
+- Test legacy Reflex (`tests/test_auth_state.py`) esta skippeado (sin coverage real).
 - `chatbot_mvp/data/app_settings.json` fija `groq` y puede sobreescribir `AI_PROVIDER`.
 
 ## Cómo correr local
@@ -78,15 +76,16 @@
 - Estado CI:
   - No se encontraron workflows en `.github/`.
 - Resultados locales:
-  - `python -m pytest` falla en coleccion por `ModuleNotFoundError: chatbot_mvp.state`.
-  - `python -m streamlit run streamlit_app/Inicio.py` iniciado pero detenido por timeout (no verificacion UI).
+  - `python -m pytest`: 6 passed, 1 skipped (legacy Reflex).
+  - `python -m streamlit run streamlit_app/Inicio.py --server.headless true --server.port 8510`: arranca y expone URL local.
+  - Nota: puerto 8501 estaba en uso en una prueba previa.
 
-## Migración Reflex → Streamlit
+## Migracion Reflex -> Streamlit
 - Migrado:
   - UI Streamlit en `streamlit_app/` y servicios reutilizados en `chatbot_mvp/`.
 - Pendiente:
   - Limpiar/archivar componentes Reflex y tests asociados.
-  - Alinear AGENTS.md y remover referencias Reflex obsoletas.
+  - Revisar y borrar `.states/` si ya no se usa.
 - Restos de Reflex detectados:
   - `chatbot_mvp/components/` (imports `reflex as rx`).
   - `.states/` (cache Reflex).
@@ -94,17 +93,17 @@
   - `docs/DEV_NOTES.md` (guia Reflex).
 
 ## Riesgos / bloqueos (priorizados)
-- P0: tests no ejecutan por modulo inexistente (bloquea CI si se agrega).
-- P1: `app_settings.json` fija proveedor y puede confundir el comportamiento real.
-- P2: restos de Reflex generan ruido y imports rotos si se usan por error.
+- P0: Ninguno bloqueante detectado para ejecucion local.
+- P1: Test legacy Reflex skippeado (sin cobertura).
+- P2: Restos de Reflex generan ruido y imports rotos si se usan por error.
 
 ## Backlog recomendado (P0/P1/P2 + esfuerzo S/M/L)
-- P0 (S): Arreglar tests (eliminar o migrar `test_auth_state.py`).
+- P1 (S): Resolver test legacy (eliminar o migrar `test_auth_state.py`).
 - P1 (M): Limpiar/archivar codigo Reflex (`chatbot_mvp/components`, `.states/`).
 - P2 (M): Decidir soporte OpenAI (agregar dependencia o remover provider).
 - P2 (S): Reducir duplicacion de prompts en `openai_client`, `gemini_client`, `groq_client`.
 
-## Primeros 3 próximos pasos
-1) Alinear docs y quickstart a `streamlit_app/Inicio.py` (hecho en este PR).
-2) Resolver tests rotos (quitar Reflex o recrear AuthState si se necesita).
+## Primeros 3 proximos pasos
+1) Definir destino de tests legacy (eliminar o migrar `test_auth_state.py`).
+2) Limpiar restos de Reflex (`chatbot_mvp/components`, `.states/`).
 3) Definir politica de proveedor IA y manejo de `app_settings.json`.

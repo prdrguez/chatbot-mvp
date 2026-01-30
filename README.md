@@ -18,6 +18,8 @@ cp .env.example .env
 streamlit run streamlit_app/Inicio.py
 ```
 
+Status report: `docs/STATUS_REPORT.md`.
+
 ## Instalación y Ejecución
 
 1. **Crear entorno virtual**:
