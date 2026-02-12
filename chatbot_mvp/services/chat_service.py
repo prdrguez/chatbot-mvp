@@ -10,15 +10,22 @@ This module separates chat logic from UI state, implementing:
 
 import time
 import logging
-from typing import Dict, List, Optional, Protocol, Iterator, Union
+import re
+from typing import Any, Dict, List, Optional, Protocol, Iterator
 from abc import ABC, abstractmethod
 
 from chatbot_mvp.config.settings import get_runtime_ai_provider
+from chatbot_mvp.knowledge.policy_kb import build_bm25_index, parse_policy, retrieve
 from chatbot_mvp.services.openai_client import AIClientError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_KB_EMPTY_RESPONSE = (
+    "No encuentro eso en la politica cargada. Proba con otra pregunta o revisa el texto de la KB."
+)
+_KB_EMPTY_SOURCES = "Sin evidencia recuperada"
 
 
 class ResponseStrategy(Protocol):
@@ -354,15 +361,25 @@ class ChatService:
         """
         # Update conversation context
         self._update_context(conversation_history, user_context)
-        
-        # Process message
-        response = self.processor.process_message(
-            message, 
-            conversation_history, 
-            user_context
+
+        prepared_message, sources, no_evidence_response, retrieved_chunks = self._prepare_kb_prompt(
+            message, user_context
         )
-        
-        return response
+        if no_evidence_response:
+            return no_evidence_response
+
+        if sources and isinstance(self.processor.strategy, DemoResponseStrategy):
+            return self._build_demo_kb_answer(retrieved_chunks, sources)
+
+        response = self.processor.process_message(
+            prepared_message,
+            conversation_history,
+            user_context,
+        )
+
+        if not sources:
+            return response
+        return self._append_sources(response, sources)
 
     def send_message_stream(
         self, 
@@ -375,13 +392,128 @@ class ChatService:
         """
         # Update conversation context
         self._update_context(conversation_history, user_context)
-        
-        # Process message
-        return self.processor.process_message_stream(
-            message, 
-            conversation_history, 
-            user_context
+
+        prepared_message, sources, no_evidence_response, retrieved_chunks = self._prepare_kb_prompt(
+            message, user_context
         )
+        if no_evidence_response:
+            return self._single_chunk_stream(no_evidence_response)
+
+        if sources and isinstance(self.processor.strategy, DemoResponseStrategy):
+            demo_answer = self._build_demo_kb_answer(retrieved_chunks, sources)
+            return self._single_chunk_stream(demo_answer)
+
+        stream = self.processor.process_message_stream(
+            prepared_message,
+            conversation_history,
+            user_context,
+        )
+
+        if not sources:
+            return stream
+        return self._stream_with_sources(stream, sources)
+
+    def _prepare_kb_prompt(
+        self, message: str, user_context: Optional[Dict]
+    ) -> tuple[str, list[str], Optional[str], list[Dict[str, Any]]]:
+        kb_payload = self._extract_kb_payload(user_context)
+        if not kb_payload:
+            return message, [], None, []
+
+        kb_text = kb_payload["kb_text"]
+        kb_name = kb_payload["kb_name"]
+        chunks = parse_policy(kb_text)
+        if not chunks:
+            return message, [], self._append_sources(_KB_EMPTY_RESPONSE, []), []
+
+        index = build_bm25_index(chunks)
+        retrieved_chunks = retrieve(message, index, chunks, k=4)
+        sources = self._extract_sources(retrieved_chunks)
+        if not retrieved_chunks:
+            return message, [], self._append_sources(_KB_EMPTY_RESPONSE, []), []
+
+        context_block = self._build_kb_context_block(kb_name, retrieved_chunks)
+        strict_instruction = (
+            "Instrucciones obligatorias:\n"
+            "- Responde SOLO usando la evidencia provista.\n"
+            "- Si la respuesta no aparece en la evidencia, responde exactamente: "
+            '"No encuentro eso en la politica cargada."\n'
+            "- Si te piden articulo o item, cita el articulo exacto.\n"
+        )
+        prepared_message = (
+            f"{context_block}\n\n{strict_instruction}\nPregunta del usuario: {message}"
+        )
+        return prepared_message, sources, None, retrieved_chunks
+
+    def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, str]]:
+        if not user_context:
+            return None
+        kb_text = str(user_context.get("kb_text", "")).strip()
+        if not kb_text:
+            return None
+        kb_name = str(user_context.get("kb_name", "KB cargada")).strip() or "KB cargada"
+        return {"kb_text": kb_text, "kb_name": kb_name}
+
+    def _build_kb_context_block(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> str:
+        lines = [f"Base de Conocimiento: {kb_name}", "Evidencia recuperada:"]
+        for idx, chunk in enumerate(retrieved_chunks, start=1):
+            source = chunk.get("source_label") or f"Fragmento {idx}"
+            text = str(chunk.get("text", "")).strip()
+            lines.append(f"[{idx}] Fuente: {source}")
+            lines.append(text)
+        return "\n".join(lines)
+
+    def _extract_sources(self, retrieved_chunks: List[Dict[str, Any]]) -> list[str]:
+        seen = set()
+        ordered_sources: list[str] = []
+        for chunk in retrieved_chunks:
+            source = str(chunk.get("source_label", "")).strip()
+            if not source or source in seen:
+                continue
+            seen.add(source)
+            ordered_sources.append(source)
+            if len(ordered_sources) >= 4:
+                break
+        return ordered_sources
+
+    def _append_sources(self, response: str, sources: List[str]) -> str:
+        lines = response.rstrip().splitlines()
+        if lines and lines[-1].strip().lower().startswith("fuentes:"):
+            lines = lines[:-1]
+        clean_response = "\n".join(lines).rstrip()
+        sources_text = ", ".join(sources[:4]) if sources else _KB_EMPTY_SOURCES
+        return f"{clean_response}\n\nFuentes: {sources_text}"
+
+    def _build_demo_kb_answer(
+        self, retrieved_chunks: List[Dict[str, Any]], sources: List[str]
+    ) -> str:
+        if not retrieved_chunks:
+            return self._append_sources(_KB_EMPTY_RESPONSE, [])
+        first_chunk = retrieved_chunks[0]
+        source = str(first_chunk.get("source_label", "Fragmento 1")).strip()
+        raw_text = str(first_chunk.get("text", "")).strip()
+        compact_text = re.sub(r"\s+", " ", raw_text)
+        excerpt = compact_text[:420]
+        if len(compact_text) > 420:
+            excerpt += "..."
+        response = f"Segun {source}, {excerpt}"
+        return self._append_sources(response, sources)
+
+    def _stream_with_sources(
+        self, stream: Iterator[str], sources: List[str]
+    ) -> Iterator[str]:
+        def generator() -> Iterator[str]:
+            for chunk in stream:
+                yield chunk
+            yield f"\n\nFuentes: {', '.join(sources[:4])}"
+
+        return generator()
+
+    def _single_chunk_stream(self, message: str) -> Iterator[str]:
+        def generator() -> Iterator[str]:
+            yield message
+
+        return generator()
     
     def _update_context(
         self, 

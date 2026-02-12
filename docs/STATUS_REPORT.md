@@ -6,9 +6,10 @@
 - Fuente de verdad: `docs/STATUS_REPORT.md` (STATUS duplicados removidos).
 - Logica de negocio vive en `chatbot_mvp/` (config, services, data).
 - Chat usa `ChatService` con streaming; proveedores: gemini/groq/openai (segun env).
+- Chat soporta KB de politicas/protocolos cargada desde Admin (TXT/MD) con recuperacion BM25.
 - Evaluacion es local con scoring y feedback estatico; persiste en `data/submissions.jsonl`.
 - Admin lee submissions y genera dashboards con pandas/plotly; requiere `ADMIN_PASSWORD`.
-- Tests corren: 6 passed, 1 skipped (legacy Reflex).
+- Tests corren: 7 passed, 1 skipped (legacy Reflex).
 - No se encontraron scripts de build ni CI configurada.
 - Quedan restos de Reflex: `chatbot_mvp/components`, `.states/`, docs/DEV_NOTES.
 
@@ -16,8 +17,10 @@
 - Navegacion multipage Streamlit implementada (Inicio, Evaluacion, Chat, Admin).
 - Cuestionario usa `chatbot_mvp.data.juego_etico` y guarda resultados via `submissions_store`.
 - Chat usa streaming con Gemini o Groq si hay API keys; el provider se elige en Admin.
+- Chat puede usar una KB cargada para responder con evidencia y linea final de fuentes.
 - Chat renderiza mensajes con flex left/right sin burbujas (usuario a la derecha).
 - Admin autentica con password y muestra KPIs desde `data/submissions.jsonl`.
+- Admin incluye seccion "Base de Conocimiento" para subir/limpiar politicas (`.txt`, `.md`).
 - Estilos cargan desde `streamlit_app/assets/style.css`.
 
 ## Que NO funciona hoy
@@ -38,7 +41,7 @@
   - `OPENAI_API_KEY` (si openai).
   - `ADMIN_PASSWORD`, `DEMO_MODE`.
 - Dependencias clave:
-  - `google-genai` (Gemini) y `openai` (Groq/OpenAI).
+  - `google-genai` (Gemini), `openai` (Groq/OpenAI) y `rank-bm25` (retrieval KB).
 - Datos/archivos requeridos:
   - `data/submissions.jsonl` (se crea automaticamente al guardar).
   - `chatbot_mvp/data/app_settings.json` (override de proveedor).
@@ -49,7 +52,30 @@
   - Si el proveedor no cambia, borrar `chatbot_mvp/data/app_settings.json` o usar el selector en Admin.
   - Si aparece "cannot import name genai from google", desinstalar el paquete `google` y reinstalar `google-genai`.
   - Si falta `openai`, instalar el SDK con `pip install openai`.
+  - Si la respuesta dice "No encuentro eso en la politica cargada", revisar que la KB cargada tenga ese tema textual.
+  - Si no se usa KB, verificar que Admin muestre `KB cargada: <nombre> (N caracteres)`.
   - Admin muestra toast y caption al cambiar provider.
+
+## Base de Conocimiento (KB)
+- Carga:
+  - Se carga desde `streamlit_app/pages/3_Admin.py` con `st.file_uploader`.
+  - Formatos soportados: `.txt` y `.md` (un archivo por vez).
+  - Estado guardado en `st.session_state`: `kb_text`, `kb_name`, `kb_updated_at`.
+- Parsing y chunking:
+  - Si detecta `Articulo <n>` o `ARTICULO <n>`, separa por articulo y conserva `article_id`.
+  - Si no detecta articulos, divide en fragmentos de aprox 1000 chars con overlap de 150.
+- Retrieval:
+  - Usa BM25 (`rank-bm25`) sobre chunks parseados.
+  - Recupera hasta 4 fragmentos relevantes por query.
+  - Cache: parseo con `st.cache_data`; indice BM25 con `st.cache_resource` (clave por hash de texto).
+- Integracion en chat:
+  - Con KB: inyecta bloque de contexto + instruccion estricta para responder solo con evidencia.
+  - Sin KB: mantiene comportamiento actual sin cambios.
+  - La respuesta final agrega `Fuentes: ...` con articulos/fragmentos usados.
+- Limitaciones actuales:
+  - Solo una KB activa por sesion.
+  - Solo texto plano (`.txt`/`.md`), sin parser de PDF/DOCX.
+  - Retrieval lexical (BM25), sin embeddings semanticos.
 
 ## Arquitectura actual
 - Estructura (alto nivel):
@@ -83,7 +109,7 @@
 - Estado CI:
   - No se encontraron workflows en `.github/`.
 - Resultados locales:
-  - `python -m pytest`: 6 passed, 1 skipped (legacy Reflex).
+  - `python -m pytest`: 7 passed, 1 skipped (legacy Reflex).
   - `python -m streamlit run streamlit_app/Inicio.py --server.headless true --server.port 8510`: arranca y expone URL local.
   - Nota: puerto 8510 estaba en uso y se libero antes de la prueba.
 
