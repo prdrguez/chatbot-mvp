@@ -76,6 +76,8 @@ with action_col:
 
 active_provider = get_runtime_ai_provider()
 st.caption(f"Proveedor activo: {provider_labels.get(active_provider, active_provider)}")
+if st.session_state.get("kb_text") and st.session_state.get("kb_name"):
+    st.caption(f"KB activa: {st.session_state['kb_name']}")
 
 if active_provider == "gemini":
     if not get_env_value("GEMINI_API_KEY") and not get_env_value("GOOGLE_API_KEY"):
@@ -121,12 +123,23 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
             {"role": m["role"], "content": m["content"]}
             for m in st.session_state.messages[:-1]
         ]
+        user_context = {}
+        kb_text = st.session_state.get("kb_text", "")
+        kb_name = st.session_state.get("kb_name", "")
+        if kb_text and kb_name:
+            user_context.update(
+                {
+                    "kb_text": kb_text,
+                    "kb_name": kb_name,
+                    "kb_updated_at": st.session_state.get("kb_updated_at", ""),
+                }
+            )
 
         service = st.session_state.chat_service
         stream = service.send_message_stream(
             message=prompt,
             conversation_history=history,
-            user_context={},
+            user_context=user_context,
         )
 
         response_text = ""

@@ -334,3 +334,49 @@ if check_password():
              """
              st.markdown(custom_css, unsafe_allow_html=True)
              st.toast("Estilos aplicados")
+
+        st.divider()
+        st.subheader("Base de Conocimiento")
+        st.caption("Subi una politica o protocolo en formato .txt o .md")
+
+        uploaded_kb = st.file_uploader(
+            "Archivo KB",
+            type=["txt", "md"],
+            accept_multiple_files=False,
+            key="admin_kb_uploader",
+            help="Solo se permite un archivo por vez.",
+        )
+
+        if uploaded_kb is not None:
+            raw_bytes = uploaded_kb.getvalue()
+            try:
+                uploaded_text = raw_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                uploaded_text = raw_bytes.decode("latin-1", errors="ignore")
+
+            uploaded_text = uploaded_text.strip()
+            current_kb_text = st.session_state.get("kb_text", "")
+            current_kb_name = st.session_state.get("kb_name", "")
+
+            if uploaded_text and (
+                uploaded_text != current_kb_text or uploaded_kb.name != current_kb_name
+            ):
+                st.session_state["kb_text"] = uploaded_text
+                st.session_state["kb_name"] = uploaded_kb.name
+                st.session_state["kb_updated_at"] = datetime.now().isoformat(
+                    timespec="seconds"
+                )
+                st.rerun()
+
+        kb_name = st.session_state.get("kb_name", "")
+        kb_text = st.session_state.get("kb_text", "")
+        if kb_name and kb_text:
+            st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
+            if st.button("Limpiar KB", use_container_width=False):
+                st.session_state.pop("kb_text", None)
+                st.session_state.pop("kb_name", None)
+                st.session_state.pop("kb_updated_at", None)
+                st.session_state["admin_kb_uploader"] = None
+                st.rerun()
+        else:
+            st.caption("KB cargada: ninguna.")
