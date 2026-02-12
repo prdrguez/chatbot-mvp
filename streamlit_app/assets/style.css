@@ -160,6 +160,33 @@ footer {
     visibility: hidden;
 }
 
-header {
-    visibility: hidden;
+/* Keep Streamlit header active so sidebar toggle keeps working */
+header[data-testid="stHeader"] {
+    visibility: visible !important;
+    background: transparent !important;
+    z-index: 9998 !important;
+}
+
+/* Hide toolbar chrome without killing sidebar controls */
+[data-testid="stToolbar"] {
+    display: none !important;
+}
+
+/* Guard rail: collapsed sidebar toggle must always remain visible/clickable */
+button[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"] button,
+header[data-testid="stHeader"] button[aria-label*="sidebar" i] {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    position: fixed !important;
+    top: 0.75rem !important;
+    left: 0.75rem !important;
+    z-index: 10000 !important;
+}
+
+/* Avoid accidental overlays blocking the control */
+[data-testid="stAppViewContainer"] {
+    isolation: isolate;
 }
