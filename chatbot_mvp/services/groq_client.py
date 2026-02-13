@@ -168,6 +168,21 @@ class GroqChatClient:
             if context_info:
                 base_prompt += "\n\nContexto del usuario:\n" + "\n".join(context_info)
 
+            kb_context = user_context.get("kb_context_block")
+            if kb_context:
+                if user_context.get("kb_strict"):
+                    base_prompt += (
+                        "\n\nResponde SOLO usando la evidencia provista en <context>. "
+                        "Si no esta en el contexto, di claramente que no esta en la politica cargada. "
+                        "Si preguntan por articulo o item, indica la fuente exacta."
+                    )
+                else:
+                    base_prompt += (
+                        "\n\nSi el contexto de la KB es relevante, usalo como fuente principal "
+                        "y evita contradecirlo."
+                    )
+                base_prompt += f"\n\n<context>\n{kb_context}\n</context>"
+
         return base_prompt
 
     def generate_evaluation(self, answers: Dict[str, Any]) -> str:

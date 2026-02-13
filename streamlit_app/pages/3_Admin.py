@@ -2,6 +2,7 @@ import streamlit as st
 import sys
 import pandas as pd
 import json
+import hashlib
 from datetime import datetime
 from pathlib import Path
 import plotly.express as px
@@ -61,6 +62,16 @@ def get_chart_config(fig):
     except:
         pass
     return fig
+
+
+def _decode_uploaded_kb(raw_bytes: bytes) -> str:
+    """Decode KB text with safe fallbacks."""
+    for encoding in ("utf-8", "utf-8-sig", "latin-1"):
+        try:
+            return raw_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw_bytes.decode("utf-8", errors="replace")
 
 if check_password():
     st.title("Panel de Administración")
@@ -306,9 +317,63 @@ if check_password():
              st.session_state.pop("chat_service_provider", None)
              st.session_state.provider_toast = f"Proveedor actualizado: {new_provider}"
              st.rerun()
-        
+
         st.divider()
-        
+
+        st.write("### Base de Conocimiento")
+        st.caption("Subi un archivo .txt o .md para usarlo como contexto del chat.")
+
+        if "kb_mode" not in st.session_state:
+            st.session_state.kb_mode = "general"
+
+        kb_mode_label = st.radio(
+            "Modo de respuesta",
+            ["General", "Solo KB (estricto)"],
+            index=0 if st.session_state.get("kb_mode") == "general" else 1,
+            horizontal=True,
+        )
+        selected_kb_mode = "strict" if kb_mode_label == "Solo KB (estricto)" else "general"
+        if selected_kb_mode != st.session_state.get("kb_mode"):
+            st.session_state.kb_mode = selected_kb_mode
+            st.toast(f"Modo KB actualizado: {kb_mode_label}", icon="✅")
+            st.rerun()
+
+        kb_file = st.file_uploader(
+            "Archivo de politica/protocolo",
+            type=["txt", "md"],
+            accept_multiple_files=False,
+        )
+        if kb_file is not None:
+            kb_bytes = kb_file.getvalue()
+            kb_text = _decode_uploaded_kb(kb_bytes).strip()
+            kb_signature = f"{kb_file.name}:{hashlib.sha256(kb_bytes).hexdigest()}"
+            current_signature = st.session_state.get("kb_signature")
+            if not kb_text:
+                st.toast("El archivo esta vacio o no se pudo leer.", icon="⚠️")
+            elif kb_signature != current_signature:
+                st.session_state.kb_text = kb_text
+                st.session_state.kb_name = kb_file.name
+                st.session_state.kb_updated_at = datetime.utcnow().isoformat()
+                st.session_state.kb_signature = kb_signature
+                st.toast(f"KB cargada: {kb_file.name}", icon="✅")
+                st.rerun()
+
+        kb_text_state = st.session_state.get("kb_text", "")
+        kb_name_state = st.session_state.get("kb_name", "")
+        if kb_text_state and kb_name_state:
+            st.caption(f"KB cargada: {kb_name_state} ({len(kb_text_state)} caracteres)")
+            if st.button("Limpiar KB"):
+                st.session_state.pop("kb_text", None)
+                st.session_state.pop("kb_name", None)
+                st.session_state.pop("kb_updated_at", None)
+                st.session_state.pop("kb_signature", None)
+                st.toast("KB limpiada", icon="⚠️")
+                st.rerun()
+        else:
+            st.caption("KB cargada: ninguna")
+
+        st.divider()
+
         st.subheader("Apariencia")
         st.caption("Personalización básica de colores.")
         

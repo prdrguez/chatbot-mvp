@@ -19,6 +19,8 @@
 - Chat renderiza mensajes con flex left/right sin burbujas (usuario a la derecha).
 - Admin autentica con password y muestra KPIs desde `data/submissions.jsonl`.
 - Estilos cargan desde `streamlit_app/assets/style.css`.
+- Admin permite cargar una KB en `.txt` o `.md` y elegir modo `General` o `Solo KB (estricto)`.
+- Chat muestra KB activa y modo; cuando recupera evidencia agrega `Fuentes: ...` al final.
 
 ## Que NO funciona hoy
 - Componentes Reflex importan modulos inexistentes (`chatbot_mvp.state`, `chatbot_mvp.ui`) y no son compatibles con Streamlit.
@@ -50,6 +52,8 @@
   - Si aparece "cannot import name genai from google", desinstalar el paquete `google` y reinstalar `google-genai`.
   - Si falta `openai`, instalar el SDK con `pip install openai`.
   - Admin muestra toast y caption al cambiar provider.
+  - Si el modo `Solo KB (estricto)` responde "No encuentro eso...", revisar que la KB activa tenga ese tema.
+  - Limitacion actual: solo se soporta carga de archivos `.txt` y `.md` (PDF/DOCX queda para siguiente etapa).
 
 ## Arquitectura actual
 - Estructura (alto nivel):
