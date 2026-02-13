@@ -1,5 +1,5 @@
 import hashlib
-from typing import Any
+from typing import Any, Optional
 
 from chatbot_mvp.knowledge import policy_kb as _policy_kb
 
@@ -12,9 +12,25 @@ retrieve = _policy_kb.retrieve
 get_last_kb_debug = _policy_kb.get_last_kb_debug
 
 
-def load_kb(text: str, name: str) -> dict[str, Any]:
+def load_kb(
+    text: str,
+    name: str,
+    kb_updated_at: Optional[str] = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
     if hasattr(_policy_kb, "load_kb"):
-        return _policy_kb.load_kb(text, name)
+        try:
+            return _policy_kb.load_kb(
+                text,
+                name,
+                kb_updated_at=kb_updated_at,
+                **kwargs,
+            )
+        except TypeError as exc:
+            message = str(exc)
+            if "kb_updated_at" not in message and "unexpected keyword argument" not in message:
+                raise
+            return _policy_kb.load_kb(text, name)
 
     normalized_text = str(text or "").strip()
     kb_name = str(name or "KB cargada").strip() or "KB cargada"

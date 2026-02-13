@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from chatbot_mvp.knowledge import load_kb as public_load_kb
 from chatbot_mvp.knowledge.policy_kb import (
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
@@ -76,3 +77,14 @@ def test_retrieve_securion_with_real_kb():
 
     assert results
     assert any("securion" in str(item.get("text", "")).lower() for item in results)
+
+
+def test_public_load_kb_accepts_kb_updated_at_kwarg():
+    bundle = public_load_kb(
+        text="Politica de prueba",
+        name="test.txt",
+        kb_updated_at="2026-02-13T00:00:00Z",
+    )
+
+    assert isinstance(bundle, dict)
+    assert bundle.get("kb_name") == "test.txt"

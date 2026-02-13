@@ -80,8 +80,13 @@ def _decode_kb_bytes(raw_bytes: bytes) -> str:
             continue
     return raw_bytes.decode("utf-8", errors="replace")
 
-def _sync_kb_runtime(text: str, name: str) -> None:
-    kb_bundle = load_kb(text=text, name=name)
+def _sync_kb_runtime(
+    text: str, name: str, kb_updated_at: str = ""
+) -> dict:
+    return load_kb(text=text, name=name, kb_updated_at=kb_updated_at)
+
+
+def _apply_kb_runtime_bundle(kb_bundle: dict) -> None:
     st.session_state["kb_hash"] = kb_bundle.get("kb_hash", "")
     st.session_state["kb_chunks"] = kb_bundle.get("chunks", [])
     st.session_state["kb_index"] = kb_bundle.get("index", {})
@@ -408,15 +413,23 @@ if check_password():
             kb_signature = f"{uploaded_kb.name}:{hashlib.sha256(raw_bytes).hexdigest()}"
             current_signature = st.session_state.get("kb_signature")
             if uploaded_text and kb_signature != current_signature:
-                st.session_state["kb_text"] = uploaded_text
-                st.session_state["kb_name"] = uploaded_kb.name
-                st.session_state["kb_updated_at"] = datetime.now().isoformat(
-                    timespec="seconds"
-                )
-                st.session_state["kb_signature"] = kb_signature
-                _sync_kb_runtime(uploaded_text, uploaded_kb.name)
-                st.toast(f"KB cargada: {uploaded_kb.name}", icon="✅")
-                st.rerun()
+                new_updated_at = datetime.now().isoformat(timespec="seconds")
+                try:
+                    kb_bundle = _sync_kb_runtime(
+                        uploaded_text,
+                        uploaded_kb.name,
+                        kb_updated_at=new_updated_at,
+                    )
+                except Exception as exc:
+                    st.error(f"No se pudo procesar la KB cargada: {exc}")
+                else:
+                    st.session_state["kb_text"] = uploaded_text
+                    st.session_state["kb_name"] = uploaded_kb.name
+                    st.session_state["kb_updated_at"] = new_updated_at
+                    st.session_state["kb_signature"] = kb_signature
+                    _apply_kb_runtime_bundle(kb_bundle)
+                    st.toast(f"KB cargada: {uploaded_kb.name}", icon="✅")
+                    st.rerun()
             if not uploaded_text and kb_signature != current_signature:
                 st.toast("El archivo esta vacio o no se pudo leer.", icon="⚠️")
 
@@ -425,7 +438,16 @@ if check_password():
         if kb_name and kb_text:
             expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
             if st.session_state.get("kb_hash") != expected_hash:
-                _sync_kb_runtime(kb_text, kb_name)
+                try:
+                    kb_bundle = _sync_kb_runtime(
+                        kb_text,
+                        kb_name,
+                        kb_updated_at=st.session_state.get("kb_updated_at", ""),
+                    )
+                except Exception as exc:
+                    st.error(f"No se pudo sincronizar la KB activa: {exc}")
+                else:
+                    _apply_kb_runtime_bundle(kb_bundle)
 
             st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
             if st.button("Limpiar KB", use_container_width=False):
