@@ -295,9 +295,11 @@ def parse_policy(text: str) -> list[dict[str, Any]]:
     return _parse_policy_cached(_hash_text(text), text)
 
 
-def load_kb(text: str, name: str) -> dict[str, Any]:
-    normalized_text = str(text or "").strip()
-    kb_name = str(name or "KB cargada").strip() or "KB cargada"
+@st.cache_data(show_spinner=False)
+def _load_kb_cached(
+    cache_key: str, normalized_text: str, kb_name: str
+) -> dict[str, Any]:
+    _ = cache_key
     kb_hash = _hash_text(normalized_text)
     chunks = parse_policy(normalized_text)
     index = build_bm25_index(chunks)
@@ -308,6 +310,15 @@ def load_kb(text: str, name: str) -> dict[str, Any]:
         "index": index,
         "chunks_total": len(chunks),
     }
+
+
+def load_kb(text: str, name: str, kb_updated_at: str = "") -> dict[str, Any]:
+    normalized_text = str(text or "").strip()
+    kb_name = str(name or "KB cargada").strip() or "KB cargada"
+    kb_hash = _hash_text(normalized_text)
+    cache_token = str(kb_updated_at or "").strip()
+    cache_key = f"{kb_hash}:{cache_token}" if cache_token else kb_hash
+    return _load_kb_cached(cache_key, normalized_text, kb_name)
 
 
 def _set_last_kb_debug(payload: dict[str, Any]) -> None:

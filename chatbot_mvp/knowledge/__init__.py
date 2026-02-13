@@ -12,9 +12,9 @@ retrieve = _policy_kb.retrieve
 get_last_kb_debug = _policy_kb.get_last_kb_debug
 
 
-def load_kb(text: str, name: str) -> dict[str, Any]:
+def load_kb(text: str, name: str, kb_updated_at: str = "") -> dict[str, Any]:
     if hasattr(_policy_kb, "load_kb"):
-        return _policy_kb.load_kb(text, name)
+        return _policy_kb.load_kb(text, name, kb_updated_at=kb_updated_at)
 
     normalized_text = str(text or "").strip()
     kb_name = str(name or "KB cargada").strip() or "KB cargada"

@@ -19,6 +19,8 @@ else:
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _DEFAULT_AI_PROVIDER = "gemini"
 _VALID_AI_PROVIDERS = {"demo", "openai", "gemini", "groq"}
+_DEFAULT_KB_TOP_K = 4
+_DEFAULT_KB_MIN_SCORE_STRICT = 0.35
 
 
 def sanitize_env_value(value: str | None) -> str:
@@ -116,3 +118,23 @@ def get_admin_password() -> str:
     if value == "":
         return "123" if is_demo_mode() else ""
     return value
+
+
+def get_kb_top_k() -> int:
+    raw_value = get_env_value("KB_TOP_K", str(_DEFAULT_KB_TOP_K))
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return _DEFAULT_KB_TOP_K
+    return min(8, max(1, value))
+
+
+def get_kb_min_score_strict() -> float:
+    raw_value = get_env_value(
+        "KB_MIN_SCORE_STRICT", str(_DEFAULT_KB_MIN_SCORE_STRICT)
+    )
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return _DEFAULT_KB_MIN_SCORE_STRICT
+    return min(1.0, max(0.0, value))

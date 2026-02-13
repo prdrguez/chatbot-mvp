@@ -80,8 +80,8 @@ def _decode_kb_bytes(raw_bytes: bytes) -> str:
             continue
     return raw_bytes.decode("utf-8", errors="replace")
 
-def _sync_kb_runtime(text: str, name: str) -> None:
-    kb_bundle = load_kb(text=text, name=name)
+def _sync_kb_runtime(text: str, name: str, kb_updated_at: str = "") -> None:
+    kb_bundle = load_kb(text=text, name=name, kb_updated_at=kb_updated_at)
     st.session_state["kb_hash"] = kb_bundle.get("kb_hash", "")
     st.session_state["kb_chunks"] = kb_bundle.get("chunks", [])
     st.session_state["kb_index"] = kb_bundle.get("index", {})
@@ -414,7 +414,11 @@ if check_password():
                     timespec="seconds"
                 )
                 st.session_state["kb_signature"] = kb_signature
-                _sync_kb_runtime(uploaded_text, uploaded_kb.name)
+                _sync_kb_runtime(
+                    uploaded_text,
+                    uploaded_kb.name,
+                    kb_updated_at=st.session_state["kb_updated_at"],
+                )
                 st.toast(f"KB cargada: {uploaded_kb.name}", icon="✅")
                 st.rerun()
             if not uploaded_text and kb_signature != current_signature:
@@ -425,7 +429,11 @@ if check_password():
         if kb_name and kb_text:
             expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
             if st.session_state.get("kb_hash") != expected_hash:
-                _sync_kb_runtime(kb_text, kb_name)
+                _sync_kb_runtime(
+                    kb_text,
+                    kb_name,
+                    kb_updated_at=st.session_state.get("kb_updated_at", ""),
+                )
 
             st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
             if st.button("Limpiar KB", use_container_width=False):

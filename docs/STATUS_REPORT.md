@@ -39,6 +39,8 @@
   - `GROQ_API_KEY` (si groq).
   - `GROQ_MODEL` (default: `openai/gpt-oss-20b`).
   - `OPENAI_API_KEY` (si openai).
+  - `KB_TOP_K` (default: `4`).
+  - `KB_MIN_SCORE_STRICT` (default: `0.35`).
   - `ADMIN_PASSWORD`, `DEMO_MODE`.
 - Dependencias clave:
   - `google-genai` (Gemini), `openai` (Groq/OpenAI) y `rank-bm25` (retrieval KB).
@@ -66,8 +68,9 @@
   - Si no detecta articulos, divide en fragmentos de aprox 1000 chars con overlap de 150.
 - Retrieval:
   - Usa BM25 (`rank-bm25`) sobre chunks parseados.
-  - Recupera hasta 4 fragmentos relevantes por query.
-  - Cache: parseo con `st.cache_data`; indice BM25 con `st.cache_resource` (clave por hash de texto).
+  - Recupera `KB_TOP_K` fragmentos relevantes por query.
+  - Cache: parseo y carga de KB con `st.cache_data`; indice BM25 con `st.cache_resource` (clave por hash de texto y `kb_updated_at`).
+  - En modo estricto usa umbral configurable `KB_MIN_SCORE_STRICT`.
 - Integracion en chat:
   - Con KB: inyecta bloque de contexto + instruccion estricta para responder solo con evidencia.
   - Sin KB: mantiene comportamiento actual sin cambios.

@@ -95,6 +95,9 @@ def test_kb_grounding_stream_strict_without_evidence_skips_provider():
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
+    debug_payload = service.get_last_kb_debug()
+    assert debug_payload.get("provider_called") is False
+    assert int(debug_payload.get("latency_ms", -1)) >= 0
 
 
 def test_kb_grounding_returns_strict_message_with_empty_kb():
@@ -113,6 +116,8 @@ def test_kb_grounding_returns_strict_message_with_empty_kb():
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
+    debug_payload = service.get_last_kb_debug()
+    assert debug_payload.get("provider_called") is False
 
 
 def test_kb_general_mode_allows_fallback_without_evidence():
@@ -136,6 +141,8 @@ def test_kb_general_mode_allows_fallback_without_evidence():
     assert fake.call_count == 1
     assert response == "Respuesta basada en evidencia."
     assert "Fuentes:" not in response
+    debug_payload = service.get_last_kb_debug()
+    assert debug_payload.get("provider_called") is True
 
 
 def test_kb_general_mode_with_evidence_adds_sources():

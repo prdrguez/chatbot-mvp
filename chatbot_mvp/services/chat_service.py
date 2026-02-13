@@ -15,14 +15,20 @@ import re
 from typing import Any, Dict, List, Optional, Protocol, Iterator
 from abc import ABC, abstractmethod
 
-from chatbot_mvp.config.settings import get_runtime_ai_provider
+import streamlit as st
+
+from chatbot_mvp.config.settings import (
+    get_kb_min_score_strict,
+    get_kb_top_k,
+    get_runtime_ai_provider,
+)
 from chatbot_mvp.knowledge import (
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
     build_bm25_index,
     get_last_kb_debug as get_policy_kb_debug,
+    load_kb,
     normalize_kb_mode,
-    parse_policy,
     retrieve,
 )
 from chatbot_mvp.services.openai_client import AIClientError
@@ -34,6 +40,23 @@ logger = logging.getLogger(__name__)
 _KB_EMPTY_RESPONSE = (
     "No encuentro eso en el documento cargado. Si me indicas el apartado/titulo o pegas el fragmento, lo reviso."
 )
+
+
+@st.cache_resource(show_spinner=False)
+def _get_cached_provider_client(provider: str):
+    if provider == "gemini":
+        from chatbot_mvp.services.gemini_client import create_gemini_client
+
+        return create_gemini_client()
+    if provider == "groq":
+        from chatbot_mvp.services.groq_client import create_groq_client
+
+        return create_groq_client()
+    if provider == "openai":
+        from chatbot_mvp.services.openai_client import create_chat_client
+
+        return create_chat_client()
+    return None
 
 
 class ResponseStrategy(Protocol):
@@ -296,20 +319,24 @@ class ChatService:
         if provider == "demo":
             logger.info("Using demo response strategy")
             return DemoResponseStrategy()
-        elif provider == "openai" and ai_client:
-            logger.info("Using OpenAI response strategy")
+        elif provider == "openai":
+            if not ai_client:
+                ai_client = _get_cached_provider_client("openai")
+            if not ai_client:
+                logger.warning(
+                    "OpenAI client unavailable (set OPENAI_API_KEY), falling back to demo"
+                )
+                return DemoResponseStrategy()
+            logger.info("Using provider: openai")
             return AIResponseStrategy(ai_client)
         elif provider == "gemini":
             if not ai_client:
-                from chatbot_mvp.services.gemini_client import (
-                    create_gemini_client,
-                    get_gemini_api_key,
-                )
+                from chatbot_mvp.services.gemini_client import get_gemini_api_key
 
                 api_key = get_gemini_api_key()
                 if api_key:
                     try:
-                        ai_client = create_gemini_client()
+                        ai_client = _get_cached_provider_client("gemini")
                     except Exception as exc:
                         logger.warning(f"Gemini client init failed: {exc}")
                 if not ai_client:
@@ -326,10 +353,7 @@ class ChatService:
             return AIResponseStrategy(ai_client)
         elif provider == "groq":
             if not ai_client:
-                from chatbot_mvp.services.groq_client import (
-                    create_groq_client,
-                    get_groq_api_key,
-                )
+                from chatbot_mvp.services.groq_client import get_groq_api_key
 
                 api_key = get_groq_api_key()
                 if not api_key:
@@ -338,7 +362,7 @@ class ChatService:
                     )
                     return DemoResponseStrategy()
                 try:
-                    ai_client = create_groq_client()
+                    ai_client = _get_cached_provider_client("groq")
                 except Exception as exc:
                     logger.warning(f"Groq client init failed: {exc}")
                     return DemoResponseStrategy()
@@ -368,21 +392,26 @@ class ChatService:
         Returns:
             The assistant's response
         """
+        started_at = time.perf_counter()
         prepared_message, prepared_user_context, sources, no_evidence_response, retrieved_chunks = (
             self._prepare_kb_prompt(message, user_context)
         )
         self._update_context(conversation_history, prepared_user_context)
         if no_evidence_response:
+            self._finalize_kb_debug(provider_called=False, started_at=started_at)
             return no_evidence_response
 
         if sources and isinstance(self.processor.strategy, DemoResponseStrategy):
-            return self._build_demo_kb_answer(retrieved_chunks, sources)
+            response = self._build_demo_kb_answer(retrieved_chunks, sources)
+            self._finalize_kb_debug(provider_called=False, started_at=started_at)
+            return response
 
         response = self.processor.process_message(
             prepared_message,
             conversation_history,
             prepared_user_context,
         )
+        self._finalize_kb_debug(provider_called=True, started_at=started_at)
 
         if not sources:
             return response
@@ -397,15 +426,18 @@ class ChatService:
         """
         Send a message and get streaming response.
         """
+        started_at = time.perf_counter()
         prepared_message, prepared_user_context, sources, no_evidence_response, retrieved_chunks = (
             self._prepare_kb_prompt(message, user_context)
         )
         self._update_context(conversation_history, prepared_user_context)
         if no_evidence_response:
+            self._finalize_kb_debug(provider_called=False, started_at=started_at)
             return self._single_chunk_stream(no_evidence_response)
 
         if sources and isinstance(self.processor.strategy, DemoResponseStrategy):
             demo_answer = self._build_demo_kb_answer(retrieved_chunks, sources)
+            self._finalize_kb_debug(provider_called=False, started_at=started_at)
             return self._single_chunk_stream(demo_answer)
 
         stream = self.processor.process_message_stream(
@@ -414,9 +446,12 @@ class ChatService:
             prepared_user_context,
         )
 
-        if not sources:
-            return stream
-        return self._stream_with_sources(stream, sources)
+        return self._stream_with_metrics(
+            stream=stream,
+            started_at=started_at,
+            provider_called=True,
+            sources=sources,
+        )
 
     def _prepare_kb_prompt(
         self, message: str, user_context: Optional[Dict]
@@ -426,11 +461,15 @@ class ChatService:
         if not kb_payload:
             self.last_kb_debug = {
                 "kb_name": "",
+                "kb_len": 0,
                 "kb_mode": KB_MODE_GENERAL,
                 "retrieved_count": 0,
+                "top_score": 0.0,
                 "used_context": False,
                 "reason": "kb_inactiva",
                 "query": message,
+                "provider_called": False,
+                "latency_ms": 0,
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -441,15 +480,21 @@ class ChatService:
         kb_hash = kb_payload["kb_hash"]
         kb_chunks = kb_payload["kb_chunks"]
         kb_index = kb_payload["kb_index"]
+        kb_updated_at = kb_payload["kb_updated_at"]
+        kb_len = len(kb_text)
         strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
                 "kb_name": kb_name,
+                "kb_len": kb_len,
                 "kb_mode": kb_mode,
                 "retrieved_count": 0,
+                "top_score": 0.0,
                 "used_context": False,
                 "reason": "kb_vacia",
                 "query": message,
+                "provider_called": False,
+                "latency_ms": 0,
                 "chunks": [],
             }
             if strict_mode:
@@ -460,36 +505,58 @@ class ChatService:
         runtime_chunks_valid = bool(kb_chunks) and (not kb_hash or kb_hash == expected_hash)
         if kb_chunks and not runtime_chunks_valid:
             logger.info("KB chunks hash mismatch detected. Rebuilding chunks from current kb_text.")
-        base_chunks = kb_chunks if runtime_chunks_valid else parse_policy(kb_text)
+        cached_bundle: Dict[str, Any] = {}
+        if runtime_chunks_valid:
+            base_chunks = kb_chunks
+        else:
+            cached_bundle = load_kb(
+                text=kb_text,
+                name=kb_name,
+                kb_updated_at=kb_updated_at,
+            )
+            base_chunks = cached_bundle.get("chunks", [])
+            if not kb_hash:
+                kb_hash = str(cached_bundle.get("kb_hash", ""))
         chunks = self._prefix_chunk_sources(kb_name, base_chunks)
         if not chunks:
             self.last_kb_debug = {
                 "kb_name": kb_name,
+                "kb_len": kb_len,
                 "kb_mode": kb_mode,
                 "retrieved_count": 0,
+                "top_score": 0.0,
                 "used_context": False,
                 "reason": "sin_chunks",
                 "query": message,
+                "provider_called": False,
+                "latency_ms": 0,
                 "chunks": [],
             }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, []
             return message, base_context, [], None, []
 
-        index = self._resolve_kb_index(kb_text, kb_hash, kb_index, chunks)
-        retrieved_chunks = retrieve(message, index, chunks, k=4, kb_name=kb_name)
+        runtime_index = kb_index if runtime_chunks_valid else cached_bundle.get("index", {})
+        index = self._resolve_kb_index(kb_text, kb_hash, runtime_index, chunks)
+        top_k = get_kb_top_k()
+        retrieved_chunks = retrieve(message, index, chunks, k=top_k, kb_name=kb_name)
         self._log_kb_retrieval(kb_name, retrieved_chunks)
         policy_debug = get_policy_kb_debug()
         debug_chunks = self._normalize_debug_chunks(policy_debug.get("top_candidates", []))
-        if not self._has_sufficient_evidence(retrieved_chunks):
+        top_score = self._compute_top_score(retrieved_chunks, debug_chunks)
+        if not self._has_sufficient_evidence(retrieved_chunks, strict_mode=strict_mode):
             self.last_kb_debug = {
                 "kb_name": kb_name,
+                "kb_len": kb_len,
                 "kb_mode": kb_mode,
                 "retrieved_count": len(retrieved_chunks),
+                "top_score": top_score,
                 "used_context": False,
                 "reason": str(policy_debug.get("reason", "no_hits")),
                 "query": str(policy_debug.get("query", message)),
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "provider_called": False,
+                "latency_ms": 0,
                 "chunks": debug_chunks,
             }
             if strict_mode:
@@ -526,12 +593,16 @@ class ChatService:
         prepared_context["kb_hash"] = kb_hash
         self.last_kb_debug = {
             "kb_name": kb_name,
+            "kb_len": kb_len,
             "kb_mode": kb_mode,
             "retrieved_count": len(retrieved_chunks),
+            "top_score": top_score,
             "used_context": True,
             "reason": str(policy_debug.get("reason", "contexto_inyectado")),
             "query": str(policy_debug.get("query", message)),
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+            "provider_called": False,
+            "latency_ms": 0,
             "chunks": debug_chunks,
         }
         return prepared_message, prepared_context, sources, None, retrieved_chunks
@@ -546,6 +617,7 @@ class ChatService:
         kb_name = str(user_context.get("kb_name", "KB cargada")).strip() or "KB cargada"
         kb_mode = normalize_kb_mode(user_context.get("kb_mode", KB_MODE_GENERAL))
         kb_hash = str(user_context.get("kb_hash", "")).strip()
+        kb_updated_at = str(user_context.get("kb_updated_at", "")).strip()
         kb_chunks = user_context.get("kb_chunks")
         kb_index = user_context.get("kb_index")
         return {
@@ -553,6 +625,7 @@ class ChatService:
             "kb_name": kb_name,
             "kb_mode": kb_mode,
             "kb_hash": kb_hash,
+            "kb_updated_at": kb_updated_at,
             "kb_chunks": kb_chunks if isinstance(kb_chunks, list) else [],
             "kb_index": kb_index if isinstance(kb_index, dict) else {},
         }
@@ -623,7 +696,9 @@ class ChatService:
             prefixed_chunks.append(prefixed)
         return prefixed_chunks
 
-    def _has_sufficient_evidence(self, retrieved_chunks: List[Dict[str, Any]]) -> bool:
+    def _has_sufficient_evidence(
+        self, retrieved_chunks: List[Dict[str, Any]], strict_mode: bool = False
+    ) -> bool:
         if not retrieved_chunks:
             return False
         top = retrieved_chunks[0]
@@ -632,6 +707,8 @@ class ChatService:
         match_type = str(top.get("match_type", ""))
         if top_overlap >= 1:
             return True
+        if strict_mode:
+            return top_score >= get_kb_min_score_strict()
         if match_type == "substring":
             return top_score >= 0.4
         if match_type == "sequence":
@@ -685,6 +762,25 @@ class ChatService:
         sources_text = ", ".join(sources[:4])
         return f"{clean_response}\n\nFuentes: {sources_text}"
 
+    def _compute_top_score(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        debug_chunks: List[Dict[str, Any]],
+    ) -> float:
+        if retrieved_chunks:
+            return round(float(retrieved_chunks[0].get("score", 0.0)), 4)
+        if debug_chunks:
+            return round(max(float(row.get("score", 0.0)) for row in debug_chunks), 4)
+        return 0.0
+
+    def _finalize_kb_debug(self, provider_called: bool, started_at: float) -> None:
+        if not self.last_kb_debug:
+            return
+        payload = dict(self.last_kb_debug)
+        payload["provider_called"] = bool(provider_called)
+        payload["latency_ms"] = int((time.perf_counter() - started_at) * 1000)
+        self.last_kb_debug = payload
+
     def _build_demo_kb_answer(
         self, retrieved_chunks: List[Dict[str, Any]], sources: List[str]
     ) -> str:
@@ -700,13 +796,24 @@ class ChatService:
         response = f"Segun {source}, {excerpt}"
         return self._append_sources(response, sources)
 
-    def _stream_with_sources(
-        self, stream: Iterator[str], sources: List[str]
+    def _stream_with_metrics(
+        self,
+        stream: Iterator[str],
+        started_at: float,
+        provider_called: bool,
+        sources: Optional[List[str]] = None,
     ) -> Iterator[str]:
         def generator() -> Iterator[str]:
-            for chunk in stream:
-                yield chunk
-            yield f"\n\nFuentes: {', '.join(sources[:4])}"
+            try:
+                for chunk in stream:
+                    yield chunk
+                if sources:
+                    yield f"\n\nFuentes: {', '.join(sources[:4])}"
+            finally:
+                self._finalize_kb_debug(
+                    provider_called=provider_called,
+                    started_at=started_at,
+                )
 
         return generator()
 

@@ -101,6 +101,25 @@ if kb_debug:
         if not debug_payload:
             st.caption("Aun no hay retrieval para mostrar.")
         else:
+            kb_len_value = int(debug_payload.get("kb_len", len(kb_text or "")))
+            retrieved_count = int(debug_payload.get("retrieved_count", 0))
+            top_score = float(debug_payload.get("top_score", 0.0))
+            kb_used = bool(debug_payload.get("used_context", False))
+            provider_called = bool(debug_payload.get("provider_called", False))
+            latency_ms = int(debug_payload.get("latency_ms", 0))
+            st.caption(
+                " | ".join(
+                    [
+                        f"kb_name={debug_payload.get('kb_name', 'ninguna')}",
+                        f"kb_len={kb_len_value}",
+                        f"chunks_retrieved={retrieved_count}",
+                        f"top_score={top_score:.4f}",
+                        f"kb_used={kb_used}",
+                        f"provider_called={provider_called}",
+                        f"latency_ms={latency_ms}",
+                    ]
+                )
+            )
             st.caption(f"KB: {debug_payload.get('kb_name', 'ninguna')}")
             st.caption(f"Modo: {debug_payload.get('kb_mode', 'general')}")
             st.caption(
