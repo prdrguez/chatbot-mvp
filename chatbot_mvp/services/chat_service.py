@@ -14,11 +14,17 @@ from typing import Dict, List, Optional, Protocol, Iterator, Union
 from abc import ABC, abstractmethod
 
 from chatbot_mvp.config.settings import get_runtime_ai_provider
+from chatbot_mvp.knowledge import load_kb, retrieve
 from chatbot_mvp.services.openai_client import AIClientError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+STRICT_NO_EVIDENCE_RESPONSE = (
+    "No encuentro eso en la politica cargada. "
+    "Proba con otras palabras o indicame el apartado/articulo."
+)
 
 
 class ResponseStrategy(Protocol):
@@ -352,17 +358,24 @@ class ChatService:
         Returns:
             The assistant's response
         """
+        effective_user_context, sources, early_response = self._prepare_kb_context(
+            message=message,
+            user_context=user_context,
+        )
+        if early_response:
+            return early_response
+
         # Update conversation context
-        self._update_context(conversation_history, user_context)
-        
+        self._update_context(conversation_history, effective_user_context)
+
         # Process message
         response = self.processor.process_message(
             message, 
             conversation_history, 
-            user_context
+            effective_user_context
         )
-        
-        return response
+
+        return self._append_sources(response, sources)
 
     def send_message_stream(
         self, 
@@ -373,15 +386,88 @@ class ChatService:
         """
         Send a message and get streaming response.
         """
+        effective_user_context, sources, early_response = self._prepare_kb_context(
+            message=message,
+            user_context=user_context,
+        )
+        if early_response:
+            return iter([early_response])
+
         # Update conversation context
-        self._update_context(conversation_history, user_context)
-        
+        self._update_context(conversation_history, effective_user_context)
+
         # Process message
-        return self.processor.process_message_stream(
+        stream = self.processor.process_message_stream(
             message, 
             conversation_history, 
-            user_context
+            effective_user_context
         )
+
+        if not sources:
+            return stream
+        return self._stream_with_sources(stream, sources)
+
+    def _prepare_kb_context(
+        self, message: str, user_context: Optional[Dict]
+    ) -> tuple[Dict, List[str], Optional[str]]:
+        effective_user_context = dict(user_context or {})
+        kb_text = str(effective_user_context.get("kb_text") or "").strip()
+        kb_name = str(effective_user_context.get("kb_name") or "KB")
+        kb_mode = str(effective_user_context.get("kb_mode") or "general").strip().lower()
+        strict_mode = kb_mode == "strict"
+
+        if not kb_text:
+            if strict_mode:
+                return effective_user_context, [], STRICT_NO_EVIDENCE_RESPONSE
+            return effective_user_context, [], None
+
+        kb_index = load_kb(kb_text, kb_name)
+        matches = retrieve(message, kb_index, top_k=4)
+        source_labels = [match["source"] for match in matches]
+        logger.info(
+            "KB retrieval name=%s mode=%s chunks=%s sources=%s",
+            kb_name,
+            kb_mode,
+            len(matches),
+            source_labels,
+        )
+
+        if strict_mode and not matches:
+            return effective_user_context, [], STRICT_NO_EVIDENCE_RESPONSE
+        if not matches:
+            return effective_user_context, [], None
+
+        context_lines = [f"KB: {kb_name}"]
+        for index, match in enumerate(matches, start=1):
+            source = match.get("source", f"Chunk {index}")
+            snippet = str(match.get("text", "")).strip()
+            context_lines.append(f"{index}. Fuente: {source}")
+            context_lines.append(snippet)
+        effective_user_context["kb_context_block"] = "\n".join(context_lines)
+        effective_user_context["kb_strict"] = strict_mode
+
+        # Keep up to 4 unique sources preserving retrieval order.
+        deduped_sources: List[str] = []
+        for source in source_labels:
+            if source not in deduped_sources:
+                deduped_sources.append(source)
+            if len(deduped_sources) >= 4:
+                break
+        return effective_user_context, deduped_sources, None
+
+    def _append_sources(self, response: str, sources: List[str]) -> str:
+        if not sources:
+            return response
+        if "fuentes:" in response.lower():
+            return response
+        return f"{response.rstrip()}\n\nFuentes: {', '.join(sources)}"
+
+    def _stream_with_sources(
+        self, stream: Iterator[str], sources: List[str]
+    ) -> Iterator[str]:
+        for chunk in stream:
+            yield chunk
+        yield f"\n\nFuentes: {', '.join(sources)}"
     
     def _update_context(
         self, 

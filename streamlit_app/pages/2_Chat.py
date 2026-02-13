@@ -77,6 +77,16 @@ with action_col:
 active_provider = get_runtime_ai_provider()
 st.caption(f"Proveedor activo: {provider_labels.get(active_provider, active_provider)}")
 
+kb_text = st.session_state.get("kb_text", "")
+kb_name = st.session_state.get("kb_name", "")
+kb_mode = st.session_state.get("kb_mode", "general")
+kb_mode_label = "Solo KB (estricto)" if kb_mode == "strict" else "General"
+if kb_text and kb_name:
+    st.caption(f"KB activa: {kb_name}")
+else:
+    st.caption("KB activa: ninguna")
+st.caption(f"Modo: {kb_mode_label}")
+
 if active_provider == "gemini":
     if not get_env_value("GEMINI_API_KEY") and not get_env_value("GOOGLE_API_KEY"):
         st.warning("Falta GEMINI_API_KEY/GOOGLE_API_KEY. Se usara modo demo.")
@@ -126,7 +136,11 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
         stream = service.send_message_stream(
             message=prompt,
             conversation_history=history,
-            user_context={},
+            user_context={
+                "kb_text": kb_text,
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+            },
         )
 
         response_text = ""
