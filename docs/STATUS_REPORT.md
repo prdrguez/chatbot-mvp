@@ -17,6 +17,7 @@
 - Cuestionario usa `chatbot_mvp.data.juego_etico` y guarda resultados via `submissions_store`.
 - Chat usa streaming con Gemini o Groq si hay API keys; el provider se elige en Admin.
 - Chat renderiza mensajes con flex left/right sin burbujas (usuario a la derecha).
+- El control nativo para reabrir sidebar queda visible y clickeable incluso con sidebar colapsado.
 - Admin autentica con password y muestra KPIs desde `data/submissions.jsonl`.
 - Estilos cargan desde `streamlit_app/assets/style.css`.
 
