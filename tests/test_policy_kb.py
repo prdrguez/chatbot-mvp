@@ -1,4 +1,4 @@
-from chatbot_mvp.knowledge.policy_kb import parse_policy
+from chatbot_mvp.knowledge.policy_kb import build_bm25_index, parse_policy, retrieve
 
 
 def test_parse_policy_splits_by_articulo():
@@ -32,3 +32,19 @@ def test_parse_policy_splits_by_numbered_sections_when_no_articulo():
     assert chunks[0]["section_id"] == "1"
     assert chunks[1]["section_id"] == "2"
     assert chunks[0]["source_label"].startswith("Seccion 1")
+
+
+def test_policy_kb_retrieval_finds_securion_term():
+    text = (
+        "CAPITULO I\n"
+        "Securion es una empresa orientada a ciberseguridad.\n\n"
+        "ARTICULO 4\n"
+        "Se deben declarar regalos de clientes."
+    )
+    chunks = parse_policy(text)
+    index = build_bm25_index(chunks)
+    results = retrieve("Que es Securion?", index, chunks, k=3)
+
+    assert results
+    assert "securion" in results[0]["text"].lower()
+    assert float(results[0].get("score", 0.0)) > 0

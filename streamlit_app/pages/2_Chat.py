@@ -79,12 +79,34 @@ st.caption(f"Proveedor activo: {provider_labels.get(active_provider, active_prov
 kb_text = st.session_state.get("kb_text", "")
 kb_name = st.session_state.get("kb_name", "")
 kb_mode = st.session_state.get("kb_mode", "general")
+kb_debug = bool(st.session_state.get("kb_debug", False))
 kb_mode_label = "Solo KB (estricto)" if kb_mode == "strict" else "General"
 if kb_text and kb_name:
     st.caption(f"KB activa: {kb_name}")
 else:
     st.caption("KB activa: ninguna")
 st.caption(f"Modo: {kb_mode_label}")
+
+if kb_debug:
+    debug_payload = st.session_state.get("chat_kb_debug")
+    with st.expander("Debug KB retrieval", expanded=False):
+        if not debug_payload:
+            st.caption("Aun no hay retrieval para mostrar.")
+        else:
+            st.caption(f"KB: {debug_payload.get('kb_name', 'ninguna')}")
+            st.caption(f"Modo: {debug_payload.get('kb_mode', 'general')}")
+            st.caption(
+                f"Chunks recuperados: {debug_payload.get('retrieved_count', 0)} | "
+                f"Contexto usado: {debug_payload.get('used_context', False)}"
+            )
+            for row in debug_payload.get("chunks", []):
+                source = row.get("source", "")
+                score = row.get("score", 0.0)
+                match_type = row.get("match_type", "")
+                snippet = row.get("snippet", "")
+                st.caption(
+                    f"{source} | score={score} | match={match_type} | snippet={snippet}"
+                )
 
 if active_provider == "gemini":
     if not get_env_value("GEMINI_API_KEY") and not get_env_value("GOOGLE_API_KEY"):
@@ -155,6 +177,8 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
         st.session_state.messages.append(
             {"role": "assistant", "content": response_text}
         )
+        if kb_debug and hasattr(service, "get_last_kb_debug"):
+            st.session_state["chat_kb_debug"] = service.get_last_kb_debug()
     except Exception as e:
         st.error(f"Error en el servicio de chat: {e}")
 

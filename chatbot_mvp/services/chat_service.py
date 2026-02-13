@@ -23,9 +23,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _KB_EMPTY_RESPONSE = (
-    "No encuentro eso en la pol\u00edtica cargada. Si me dec\u00eds el nombre del apartado o me copi\u00e1s el fragmento, lo reviso."
+    "No encuentro eso en el documento cargado. Proba con otras palabras o indicame el apartado/articulo."
 )
-_KB_EMPTY_SOURCES = "Sin evidencia recuperada"
 
 
 class ResponseStrategy(Protocol):
@@ -271,6 +270,7 @@ class ChatService:
         strategy = self._create_strategy(ai_client)
         self.processor = MessageProcessor(strategy)
         self.conversation_context: Dict = {}
+        self.last_kb_debug: Dict[str, Any] = {}
     
     def _create_strategy(self, ai_client=None) -> BaseResponseStrategy:
         """
@@ -415,6 +415,14 @@ class ChatService:
         base_context: Dict[str, Any] = dict(user_context or {})
         kb_payload = self._extract_kb_payload(user_context)
         if not kb_payload:
+            self.last_kb_debug = {
+                "kb_name": "",
+                "kb_mode": "general",
+                "retrieved_count": 0,
+                "used_context": False,
+                "reason": "kb_inactiva",
+                "chunks": [],
+            }
             return message, base_context, [], None, []
 
         kb_text = kb_payload["kb_text"]
@@ -422,12 +430,28 @@ class ChatService:
         kb_mode = kb_payload["kb_mode"]
         strict_mode = kb_mode == "strict"
         if not kb_text.strip():
+            self.last_kb_debug = {
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+                "retrieved_count": 0,
+                "used_context": False,
+                "reason": "kb_vacia",
+                "chunks": [],
+            }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, []
             return message, base_context, [], None, []
 
-        chunks = parse_policy(kb_text)
+        chunks = self._prefix_chunk_sources(kb_name, parse_policy(kb_text))
         if not chunks:
+            self.last_kb_debug = {
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+                "retrieved_count": 0,
+                "used_context": False,
+                "reason": "sin_chunks",
+                "chunks": [],
+            }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, []
             return message, base_context, [], None, []
@@ -435,36 +459,55 @@ class ChatService:
         index = build_bm25_index(chunks)
         retrieved_chunks = retrieve(message, index, chunks, k=4)
         self._log_kb_retrieval(kb_name, retrieved_chunks)
-        sources = self._extract_sources(retrieved_chunks)
+        debug_chunks = self._build_debug_chunks(retrieved_chunks)
         if not self._has_sufficient_evidence(retrieved_chunks):
+            self.last_kb_debug = {
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+                "retrieved_count": len(retrieved_chunks),
+                "used_context": False,
+                "reason": "sin_evidencia",
+                "chunks": debug_chunks,
+            }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, retrieved_chunks
             return message, base_context, [], None, retrieved_chunks
 
+        sources = self._extract_sources(retrieved_chunks)
         context_block = self._build_kb_context_block(kb_name, retrieved_chunks)
         if strict_mode:
             guidance = (
                 "Instrucciones obligatorias:\n"
-                "- Responde SOLO usando la evidencia provista.\n"
+                "- Responde SOLO usando la evidencia provista dentro de <context>.\n"
                 "- Si la respuesta no aparece en la evidencia, responde exactamente: "
-                '"No encuentro eso en la politica cargada."\n'
+                '"No encuentro eso en el documento cargado. Proba con otras palabras o indicame el apartado/articulo."\n'
                 "- Si te piden articulo o item, cita el articulo exacto.\n"
             )
         else:
             guidance = (
                 "Instrucciones:\n"
                 "- Usa primero la evidencia recuperada de la Base de Conocimiento.\n"
-                "- Si la evidencia no alcanza, podes responder de forma general sin inventar datos de la politica.\n"
+                "- Si la evidencia no alcanza, podes responder de forma general sin inventar datos del documento.\n"
                 "- Si usas evidencia, menciona articulo, seccion o fragmento cuando corresponda.\n"
             )
         prepared_message = (
-            f"{context_block}\n\n{guidance}\nPregunta del usuario: {message}"
+            f"<context>\n{context_block}\n</context>\n\n{guidance}\nPregunta del usuario: {message}"
         )
         prepared_context = dict(base_context)
         prepared_context["kb_strict_mode"] = strict_mode
         prepared_context["kb_mode"] = kb_mode
+        prepared_context["kb_context_used"] = True
         prepared_context["kb_context_block"] = context_block
+        prepared_context["kb_sources"] = sources
         prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
+        self.last_kb_debug = {
+            "kb_name": kb_name,
+            "kb_mode": kb_mode,
+            "retrieved_count": len(retrieved_chunks),
+            "used_context": True,
+            "reason": "contexto_inyectado",
+            "chunks": debug_chunks,
+        }
         return prepared_message, prepared_context, sources, None, retrieved_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, str]]:
@@ -479,28 +522,63 @@ class ChatService:
         kb_mode = "strict" if kb_mode == "strict" else "general"
         return {"kb_text": kb_text, "kb_name": kb_name, "kb_mode": kb_mode}
 
+    def _prefix_chunk_sources(
+        self, kb_name: str, chunks: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        prefixed_chunks: List[Dict[str, Any]] = []
+        for idx, chunk in enumerate(chunks, start=1):
+            source = str(chunk.get("source_label", "")).strip() or f"Chunk {idx}"
+            prefixed = dict(chunk)
+            prefixed["chunk_id"] = int(chunk.get("chunk_id") or idx)
+            prefixed["source_label"] = f"{kb_name} · {source}"
+            prefixed_chunks.append(prefixed)
+        return prefixed_chunks
+
     def _has_sufficient_evidence(self, retrieved_chunks: List[Dict[str, Any]]) -> bool:
         if not retrieved_chunks:
             return False
         top = retrieved_chunks[0]
         top_overlap = int(top.get("overlap", 0))
         top_score = float(top.get("score", 0.0))
-        if top_overlap >= 2:
+        match_type = str(top.get("match_type", ""))
+        if top_overlap >= 1:
             return True
-        return top_score >= 1.5
+        if match_type == "substring":
+            return top_score >= 0.4
+        if match_type == "sequence":
+            return top_score >= 0.32
+        return top_score >= 0.25
 
     def _log_kb_retrieval(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> None:
         chunk_refs = []
         for chunk in retrieved_chunks:
             chunk_id = chunk.get("chunk_id", "?")
             source = chunk.get("source_label", "")
-            chunk_refs.append(f"{chunk_id}:{source}")
+            score = float(chunk.get("score", 0.0))
+            match_type = str(chunk.get("match_type", ""))
+            chunk_refs.append(f"{chunk_id}:{source}:{score:.3f}:{match_type}")
         logger.info(
             "KB retrieval | kb=%s | retrieved=%s | refs=%s",
             kb_name,
             len(retrieved_chunks),
             chunk_refs,
         )
+
+    def _build_debug_chunks(self, retrieved_chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        debug_rows: List[Dict[str, Any]] = []
+        for chunk in retrieved_chunks[:4]:
+            text = str(chunk.get("text", "")).strip()
+            snippet = re.sub(r"\s+", " ", text)[:200]
+            debug_rows.append(
+                {
+                    "chunk_id": chunk.get("chunk_id"),
+                    "source": str(chunk.get("source_label", "")),
+                    "score": round(float(chunk.get("score", 0.0)), 4),
+                    "match_type": str(chunk.get("match_type", "")),
+                    "snippet": snippet,
+                }
+            )
+        return debug_rows
 
     def _build_kb_context_block(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> str:
         lines = [f"Base de Conocimiento: {kb_name}", "Evidencia recuperada:"]
@@ -525,18 +603,20 @@ class ChatService:
         return ordered_sources
 
     def _append_sources(self, response: str, sources: List[str]) -> str:
+        if not sources:
+            return response
         lines = response.rstrip().splitlines()
         if lines and lines[-1].strip().lower().startswith("fuentes:"):
             lines = lines[:-1]
         clean_response = "\n".join(lines).rstrip()
-        sources_text = ", ".join(sources[:4]) if sources else _KB_EMPTY_SOURCES
+        sources_text = ", ".join(sources[:4])
         return f"{clean_response}\n\nFuentes: {sources_text}"
 
     def _build_demo_kb_answer(
         self, retrieved_chunks: List[Dict[str, Any]], sources: List[str]
     ) -> str:
         if not retrieved_chunks:
-            return self._append_sources(_KB_EMPTY_RESPONSE, [])
+            return _KB_EMPTY_RESPONSE
         first_chunk = retrieved_chunks[0]
         source = str(first_chunk.get("source_label", "Fragmento 1")).strip()
         raw_text = str(first_chunk.get("text", "")).strip()
@@ -562,6 +642,9 @@ class ChatService:
             yield message
 
         return generator()
+
+    def get_last_kb_debug(self) -> Dict[str, Any]:
+        return dict(self.last_kb_debug)
     
     def _update_context(
         self, 

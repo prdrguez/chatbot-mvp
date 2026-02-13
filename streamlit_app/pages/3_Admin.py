@@ -351,6 +351,8 @@ if check_password():
 
         if "kb_mode" not in st.session_state:
             st.session_state["kb_mode"] = "general"
+        if "kb_debug" not in st.session_state:
+            st.session_state["kb_debug"] = False
 
         kb_mode_label = st.radio(
             "Modo de respuesta",
@@ -363,6 +365,15 @@ if check_password():
         if selected_kb_mode != st.session_state.get("kb_mode"):
             st.session_state["kb_mode"] = selected_kb_mode
             st.toast(f"Modo KB actualizado: {kb_mode_label}", icon="✅")
+            st.rerun()
+
+        kb_debug = st.checkbox(
+            "Debug KB",
+            value=bool(st.session_state.get("kb_debug", False)),
+            help="Muestra en Chat los chunks recuperados y sus scores.",
+        )
+        if kb_debug != bool(st.session_state.get("kb_debug", False)):
+            st.session_state["kb_debug"] = kb_debug
             st.rerun()
 
         uploaded_kb = st.file_uploader(
@@ -405,3 +416,7 @@ if check_password():
                 st.rerun()
         else:
             st.caption("KB cargada: ninguna.")
+        kb_active_label = kb_name if kb_name else "ninguna"
+        kb_mode_caption = "Solo KB (estricto)" if st.session_state.get("kb_mode") == "strict" else "General"
+        st.caption(f"KB activa: {kb_active_label}")
+        st.caption(f"Modo: {kb_mode_caption}")

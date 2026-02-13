@@ -44,7 +44,7 @@ def test_kb_grounding_injects_context_and_sources():
 
     assert fake.call_count == 1
     assert "Base de Conocimiento: securin.txt" in fake.last_message
-    assert "Fuente: Articulo 3" in fake.last_message
+    assert "Articulo 3" in fake.last_message
     assert fake.last_user_context.get("kb_strict_mode") is True
     assert "Fuentes:" in response
     assert "Articulo 3" in response
@@ -69,7 +69,7 @@ def test_kb_grounding_returns_strict_message_without_evidence():
     )
 
     assert fake.call_count == 0
-    assert response.startswith("No encuentro eso en la pol")
+    assert response.startswith("No encuentro eso en el documento cargado.")
 
 
 def test_kb_grounding_returns_strict_message_with_empty_kb():
@@ -87,7 +87,7 @@ def test_kb_grounding_returns_strict_message_with_empty_kb():
     )
 
     assert fake.call_count == 0
-    assert response.startswith("No encuentro eso en la pol")
+    assert response.startswith("No encuentro eso en el documento cargado.")
 
 
 def test_kb_general_mode_allows_fallback_without_evidence():
@@ -110,3 +110,26 @@ def test_kb_general_mode_allows_fallback_without_evidence():
 
     assert fake.call_count == 1
     assert response == "Respuesta basada en evidencia."
+    assert "Fuentes:" not in response
+
+
+def test_kb_general_mode_with_evidence_adds_sources():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 2 Valores fundamentales\n"
+        "Securion prioriza transparencia, responsabilidad y calidad."
+    )
+
+    response = service.send_message(
+        message="Cuales son los valores de Securion?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "general",
+        },
+    )
+
+    assert fake.call_count == 1
+    assert "Fuentes:" in response
