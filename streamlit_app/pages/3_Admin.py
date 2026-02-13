@@ -14,7 +14,12 @@ if str(root_path) not in sys.path:
 
 from chatbot_mvp.services.submissions_store import read_submissions, summarize
 from chatbot_mvp.config.settings import get_admin_password, is_demo_mode, get_runtime_ai_provider
-from chatbot_mvp.knowledge import KB_MODE_GENERAL, KB_MODE_STRICT, normalize_kb_mode
+from chatbot_mvp.knowledge import (
+    KB_MODE_GENERAL,
+    KB_MODE_STRICT,
+    load_kb,
+    normalize_kb_mode,
+)
 from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(page_title="Admin Panel", page_icon="📊", layout="wide")
@@ -72,6 +77,12 @@ def _decode_kb_bytes(raw_bytes: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return raw_bytes.decode("utf-8", errors="replace")
+
+def _sync_kb_runtime(text: str, name: str) -> None:
+    kb_bundle = load_kb(text=text, name=name)
+    st.session_state["kb_hash"] = kb_bundle.get("kb_hash", "")
+    st.session_state["kb_chunks"] = kb_bundle.get("chunks", [])
+    st.session_state["kb_index"] = kb_bundle.get("index", {})
 
 if check_password():
     st.title("Panel de Administración")
@@ -401,6 +412,7 @@ if check_password():
                     timespec="seconds"
                 )
                 st.session_state["kb_signature"] = kb_signature
+                _sync_kb_runtime(uploaded_text, uploaded_kb.name)
                 st.toast(f"KB cargada: {uploaded_kb.name}", icon="✅")
                 st.rerun()
             if not uploaded_text and kb_signature != current_signature:
@@ -409,12 +421,19 @@ if check_password():
         kb_name = st.session_state.get("kb_name", "")
         kb_text = st.session_state.get("kb_text", "")
         if kb_name and kb_text:
+            expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
+            if st.session_state.get("kb_hash") != expected_hash:
+                _sync_kb_runtime(kb_text, kb_name)
+
             st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
             if st.button("Limpiar KB", use_container_width=False):
                 st.session_state.pop("kb_text", None)
                 st.session_state.pop("kb_name", None)
                 st.session_state.pop("kb_updated_at", None)
                 st.session_state.pop("kb_signature", None)
+                st.session_state.pop("kb_hash", None)
+                st.session_state.pop("kb_chunks", None)
+                st.session_state.pop("kb_index", None)
                 st.session_state["admin_kb_uploader"] = None
                 st.toast("KB limpiada", icon="⚠️")
                 st.rerun()

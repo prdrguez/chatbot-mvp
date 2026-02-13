@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from chatbot_mvp.knowledge.policy_kb import (
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
@@ -60,4 +62,17 @@ def test_policy_kb_retrieval_finds_securion_term():
 def test_normalize_kb_mode():
     assert normalize_kb_mode(KB_MODE_GENERAL) == KB_MODE_GENERAL
     assert normalize_kb_mode(KB_MODE_STRICT) == KB_MODE_STRICT
-    assert normalize_kb_mode("Solo KB (estricto)") == KB_MODE_GENERAL
+    assert normalize_kb_mode("Solo KB (estricto)") == KB_MODE_STRICT
+    assert normalize_kb_mode("modo-invalido") == KB_MODE_GENERAL
+
+
+def test_retrieve_securion_with_real_kb():
+    kb_path = Path(__file__).resolve().parents[1] / "docs" / "securin.txt"
+    text = kb_path.read_text(encoding="utf-8")
+    chunks = parse_policy(text)
+    index = build_bm25_index(chunks)
+
+    results = retrieve("Cuales son los valores del Grupo Securion?", index, chunks, k=4)
+
+    assert results
+    assert any("securion" in str(item.get("text", "")).lower() for item in results)

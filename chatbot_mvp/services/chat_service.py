@@ -8,6 +8,7 @@ This module separates chat logic from UI state, implementing:
 - Context management
 """
 
+import hashlib
 import time
 import logging
 import re
@@ -429,6 +430,7 @@ class ChatService:
                 "retrieved_count": 0,
                 "used_context": False,
                 "reason": "kb_inactiva",
+                "query": message,
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -436,6 +438,9 @@ class ChatService:
         kb_text = kb_payload["kb_text"]
         kb_name = kb_payload["kb_name"]
         kb_mode = kb_payload["kb_mode"]
+        kb_hash = kb_payload["kb_hash"]
+        kb_chunks = kb_payload["kb_chunks"]
+        kb_index = kb_payload["kb_index"]
         strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
@@ -444,13 +449,19 @@ class ChatService:
                 "retrieved_count": 0,
                 "used_context": False,
                 "reason": "kb_vacia",
+                "query": message,
                 "chunks": [],
             }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, []
             return message, base_context, [], None, []
 
-        chunks = self._prefix_chunk_sources(kb_name, parse_policy(kb_text))
+        expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
+        runtime_chunks_valid = bool(kb_chunks) and (not kb_hash or kb_hash == expected_hash)
+        if kb_chunks and not runtime_chunks_valid:
+            logger.info("KB chunks hash mismatch detected. Rebuilding chunks from current kb_text.")
+        base_chunks = kb_chunks if runtime_chunks_valid else parse_policy(kb_text)
+        chunks = self._prefix_chunk_sources(kb_name, base_chunks)
         if not chunks:
             self.last_kb_debug = {
                 "kb_name": kb_name,
@@ -458,17 +469,18 @@ class ChatService:
                 "retrieved_count": 0,
                 "used_context": False,
                 "reason": "sin_chunks",
+                "query": message,
                 "chunks": [],
             }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, []
             return message, base_context, [], None, []
 
-        index = build_bm25_index(chunks)
+        index = self._resolve_kb_index(kb_text, kb_hash, kb_index, chunks)
         retrieved_chunks = retrieve(message, index, chunks, k=4, kb_name=kb_name)
         self._log_kb_retrieval(kb_name, retrieved_chunks)
         policy_debug = get_policy_kb_debug()
-        debug_chunks = policy_debug.get("top_candidates", [])
+        debug_chunks = self._normalize_debug_chunks(policy_debug.get("top_candidates", []))
         if not self._has_sufficient_evidence(retrieved_chunks):
             self.last_kb_debug = {
                 "kb_name": kb_name,
@@ -511,19 +523,20 @@ class ChatService:
         prepared_context["kb_context_block"] = context_block
         prepared_context["kb_sources"] = sources
         prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
+        prepared_context["kb_hash"] = kb_hash
         self.last_kb_debug = {
-                "kb_name": kb_name,
-                "kb_mode": kb_mode,
-                "retrieved_count": len(retrieved_chunks),
-                "used_context": True,
-                "reason": str(policy_debug.get("reason", "contexto_inyectado")),
-                "query": str(policy_debug.get("query", message)),
-                "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
-                "chunks": debug_chunks,
-            }
+            "kb_name": kb_name,
+            "kb_mode": kb_mode,
+            "retrieved_count": len(retrieved_chunks),
+            "used_context": True,
+            "reason": str(policy_debug.get("reason", "contexto_inyectado")),
+            "query": str(policy_debug.get("query", message)),
+            "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+            "chunks": debug_chunks,
+        }
         return prepared_message, prepared_context, sources, None, retrieved_chunks
 
-    def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, str]]:
+    def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, Any]]:
         if not user_context:
             return None
         has_kb_keys = "kb_text" in user_context or "kb_name" in user_context
@@ -532,7 +545,67 @@ class ChatService:
         kb_text = str(user_context.get("kb_text", ""))
         kb_name = str(user_context.get("kb_name", "KB cargada")).strip() or "KB cargada"
         kb_mode = normalize_kb_mode(user_context.get("kb_mode", KB_MODE_GENERAL))
-        return {"kb_text": kb_text, "kb_name": kb_name, "kb_mode": kb_mode}
+        kb_hash = str(user_context.get("kb_hash", "")).strip()
+        kb_chunks = user_context.get("kb_chunks")
+        kb_index = user_context.get("kb_index")
+        return {
+            "kb_text": kb_text,
+            "kb_name": kb_name,
+            "kb_mode": kb_mode,
+            "kb_hash": kb_hash,
+            "kb_chunks": kb_chunks if isinstance(kb_chunks, list) else [],
+            "kb_index": kb_index if isinstance(kb_index, dict) else {},
+        }
+
+    def _resolve_kb_index(
+        self,
+        kb_text: str,
+        kb_hash: str,
+        runtime_index: Dict[str, Any],
+        chunks: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if self._is_index_compatible(runtime_index, chunks):
+            expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
+            if not kb_hash or kb_hash == expected_hash:
+                return runtime_index
+            logger.info(
+                "KB index hash mismatch detected. Rebuilding index from current kb_text."
+            )
+        return build_bm25_index(chunks)
+
+    def _is_index_compatible(
+        self, index: Dict[str, Any], chunks: List[Dict[str, Any]]
+    ) -> bool:
+        if not isinstance(index, dict):
+            return False
+        token_sets = index.get("token_sets")
+        normalized = index.get("normalized_texts")
+        if not isinstance(token_sets, (list, tuple)):
+            return False
+        if not isinstance(normalized, (list, tuple)):
+            return False
+        return len(token_sets) == len(chunks) and len(normalized) == len(chunks)
+
+    def _normalize_debug_chunks(self, rows: Any) -> List[Dict[str, Any]]:
+        normalized_rows: List[Dict[str, Any]] = []
+        if not isinstance(rows, list):
+            return normalized_rows
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            source = str(row.get("source") or row.get("source_label") or "").strip()
+            normalized_rows.append(
+                {
+                    "chunk_id": row.get("chunk_id"),
+                    "source": source,
+                    "source_label": source,
+                    "score": float(row.get("score", 0.0)),
+                    "overlap": int(row.get("overlap", 0)),
+                    "match_type": str(row.get("match_type", "")),
+                    "snippet": str(row.get("snippet", "")),
+                }
+            )
+        return normalized_rows
 
     def _prefix_chunk_sources(
         self, kb_name: str, chunks: List[Dict[str, Any]]
@@ -542,7 +615,11 @@ class ChatService:
             source = str(chunk.get("source_label", "")).strip() or f"Chunk {idx}"
             prefixed = dict(chunk)
             prefixed["chunk_id"] = int(chunk.get("chunk_id") or idx)
-            prefixed["source_label"] = f"{kb_name} · {source}"
+            prefix = f"{kb_name} | "
+            prefixed["source_label"] = (
+                source if source.startswith(prefix) else f"{prefix}{source}"
+            )
+            prefixed["source"] = prefixed["source_label"]
             prefixed_chunks.append(prefixed)
         return prefixed_chunks
 

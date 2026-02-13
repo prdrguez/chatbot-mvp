@@ -83,6 +83,9 @@ kb_text = st.session_state.get("kb_text", "")
 kb_name = st.session_state.get("kb_name", "")
 kb_mode = normalize_kb_mode(st.session_state.get("kb_mode", KB_MODE_GENERAL))
 kb_debug = bool(st.session_state.get("kb_debug", False))
+kb_hash = st.session_state.get("kb_hash", "")
+kb_chunks = st.session_state.get("kb_chunks", [])
+kb_index = st.session_state.get("kb_index", {})
 kb_mode_label = "Solo KB (estricto)" if kb_mode == KB_MODE_STRICT else "General"
 if kb_text and kb_name:
     st.caption(f"KB activa: {kb_name}")
@@ -101,11 +104,18 @@ if kb_debug:
             st.caption(f"KB: {debug_payload.get('kb_name', 'ninguna')}")
             st.caption(f"Modo: {debug_payload.get('kb_mode', 'general')}")
             st.caption(
+                f"Query: {debug_payload.get('query', '')} | "
+                f"Motivo: {debug_payload.get('reason', '')}"
+            )
+            st.caption(
                 f"Chunks recuperados: {debug_payload.get('retrieved_count', 0)} | "
                 f"Contexto usado: {debug_payload.get('used_context', False)}"
             )
-            for row in debug_payload.get("chunks", []):
-                source = row.get("source", "")
+            rows = debug_payload.get("chunks", [])
+            if not rows:
+                st.caption("0 hits. Revisa query/threshold y chunking.")
+            for row in rows:
+                source = row.get("source") or row.get("source_label", "")
                 score = row.get("score", 0.0)
                 match_type = row.get("match_type", "")
                 snippet = row.get("snippet", "")
@@ -161,6 +171,9 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
             "kb_mode": kb_mode,
             "kb_text": kb_text,
             "kb_name": kb_name,
+            "kb_hash": kb_hash,
+            "kb_chunks": kb_chunks,
+            "kb_index": kb_index,
             "kb_updated_at": st.session_state.get("kb_updated_at", ""),
         }
         if kb_debug:
@@ -177,7 +190,7 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
             conversation_history=history,
             user_context=user_context,
         )
-        if kb_debug and hasattr(service, "get_last_kb_debug"):
+        if hasattr(service, "get_last_kb_debug"):
             st.session_state["chat_kb_debug"] = service.get_last_kb_debug()
 
         response_text = ""
@@ -191,7 +204,7 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
         st.session_state.messages.append(
             {"role": "assistant", "content": response_text}
         )
-        if kb_debug and hasattr(service, "get_last_kb_debug"):
+        if hasattr(service, "get_last_kb_debug"):
             st.session_state["chat_kb_debug"] = service.get_last_kb_debug()
     except Exception as e:
         st.error(f"Error en el servicio de chat: {e}")

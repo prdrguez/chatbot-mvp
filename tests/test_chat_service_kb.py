@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from chatbot_mvp.services.chat_service import ChatService
 
 
@@ -72,6 +74,29 @@ def test_kb_grounding_returns_strict_message_without_evidence():
     assert response.startswith("No encuentro eso en el documento cargado.")
 
 
+def test_kb_grounding_stream_strict_without_evidence_skips_provider():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 10 Integridad\n"
+        "Securion promueve la integridad en todas sus operaciones."
+    )
+
+    stream = service.send_message_stream(
+        message="Que dice sobre la NBA?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+    response = "".join(stream)
+
+    assert fake.call_count == 0
+    assert response.startswith("No encuentro eso en el documento cargado.")
+
+
 def test_kb_grounding_returns_strict_message_with_empty_kb():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
@@ -135,7 +160,7 @@ def test_kb_general_mode_with_evidence_adds_sources():
     assert "Fuentes:" in response
 
 
-def test_kb_mode_invalid_value_normalizes_to_general():
+def test_kb_mode_legacy_strict_label_normalizes_to_strict():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
@@ -153,8 +178,51 @@ def test_kb_mode_invalid_value_normalizes_to_general():
         },
     )
 
+    assert fake.call_count == 0
+    assert response.startswith("No encuentro eso en el documento cargado.")
+
+
+def test_kb_mode_unknown_value_falls_back_to_general():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 7 Integridad\n"
+        "Securion protege la integridad de la informacion."
+    )
+
+    response = service.send_message(
+        message="Que es la NBA?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "modo-raro",
+        },
+    )
+
     assert fake.call_count == 1
     assert "Fuentes:" not in response
+
+
+def test_kb_strict_with_real_securin_kb_adds_sources():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
+        encoding="utf-8"
+    )
+
+    response = service.send_message(
+        message="Cuales son los valores del Grupo Securion?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+
+    assert fake.call_count == 1
+    assert "Fuentes:" in response
 
 
 def test_kb_debug_available_after_no_hits():

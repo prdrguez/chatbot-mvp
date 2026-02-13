@@ -10,6 +10,18 @@ import streamlit as st
 
 KB_MODE_GENERAL = "general"
 KB_MODE_STRICT = "strict"
+_KB_MODE_STRICT_ALIASES = {
+    "strict",
+    "estricto",
+    "solo kb",
+    "solo kb (estricto)",
+    "solo_kb",
+    "solo-kb",
+}
+_KB_MODE_GENERAL_ALIASES = {
+    "general",
+    "modo general",
+}
 
 _ARTICLE_RE = re.compile(r"(?im)^\s*art[i\u00ed]culo\s+([0-9]+[a-zA-Z0-9-]*)\b")
 _CHAPTER_RE = re.compile(r"(?im)^\s*(cap[i\u00ed]tulo|secci[o\u00f3]n|section)\s+([^\n]{1,80})")
@@ -66,9 +78,9 @@ _STOPWORDS = {
 def normalize_kb_mode(mode: Any) -> str:
     if isinstance(mode, str):
         raw = mode.strip().lower()
-        if raw == KB_MODE_STRICT:
+        if raw in _KB_MODE_STRICT_ALIASES:
             return KB_MODE_STRICT
-        if raw == KB_MODE_GENERAL:
+        if raw in _KB_MODE_GENERAL_ALIASES:
             return KB_MODE_GENERAL
     return KB_MODE_GENERAL
 
@@ -283,6 +295,21 @@ def parse_policy(text: str) -> list[dict[str, Any]]:
     return _parse_policy_cached(_hash_text(text), text)
 
 
+def load_kb(text: str, name: str) -> dict[str, Any]:
+    normalized_text = str(text or "").strip()
+    kb_name = str(name or "KB cargada").strip() or "KB cargada"
+    kb_hash = _hash_text(normalized_text)
+    chunks = parse_policy(normalized_text)
+    index = build_bm25_index(chunks)
+    return {
+        "kb_name": kb_name,
+        "kb_hash": kb_hash,
+        "chunks": chunks,
+        "index": index,
+        "chunks_total": len(chunks),
+    }
+
+
 def _set_last_kb_debug(payload: dict[str, Any]) -> None:
     global _LAST_KB_DEBUG
     _LAST_KB_DEBUG = dict(payload)
@@ -454,6 +481,7 @@ def _collect_debug_candidates(
             {
                 "chunk_id": chunk.get("chunk_id", idx + 1),
                 "source_label": str(chunk.get("source_label", f"Chunk {idx + 1}")),
+                "source": str(chunk.get("source_label", f"Chunk {idx + 1}")),
                 "score": round(float(score), 4),
                 "overlap": int(overlap_count),
                 "match_type": match_type,
@@ -522,6 +550,7 @@ def retrieve(
                 **item,
                 "chunk_id": chunk_id,
                 "source_label": source_label,
+                "source": source_label,
                 "score": float(item.get("score", 0.0)),
                 "overlap": int(item.get("overlap", 0)),
                 "match_type": str(item.get("match_type", "")),
