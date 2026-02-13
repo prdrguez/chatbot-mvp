@@ -11,6 +11,9 @@ from rank_bm25 import BM25Okapi
 _ARTICLE_RE = re.compile(
     r"(?im)^\s*art[i\u00ed]culo\s+([0-9]+[a-zA-Z0-9-]*)\b"
 )
+_SECTION_RE = re.compile(
+    r"(?im)^\s*(\d+(?:\.\d+)*)\s*[.)]?\s+([^\n]{3,140})$"
+)
 _TOKEN_RE = re.compile(r"[a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]+", re.IGNORECASE)
 _STOPWORDS = {
     "a",
@@ -18,7 +21,12 @@ _STOPWORDS = {
     "ante",
     "con",
     "contra",
+    "cual",
+    "cuales",
+    "cu\u00e1l",
+    "cu\u00e1les",
     "de",
+    "dice",
     "del",
     "desde",
     "el",
@@ -39,8 +47,11 @@ _STOPWORDS = {
     "para",
     "por",
     "que",
+    "qu\u00e9",
     "se",
     "sin",
+    "sobre",
+    "son",
     "su",
     "sus",
     "te",
@@ -123,6 +134,41 @@ def _parse_policy_impl(text: str) -> list[dict[str, Any]]:
 
     matches = list(_ARTICLE_RE.finditer(clean_text))
     if not matches:
+        section_matches = [
+            match
+            for match in _SECTION_RE.finditer(clean_text)
+            if not match.group(1).startswith("0")
+        ]
+        if len(section_matches) >= 2:
+            chunks: list[dict[str, Any]] = []
+            for idx, match in enumerate(section_matches):
+                start = match.start()
+                end = (
+                    section_matches[idx + 1].start()
+                    if idx + 1 < len(section_matches)
+                    else len(clean_text)
+                )
+                section_text = clean_text[start:end].strip()
+                if not section_text:
+                    continue
+
+                section_id = match.group(1)
+                section_title = _normalize_whitespace(match.group(2))
+                source_label = f"Seccion {section_id}"
+                if section_title:
+                    source_label += f" - {section_title[:80]}"
+                chunks.append(
+                    {
+                        "chunk_id": len(chunks),
+                        "fragment_id": None,
+                        "article_id": None,
+                        "section_id": section_id,
+                        "source_label": source_label,
+                        "text": section_text,
+                    }
+                )
+            if chunks:
+                return chunks
         return _chunk_by_size(clean_text)
 
     chunks: list[dict[str, Any]] = []
@@ -214,7 +260,11 @@ def retrieve(
         chunk["score"] = score
         chunk["overlap"] = overlap_count
         results.append(chunk)
-        if len(results) >= max(1, k):
-            break
 
-    return results
+    results = sorted(
+        results,
+        key=lambda chunk: (int(chunk.get("overlap", 0)), float(chunk.get("score", 0.0))),
+        reverse=True,
+    )
+
+    return results[: max(1, k)]

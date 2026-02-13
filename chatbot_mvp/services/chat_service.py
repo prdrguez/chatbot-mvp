@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _KB_EMPTY_RESPONSE = (
-    "No encuentro eso en la politica cargada. Proba con otra pregunta o revisa el texto de la KB."
+    "No encuentro eso en la pol\u00edtica cargada. Si me dec\u00eds el nombre del apartado o me copi\u00e1s el fragmento, lo reviso."
 )
 _KB_EMPTY_SOURCES = "Sin evidencia recuperada"
 
@@ -359,12 +359,10 @@ class ChatService:
         Returns:
             The assistant's response
         """
-        # Update conversation context
-        self._update_context(conversation_history, user_context)
-
-        prepared_message, sources, no_evidence_response, retrieved_chunks = self._prepare_kb_prompt(
-            message, user_context
+        prepared_message, prepared_user_context, sources, no_evidence_response, retrieved_chunks = (
+            self._prepare_kb_prompt(message, user_context)
         )
+        self._update_context(conversation_history, prepared_user_context)
         if no_evidence_response:
             return no_evidence_response
 
@@ -374,7 +372,7 @@ class ChatService:
         response = self.processor.process_message(
             prepared_message,
             conversation_history,
-            user_context,
+            prepared_user_context,
         )
 
         if not sources:
@@ -390,12 +388,10 @@ class ChatService:
         """
         Send a message and get streaming response.
         """
-        # Update conversation context
-        self._update_context(conversation_history, user_context)
-
-        prepared_message, sources, no_evidence_response, retrieved_chunks = self._prepare_kb_prompt(
-            message, user_context
+        prepared_message, prepared_user_context, sources, no_evidence_response, retrieved_chunks = (
+            self._prepare_kb_prompt(message, user_context)
         )
+        self._update_context(conversation_history, prepared_user_context)
         if no_evidence_response:
             return self._single_chunk_stream(no_evidence_response)
 
@@ -406,7 +402,7 @@ class ChatService:
         stream = self.processor.process_message_stream(
             prepared_message,
             conversation_history,
-            user_context,
+            prepared_user_context,
         )
 
         if not sources:
@@ -415,22 +411,45 @@ class ChatService:
 
     def _prepare_kb_prompt(
         self, message: str, user_context: Optional[Dict]
-    ) -> tuple[str, list[str], Optional[str], list[Dict[str, Any]]]:
+    ) -> tuple[str, Dict[str, Any], list[str], Optional[str], list[Dict[str, Any]]]:
+        base_context: Dict[str, Any] = dict(user_context or {})
         kb_payload = self._extract_kb_payload(user_context)
         if not kb_payload:
-            return message, [], None, []
+            return message, base_context, [], None, []
 
         kb_text = kb_payload["kb_text"]
         kb_name = kb_payload["kb_name"]
+        if not kb_text.strip():
+            return (
+                message,
+                base_context,
+                [],
+                self._append_sources(_KB_EMPTY_RESPONSE, []),
+                [],
+            )
+
         chunks = parse_policy(kb_text)
         if not chunks:
-            return message, [], self._append_sources(_KB_EMPTY_RESPONSE, []), []
+            return (
+                message,
+                base_context,
+                [],
+                self._append_sources(_KB_EMPTY_RESPONSE, []),
+                [],
+            )
 
         index = build_bm25_index(chunks)
         retrieved_chunks = retrieve(message, index, chunks, k=4)
+        self._log_kb_retrieval(kb_name, retrieved_chunks)
         sources = self._extract_sources(retrieved_chunks)
-        if not retrieved_chunks:
-            return message, [], self._append_sources(_KB_EMPTY_RESPONSE, []), []
+        if not self._has_sufficient_evidence(retrieved_chunks):
+            return (
+                message,
+                base_context,
+                [],
+                self._append_sources(_KB_EMPTY_RESPONSE, []),
+                retrieved_chunks,
+            )
 
         context_block = self._build_kb_context_block(kb_name, retrieved_chunks)
         strict_instruction = (
@@ -443,16 +462,44 @@ class ChatService:
         prepared_message = (
             f"{context_block}\n\n{strict_instruction}\nPregunta del usuario: {message}"
         )
-        return prepared_message, sources, None, retrieved_chunks
+        prepared_context = dict(base_context)
+        prepared_context["kb_strict_mode"] = True
+        prepared_context["kb_context_block"] = context_block
+        prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
+        return prepared_message, prepared_context, sources, None, retrieved_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, str]]:
         if not user_context:
             return None
-        kb_text = str(user_context.get("kb_text", "")).strip()
-        if not kb_text:
+        has_kb_keys = "kb_text" in user_context or "kb_name" in user_context
+        if not has_kb_keys:
             return None
+        kb_text = str(user_context.get("kb_text", ""))
         kb_name = str(user_context.get("kb_name", "KB cargada")).strip() or "KB cargada"
         return {"kb_text": kb_text, "kb_name": kb_name}
+
+    def _has_sufficient_evidence(self, retrieved_chunks: List[Dict[str, Any]]) -> bool:
+        if not retrieved_chunks:
+            return False
+        top = retrieved_chunks[0]
+        top_overlap = int(top.get("overlap", 0))
+        top_score = float(top.get("score", 0.0))
+        if top_overlap >= 2:
+            return True
+        return top_score >= 1.5
+
+    def _log_kb_retrieval(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> None:
+        chunk_refs = []
+        for chunk in retrieved_chunks:
+            chunk_id = chunk.get("chunk_id", "?")
+            source = chunk.get("source_label", "")
+            chunk_refs.append(f"{chunk_id}:{source}")
+        logger.info(
+            "KB retrieval | kb=%s | retrieved=%s | refs=%s",
+            kb_name,
+            len(retrieved_chunks),
+            chunk_refs,
+        )
 
     def _build_kb_context_block(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> str:
         lines = [f"Base de Conocimiento: {kb_name}", "Evidencia recuperada:"]
