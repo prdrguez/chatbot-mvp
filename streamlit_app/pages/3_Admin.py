@@ -2,6 +2,7 @@ import streamlit as st
 import sys
 import pandas as pd
 import json
+import hashlib
 from datetime import datetime
 from pathlib import Path
 import plotly.express as px
@@ -61,6 +62,15 @@ def get_chart_config(fig):
     except:
         pass
     return fig
+
+
+def _decode_kb_bytes(raw_bytes: bytes) -> str:
+    for encoding in ("utf-8", "utf-8-sig", "latin-1"):
+        try:
+            return raw_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw_bytes.decode("utf-8", errors="replace")
 
 if check_password():
     st.title("Panel de Administración")
@@ -334,3 +344,64 @@ if check_password():
              """
              st.markdown(custom_css, unsafe_allow_html=True)
              st.toast("Estilos aplicados")
+
+        st.divider()
+        st.subheader("Base de Conocimiento")
+        st.caption("Subi una politica o protocolo en formato .txt o .md")
+
+        if "kb_mode" not in st.session_state:
+            st.session_state["kb_mode"] = "general"
+
+        kb_mode_label = st.radio(
+            "Modo de respuesta",
+            ["General", "Solo KB (estricto)"],
+            index=0 if st.session_state.get("kb_mode") == "general" else 1,
+            horizontal=True,
+            key="admin_kb_mode_radio",
+        )
+        selected_kb_mode = "strict" if kb_mode_label == "Solo KB (estricto)" else "general"
+        if selected_kb_mode != st.session_state.get("kb_mode"):
+            st.session_state["kb_mode"] = selected_kb_mode
+            st.toast(f"Modo KB actualizado: {kb_mode_label}", icon="✅")
+            st.rerun()
+
+        uploaded_kb = st.file_uploader(
+            "Archivo KB",
+            type=["txt", "md"],
+            accept_multiple_files=False,
+            key="admin_kb_uploader",
+            help="Solo se permite un archivo por vez.",
+        )
+
+        if uploaded_kb is not None:
+            raw_bytes = uploaded_kb.getvalue()
+            uploaded_text = _decode_kb_bytes(raw_bytes)
+            uploaded_text = uploaded_text.strip()
+            kb_signature = f"{uploaded_kb.name}:{hashlib.sha256(raw_bytes).hexdigest()}"
+            current_signature = st.session_state.get("kb_signature")
+            if uploaded_text and kb_signature != current_signature:
+                st.session_state["kb_text"] = uploaded_text
+                st.session_state["kb_name"] = uploaded_kb.name
+                st.session_state["kb_updated_at"] = datetime.now().isoformat(
+                    timespec="seconds"
+                )
+                st.session_state["kb_signature"] = kb_signature
+                st.toast(f"KB cargada: {uploaded_kb.name}", icon="✅")
+                st.rerun()
+            if not uploaded_text and kb_signature != current_signature:
+                st.toast("El archivo esta vacio o no se pudo leer.", icon="⚠️")
+
+        kb_name = st.session_state.get("kb_name", "")
+        kb_text = st.session_state.get("kb_text", "")
+        if kb_name and kb_text:
+            st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
+            if st.button("Limpiar KB", use_container_width=False):
+                st.session_state.pop("kb_text", None)
+                st.session_state.pop("kb_name", None)
+                st.session_state.pop("kb_updated_at", None)
+                st.session_state.pop("kb_signature", None)
+                st.session_state["admin_kb_uploader"] = None
+                st.toast("KB limpiada", icon="⚠️")
+                st.rerun()
+        else:
+            st.caption("KB cargada: ninguna.")
