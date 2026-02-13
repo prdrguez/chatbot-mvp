@@ -19,6 +19,13 @@ body,
     border-right: 1px solid #30363d;
 }
 
+/* Sidebar layout: content + footer without floating overlays */
+[data-testid="stSidebar"] > div:first-child {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
 [data-testid="stSidebar"] .stMarkdown h1,
 [data-testid="stSidebar"] .stMarkdown h2,
 [data-testid="stSidebar"] .stMarkdown h3 {
@@ -134,26 +141,28 @@ hr {
     font-weight: bold;
 }
 
-/* Fixed Sidebar Footer */
+/* Sidebar Footer */
 .sidebar-footer-container {
-    position: fixed;
-    bottom: 0;
-    width: 17rem;
-    /* Matches default Streamlit sidebar width */
+    width: 100%;
+    margin-top: auto;
     background-color: #161b22;
     padding: 10px 20px 20px 20px;
-    z-index: 100;
     border-top: 1px solid #30363d;
 }
 
-/* Hide sidebar fixed footer when sidebar is collapsed */
+/* Hide footer when sidebar is collapsed */
+body:has(button[data-testid="collapsedControl"]) .sidebar-footer-container,
+body:has([data-testid="stSidebarCollapsedControl"]) .sidebar-footer-container,
 [data-testid="stSidebar"][aria-expanded="false"] .sidebar-footer-container {
     display: none !important;
 }
 
-/* Adjust sidebar content to avoid overlap */
+/* Sidebar main content should grow and scroll normally */
 [data-testid="stSidebarNav"] {
-    padding-bottom: 180px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 0;
 }
 
 /* Hide Streamlit footer and menu for cleaner look */
