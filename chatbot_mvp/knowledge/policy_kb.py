@@ -8,11 +8,15 @@ from typing import Any
 
 import streamlit as st
 
+KB_MODE_GENERAL = "general"
+KB_MODE_STRICT = "strict"
+
 _ARTICLE_RE = re.compile(r"(?im)^\s*art[i\u00ed]culo\s+([0-9]+[a-zA-Z0-9-]*)\b")
 _CHAPTER_RE = re.compile(r"(?im)^\s*(cap[i\u00ed]tulo|secci[o\u00f3]n|section)\s+([^\n]{1,80})")
 _NUMBERED_HEADING_RE = re.compile(r"(?m)^\s*(\d+(?:\.\d+)*)\s*[.)-]?\s+([^\n]{3,120})$")
 _TOKEN_RE = re.compile(r"[a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+_LAST_KB_DEBUG: dict[str, Any] = {}
 _STOPWORDS = {
     "a",
     "al",
@@ -57,6 +61,16 @@ _STOPWORDS = {
     "una",
     "y",
 }
+
+
+def normalize_kb_mode(mode: Any) -> str:
+    if isinstance(mode, str):
+        raw = mode.strip().lower()
+        if raw == KB_MODE_STRICT:
+            return KB_MODE_STRICT
+        if raw == KB_MODE_GENERAL:
+            return KB_MODE_GENERAL
+    return KB_MODE_GENERAL
 
 
 def _hash_text(text: str) -> str:
@@ -269,6 +283,15 @@ def parse_policy(text: str) -> list[dict[str, Any]]:
     return _parse_policy_cached(_hash_text(text), text)
 
 
+def _set_last_kb_debug(payload: dict[str, Any]) -> None:
+    global _LAST_KB_DEBUG
+    _LAST_KB_DEBUG = dict(payload)
+
+
+def get_last_kb_debug() -> dict[str, Any]:
+    return dict(_LAST_KB_DEBUG)
+
+
 @st.cache_resource(show_spinner=False)
 def _build_index_cached(text_hash: str, corpus: tuple[str, ...]) -> dict[str, Any]:
     _ = text_hash
@@ -387,23 +410,108 @@ def _rank_by_sequence_match(
     ]
 
 
+def _collect_debug_candidates(
+    query: str,
+    query_tokens: list[str],
+    index: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    top_n: int = 4,
+) -> list[dict[str, Any]]:
+    if not chunks:
+        return []
+    query_norm = _normalize_for_match(query)
+    query_terms = sorted(set(query_tokens), key=len, reverse=True)
+    total_terms = max(1, len(query_terms))
+    candidates: list[dict[str, Any]] = []
+    for idx, chunk in enumerate(chunks):
+        text = str(chunk.get("text", ""))
+        norm_text = index["normalized_texts"][idx] if idx < len(index["normalized_texts"]) else ""
+        chunk_tokens = index["token_sets"][idx] if idx < len(index["token_sets"]) else set()
+        overlap_count = len(set(query_tokens).intersection(chunk_tokens))
+        substring_hits = 0
+        if norm_text and query_terms:
+            substring_hits = sum(1 for term in query_terms if term in norm_text)
+        seq_ratio = 0.0
+        if query_norm and norm_text:
+            seq_ratio = difflib.SequenceMatcher(None, query_norm, norm_text[:2500]).ratio()
+
+        if overlap_count > 0:
+            match_type = "token_overlap"
+        elif substring_hits > 0:
+            match_type = "substring"
+        elif seq_ratio > 0:
+            match_type = "sequence"
+        else:
+            match_type = "none"
+
+        score = max(
+            overlap_count / float(total_terms),
+            substring_hits / float(total_terms),
+            seq_ratio,
+        )
+        snippet = _normalize_spaces(text)[:200]
+        candidates.append(
+            {
+                "chunk_id": chunk.get("chunk_id", idx + 1),
+                "source_label": str(chunk.get("source_label", f"Chunk {idx + 1}")),
+                "score": round(float(score), 4),
+                "overlap": int(overlap_count),
+                "match_type": match_type,
+                "snippet": snippet,
+            }
+        )
+
+    candidates.sort(
+        key=lambda item: (float(item.get("score", 0.0)), int(item.get("overlap", 0))),
+        reverse=True,
+    )
+    return candidates[: max(1, top_n)]
+
+
 def retrieve(
     query: str,
     index: dict[str, Any],
     chunks: list[dict[str, Any]],
     k: int = 4,
+    kb_name: str = "",
 ) -> list[dict[str, Any]]:
     if not query or not chunks:
+        _set_last_kb_debug(
+            {
+                "query": str(query or ""),
+                "kb_name": kb_name,
+                "chunks_total": len(chunks or []),
+                "retrieved_count": 0,
+                "reason": "no_query_or_chunks",
+                "top_candidates": [],
+            }
+        )
         return []
     if not index:
+        _set_last_kb_debug(
+            {
+                "query": str(query),
+                "kb_name": kb_name,
+                "chunks_total": len(chunks),
+                "retrieved_count": 0,
+                "reason": "no_index",
+                "top_candidates": [],
+            }
+        )
         return []
 
     query_tokens = _tokenize(query)
+    debug_candidates = _collect_debug_candidates(query, query_tokens, index, chunks, top_n=4)
     ranked = _rank_by_token_overlap(query_tokens, index, chunks)
+    reason = "token_overlap"
     if not ranked:
         ranked = _rank_by_substring(query_tokens, index, chunks)
+        reason = "substring_fallback"
     if not ranked:
         ranked = _rank_by_sequence_match(query, index, chunks)
+        reason = "sequence_fallback"
+    if not ranked:
+        reason = "no_hits"
 
     results = []
     for item in ranked[: max(1, k)]:
@@ -416,6 +524,17 @@ def retrieve(
                 "source_label": source_label,
                 "score": float(item.get("score", 0.0)),
                 "overlap": int(item.get("overlap", 0)),
+                "match_type": str(item.get("match_type", "")),
             }
         )
+    _set_last_kb_debug(
+        {
+            "query": query,
+            "kb_name": kb_name,
+            "chunks_total": len(chunks),
+            "retrieved_count": len(results),
+            "reason": reason,
+            "top_candidates": debug_candidates,
+        }
+    )
     return results

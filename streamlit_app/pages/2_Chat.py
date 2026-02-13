@@ -1,10 +1,12 @@
 import html
 import sys
+import logging
 from pathlib import Path
 
 import streamlit as st
 
 from chatbot_mvp.config.settings import get_env_value, get_runtime_ai_provider
+from chatbot_mvp.knowledge import KB_MODE_GENERAL, KB_MODE_STRICT, normalize_kb_mode
 from chatbot_mvp.services.chat_service import create_chat_service
 from streamlit_app.components.sidebar import load_custom_css, sidebar_branding
 
@@ -15,6 +17,7 @@ if str(root_path) not in sys.path:
 
 st.set_page_config(page_title="Asistente IA - Chat", page_icon="💬", layout="wide")
 load_custom_css()
+logger = logging.getLogger(__name__)
 
 INITIAL_ASSISTANT_MESSAGE = (
     "Hola. Soy tu asistente de etica en IA. En que puedo ayudarte hoy?"
@@ -78,14 +81,16 @@ active_provider = get_runtime_ai_provider()
 st.caption(f"Proveedor activo: {provider_labels.get(active_provider, active_provider)}")
 kb_text = st.session_state.get("kb_text", "")
 kb_name = st.session_state.get("kb_name", "")
-kb_mode = st.session_state.get("kb_mode", "general")
+kb_mode = normalize_kb_mode(st.session_state.get("kb_mode", KB_MODE_GENERAL))
 kb_debug = bool(st.session_state.get("kb_debug", False))
-kb_mode_label = "Solo KB (estricto)" if kb_mode == "strict" else "General"
+kb_mode_label = "Solo KB (estricto)" if kb_mode == KB_MODE_STRICT else "General"
 if kb_text and kb_name:
     st.caption(f"KB activa: {kb_name}")
 else:
     st.caption("KB activa: ninguna")
 st.caption(f"Modo: {kb_mode_label}")
+if kb_name and not kb_text:
+    st.warning("Hay nombre de KB activo pero el contenido esta vacio.")
 
 if kb_debug:
     debug_payload = st.session_state.get("chat_kb_debug")
@@ -158,6 +163,13 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
             "kb_name": kb_name,
             "kb_updated_at": st.session_state.get("kb_updated_at", ""),
         }
+        if kb_debug:
+            logger.info(
+                "KB debug send | kb_name=%s | kb_text_len=%s | kb_mode=%s",
+                kb_name,
+                len(kb_text or ""),
+                kb_mode,
+            )
 
         service = st.session_state.chat_service
         stream = service.send_message_stream(
@@ -165,6 +177,8 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
             conversation_history=history,
             user_context=user_context,
         )
+        if kb_debug and hasattr(service, "get_last_kb_debug"):
+            st.session_state["chat_kb_debug"] = service.get_last_kb_debug()
 
         response_text = ""
         for chunk in stream:

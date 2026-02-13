@@ -1,4 +1,11 @@
-from chatbot_mvp.knowledge.policy_kb import build_bm25_index, parse_policy, retrieve
+from chatbot_mvp.knowledge.policy_kb import (
+    KB_MODE_GENERAL,
+    KB_MODE_STRICT,
+    build_bm25_index,
+    normalize_kb_mode,
+    parse_policy,
+    retrieve,
+)
 
 
 def test_parse_policy_splits_by_articulo():
@@ -48,3 +55,9 @@ def test_policy_kb_retrieval_finds_securion_term():
     assert results
     assert "securion" in results[0]["text"].lower()
     assert float(results[0].get("score", 0.0)) > 0
+
+
+def test_normalize_kb_mode():
+    assert normalize_kb_mode(KB_MODE_GENERAL) == KB_MODE_GENERAL
+    assert normalize_kb_mode(KB_MODE_STRICT) == KB_MODE_STRICT
+    assert normalize_kb_mode("Solo KB (estricto)") == KB_MODE_GENERAL

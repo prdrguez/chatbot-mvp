@@ -14,6 +14,7 @@ if str(root_path) not in sys.path:
 
 from chatbot_mvp.services.submissions_store import read_submissions, summarize
 from chatbot_mvp.config.settings import get_admin_password, is_demo_mode, get_runtime_ai_provider
+from chatbot_mvp.knowledge import KB_MODE_GENERAL, KB_MODE_STRICT, normalize_kb_mode
 from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(page_title="Admin Panel", page_icon="📊", layout="wide")
@@ -350,21 +351,24 @@ if check_password():
         st.caption("Subi una politica o protocolo en formato .txt o .md")
 
         if "kb_mode" not in st.session_state:
-            st.session_state["kb_mode"] = "general"
+            st.session_state["kb_mode"] = KB_MODE_GENERAL
         if "kb_debug" not in st.session_state:
             st.session_state["kb_debug"] = False
 
-        kb_mode_label = st.radio(
+        st.session_state["kb_mode"] = normalize_kb_mode(st.session_state.get("kb_mode"))
+
+        kb_mode = st.radio(
             "Modo de respuesta",
-            ["General", "Solo KB (estricto)"],
-            index=0 if st.session_state.get("kb_mode") == "general" else 1,
+            [KB_MODE_GENERAL, KB_MODE_STRICT],
+            index=0 if st.session_state.get("kb_mode") == KB_MODE_GENERAL else 1,
+            format_func=lambda value: "Solo KB (estricto)" if value == KB_MODE_STRICT else "General",
             horizontal=True,
             key="admin_kb_mode_radio",
         )
-        selected_kb_mode = "strict" if kb_mode_label == "Solo KB (estricto)" else "general"
-        if selected_kb_mode != st.session_state.get("kb_mode"):
-            st.session_state["kb_mode"] = selected_kb_mode
-            st.toast(f"Modo KB actualizado: {kb_mode_label}", icon="✅")
+        if kb_mode != st.session_state.get("kb_mode"):
+            st.session_state["kb_mode"] = normalize_kb_mode(kb_mode)
+            mode_label = "Solo KB (estricto)" if kb_mode == KB_MODE_STRICT else "General"
+            st.toast(f"Modo KB actualizado: {mode_label}", icon="✅")
             st.rerun()
 
         kb_debug = st.checkbox(
@@ -417,6 +421,6 @@ if check_password():
         else:
             st.caption("KB cargada: ninguna.")
         kb_active_label = kb_name if kb_name else "ninguna"
-        kb_mode_caption = "Solo KB (estricto)" if st.session_state.get("kb_mode") == "strict" else "General"
+        kb_mode_caption = "Solo KB (estricto)" if st.session_state.get("kb_mode") == KB_MODE_STRICT else "General"
         st.caption(f"KB activa: {kb_active_label}")
         st.caption(f"Modo: {kb_mode_caption}")

@@ -133,3 +133,50 @@ def test_kb_general_mode_with_evidence_adds_sources():
 
     assert fake.call_count == 1
     assert "Fuentes:" in response
+
+
+def test_kb_mode_invalid_value_normalizes_to_general():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 7 Integridad\n"
+        "Securion protege la integridad de la informacion."
+    )
+
+    response = service.send_message(
+        message="Que es la NBA?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "Solo KB (estricto)",
+        },
+    )
+
+    assert fake.call_count == 1
+    assert "Fuentes:" not in response
+
+
+def test_kb_debug_available_after_no_hits():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 1 Integridad\n"
+        "Solo se habla de integridad y conducta."
+    )
+
+    _ = service.send_message(
+        message="Que es la NBA?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+
+    debug_payload = service.get_last_kb_debug()
+    assert debug_payload is not None
+    assert debug_payload.get("kb_name") == "securin.txt"
+    assert debug_payload.get("used_context") is False
+    assert debug_payload.get("chunks") is not None

@@ -15,7 +15,15 @@ from typing import Any, Dict, List, Optional, Protocol, Iterator
 from abc import ABC, abstractmethod
 
 from chatbot_mvp.config.settings import get_runtime_ai_provider
-from chatbot_mvp.knowledge.policy_kb import build_bm25_index, parse_policy, retrieve
+from chatbot_mvp.knowledge import (
+    KB_MODE_GENERAL,
+    KB_MODE_STRICT,
+    build_bm25_index,
+    get_last_kb_debug as get_policy_kb_debug,
+    normalize_kb_mode,
+    parse_policy,
+    retrieve,
+)
 from chatbot_mvp.services.openai_client import AIClientError
 
 # Configure logging
@@ -23,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _KB_EMPTY_RESPONSE = (
-    "No encuentro eso en el documento cargado. Proba con otras palabras o indicame el apartado/articulo."
+    "No encuentro eso en el documento cargado. Si me indicas el apartado/titulo o pegas el fragmento, lo reviso."
 )
 
 
@@ -417,7 +425,7 @@ class ChatService:
         if not kb_payload:
             self.last_kb_debug = {
                 "kb_name": "",
-                "kb_mode": "general",
+                "kb_mode": KB_MODE_GENERAL,
                 "retrieved_count": 0,
                 "used_context": False,
                 "reason": "kb_inactiva",
@@ -428,7 +436,7 @@ class ChatService:
         kb_text = kb_payload["kb_text"]
         kb_name = kb_payload["kb_name"]
         kb_mode = kb_payload["kb_mode"]
-        strict_mode = kb_mode == "strict"
+        strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
                 "kb_name": kb_name,
@@ -457,16 +465,19 @@ class ChatService:
             return message, base_context, [], None, []
 
         index = build_bm25_index(chunks)
-        retrieved_chunks = retrieve(message, index, chunks, k=4)
+        retrieved_chunks = retrieve(message, index, chunks, k=4, kb_name=kb_name)
         self._log_kb_retrieval(kb_name, retrieved_chunks)
-        debug_chunks = self._build_debug_chunks(retrieved_chunks)
+        policy_debug = get_policy_kb_debug()
+        debug_chunks = policy_debug.get("top_candidates", [])
         if not self._has_sufficient_evidence(retrieved_chunks):
             self.last_kb_debug = {
                 "kb_name": kb_name,
                 "kb_mode": kb_mode,
                 "retrieved_count": len(retrieved_chunks),
                 "used_context": False,
-                "reason": "sin_evidencia",
+                "reason": str(policy_debug.get("reason", "no_hits")),
+                "query": str(policy_debug.get("query", message)),
+                "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
                 "chunks": debug_chunks,
             }
             if strict_mode:
@@ -501,13 +512,15 @@ class ChatService:
         prepared_context["kb_sources"] = sources
         prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
         self.last_kb_debug = {
-            "kb_name": kb_name,
-            "kb_mode": kb_mode,
-            "retrieved_count": len(retrieved_chunks),
-            "used_context": True,
-            "reason": "contexto_inyectado",
-            "chunks": debug_chunks,
-        }
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+                "retrieved_count": len(retrieved_chunks),
+                "used_context": True,
+                "reason": str(policy_debug.get("reason", "contexto_inyectado")),
+                "query": str(policy_debug.get("query", message)),
+                "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "chunks": debug_chunks,
+            }
         return prepared_message, prepared_context, sources, None, retrieved_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, str]]:
@@ -518,8 +531,7 @@ class ChatService:
             return None
         kb_text = str(user_context.get("kb_text", ""))
         kb_name = str(user_context.get("kb_name", "KB cargada")).strip() or "KB cargada"
-        kb_mode = str(user_context.get("kb_mode", "general")).strip().lower()
-        kb_mode = "strict" if kb_mode == "strict" else "general"
+        kb_mode = normalize_kb_mode(user_context.get("kb_mode", KB_MODE_GENERAL))
         return {"kb_text": kb_text, "kb_name": kb_name, "kb_mode": kb_mode}
 
     def _prefix_chunk_sources(
@@ -563,22 +575,6 @@ class ChatService:
             len(retrieved_chunks),
             chunk_refs,
         )
-
-    def _build_debug_chunks(self, retrieved_chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        debug_rows: List[Dict[str, Any]] = []
-        for chunk in retrieved_chunks[:4]:
-            text = str(chunk.get("text", "")).strip()
-            snippet = re.sub(r"\s+", " ", text)[:200]
-            debug_rows.append(
-                {
-                    "chunk_id": chunk.get("chunk_id"),
-                    "source": str(chunk.get("source_label", "")),
-                    "score": round(float(chunk.get("score", 0.0)), 4),
-                    "match_type": str(chunk.get("match_type", "")),
-                    "snippet": snippet,
-                }
-            )
-        return debug_rows
 
     def _build_kb_context_block(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> str:
         lines = [f"Base de Conocimiento: {kb_name}", "Evidencia recuperada:"]
