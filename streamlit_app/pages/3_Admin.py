@@ -9,8 +9,10 @@ import plotly.express as px
 
 # Add project root
 root_path = Path(__file__).parent.parent.parent
-if str(root_path) not in sys.path:
-    sys.path.append(str(root_path))
+root_path_str = str(root_path)
+if root_path_str in sys.path:
+    sys.path.remove(root_path_str)
+sys.path.insert(0, root_path_str)
 
 from chatbot_mvp.services.submissions_store import read_submissions, summarize
 from chatbot_mvp.config.settings import get_admin_password, is_demo_mode, get_runtime_ai_provider
