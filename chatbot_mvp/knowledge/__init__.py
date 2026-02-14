@@ -1,15 +1,21 @@
-import hashlib
+﻿import hashlib
 from typing import Any, Optional
 
 from chatbot_mvp.knowledge import policy_kb as _policy_kb
 
 KB_MODE_GENERAL = _policy_kb.KB_MODE_GENERAL
 KB_MODE_STRICT = _policy_kb.KB_MODE_STRICT
+KB_DEFAULT_TOP_K = _policy_kb.KB_DEFAULT_TOP_K
+KB_DEFAULT_MIN_SCORE = _policy_kb.KB_DEFAULT_MIN_SCORE
+KB_DEFAULT_MAX_CONTEXT_CHARS = _policy_kb.KB_DEFAULT_MAX_CONTEXT_CHARS
 normalize_kb_mode = _policy_kb.normalize_kb_mode
 parse_policy = _policy_kb.parse_policy
 build_bm25_index = _policy_kb.build_bm25_index
+build_kb_index = _policy_kb.build_kb_index
 retrieve = _policy_kb.retrieve
+retrieve_evidence = _policy_kb.retrieve_evidence
 get_last_kb_debug = _policy_kb.get_last_kb_debug
+get_index_build_count = _policy_kb.get_index_build_count
 
 
 def load_kb(
@@ -45,13 +51,20 @@ def load_kb(
         "chunks_total": len(chunks),
     }
 
+
 __all__ = [
     "KB_MODE_GENERAL",
     "KB_MODE_STRICT",
+    "KB_DEFAULT_TOP_K",
+    "KB_DEFAULT_MIN_SCORE",
+    "KB_DEFAULT_MAX_CONTEXT_CHARS",
     "normalize_kb_mode",
     "load_kb",
     "parse_policy",
     "build_bm25_index",
+    "build_kb_index",
     "retrieve",
+    "retrieve_evidence",
     "get_last_kb_debug",
+    "get_index_build_count",
 ]

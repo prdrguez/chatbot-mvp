@@ -204,6 +204,29 @@ def test_kb_mode_unknown_value_falls_back_to_general():
     assert "Fuentes:" not in response
 
 
+def test_kb_strict_high_threshold_skips_provider():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 2 Valores fundamentales\\n"
+        "Securion prioriza transparencia, responsabilidad y calidad."
+    )
+
+    response = service.send_message(
+        message="Cuales son los valores de Securion?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+            "kb_min_score": 50.0,
+        },
+    )
+
+    assert fake.call_count == 0
+    assert response.startswith("No encuentro eso en el documento cargado.")
+
+
 def test_kb_strict_with_real_securin_kb_adds_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
@@ -248,3 +271,6 @@ def test_kb_debug_available_after_no_hits():
     assert debug_payload.get("kb_name") == "securin.txt"
     assert debug_payload.get("used_context") is False
     assert debug_payload.get("chunks") is not None
+    if debug_payload.get("chunks"):
+        first = debug_payload["chunks"][0]
+        assert "preview" in first or "snippet" in first

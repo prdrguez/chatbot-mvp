@@ -6,7 +6,14 @@ from pathlib import Path
 import streamlit as st
 
 from chatbot_mvp.config.settings import get_env_value, get_runtime_ai_provider
-from chatbot_mvp.knowledge import KB_MODE_GENERAL, KB_MODE_STRICT, normalize_kb_mode
+from chatbot_mvp.knowledge import (
+    KB_DEFAULT_MAX_CONTEXT_CHARS,
+    KB_DEFAULT_MIN_SCORE,
+    KB_DEFAULT_TOP_K,
+    KB_MODE_GENERAL,
+    KB_MODE_STRICT,
+    normalize_kb_mode,
+)
 from chatbot_mvp.services.chat_service import create_chat_service
 from streamlit_app.components.sidebar import load_custom_css, sidebar_branding
 
@@ -86,12 +93,20 @@ kb_debug = bool(st.session_state.get("kb_debug", False))
 kb_hash = st.session_state.get("kb_hash", "")
 kb_chunks = st.session_state.get("kb_chunks", [])
 kb_index = st.session_state.get("kb_index", {})
+kb_top_k = int(st.session_state.get("kb_top_k", KB_DEFAULT_TOP_K))
+kb_min_score = float(st.session_state.get("kb_min_score", KB_DEFAULT_MIN_SCORE))
+kb_max_context_chars = int(
+    st.session_state.get("kb_max_context_chars", KB_DEFAULT_MAX_CONTEXT_CHARS)
+)
 kb_mode_label = "Solo KB (estricto)" if kb_mode == KB_MODE_STRICT else "General"
 if kb_text and kb_name:
     st.caption(f"KB activa: {kb_name}")
 else:
     st.caption("KB activa: ninguna")
 st.caption(f"Modo: {kb_mode_label}")
+st.caption(
+    f"Retrieval: top_k={kb_top_k}, min_score={kb_min_score:.2f}, max_chars={kb_max_context_chars}"
+)
 if kb_name and not kb_text:
     st.warning("Hay nombre de KB activo pero el contenido esta vacio.")
 
@@ -111,16 +126,22 @@ if kb_debug:
                 f"Chunks recuperados: {debug_payload.get('retrieved_count', 0)} | "
                 f"Contexto usado: {debug_payload.get('used_context', False)}"
             )
+            st.caption(
+                f"top_k={debug_payload.get('top_k', kb_top_k)} | "
+                f"min_score={debug_payload.get('min_score', kb_min_score)} | "
+                f"index_build_count={debug_payload.get('index_build_count', 0)}"
+            )
             rows = debug_payload.get("chunks", [])
             if not rows:
                 st.caption("0 hits. Revisa query/threshold y chunking.")
             for row in rows:
                 source = row.get("source") or row.get("source_label", "")
                 score = row.get("score", 0.0)
+                section = row.get("section", "")
                 match_type = row.get("match_type", "")
-                snippet = row.get("snippet", "")
+                preview = row.get("preview") or row.get("snippet", "")
                 st.caption(
-                    f"{source} | score={score} | match={match_type} | snippet={snippet}"
+                    f"{source} | section={section} | score={score} | match={match_type} | preview={preview}"
                 )
 
 if active_provider == "gemini":
@@ -175,6 +196,9 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
             "kb_chunks": kb_chunks,
             "kb_index": kb_index,
             "kb_updated_at": st.session_state.get("kb_updated_at", ""),
+            "kb_top_k": kb_top_k,
+            "kb_min_score": kb_min_score,
+            "kb_max_context_chars": kb_max_context_chars,
         }
         if kb_debug:
             logger.info(

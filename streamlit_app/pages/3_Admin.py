@@ -17,8 +17,12 @@ sys.path.insert(0, root_path_str)
 from chatbot_mvp.services.submissions_store import read_submissions, summarize
 from chatbot_mvp.config.settings import get_admin_password, is_demo_mode, get_runtime_ai_provider
 from chatbot_mvp.knowledge import (
+    KB_DEFAULT_MAX_CONTEXT_CHARS,
+    KB_DEFAULT_MIN_SCORE,
+    KB_DEFAULT_TOP_K,
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
+    get_index_build_count,
     load_kb,
     normalize_kb_mode,
 )
@@ -372,6 +376,12 @@ if check_password():
             st.session_state["kb_mode"] = KB_MODE_GENERAL
         if "kb_debug" not in st.session_state:
             st.session_state["kb_debug"] = False
+        if "kb_top_k" not in st.session_state:
+            st.session_state["kb_top_k"] = KB_DEFAULT_TOP_K
+        if "kb_min_score" not in st.session_state:
+            st.session_state["kb_min_score"] = KB_DEFAULT_MIN_SCORE
+        if "kb_max_context_chars" not in st.session_state:
+            st.session_state["kb_max_context_chars"] = KB_DEFAULT_MAX_CONTEXT_CHARS
 
         st.session_state["kb_mode"] = normalize_kb_mode(st.session_state.get("kb_mode"))
 
@@ -397,6 +407,40 @@ if check_password():
         if kb_debug != bool(st.session_state.get("kb_debug", False)):
             st.session_state["kb_debug"] = kb_debug
             st.rerun()
+
+        col_r1, col_r2, col_r3 = st.columns(3)
+        kb_top_k = col_r1.number_input(
+            "Top K",
+            min_value=1,
+            max_value=8,
+            value=int(st.session_state.get("kb_top_k", KB_DEFAULT_TOP_K)),
+            step=1,
+            help="Cantidad maxima de evidencias recuperadas por pregunta.",
+        )
+        kb_min_score = col_r2.number_input(
+            "Score minimo",
+            min_value=0.0,
+            max_value=10.0,
+            value=float(st.session_state.get("kb_min_score", KB_DEFAULT_MIN_SCORE)),
+            step=0.05,
+            format="%.2f",
+            help="Umbral para considerar una evidencia como valida.",
+        )
+        kb_max_context_chars = col_r3.number_input(
+            "Max chars contexto",
+            min_value=300,
+            max_value=12000,
+            value=int(
+                st.session_state.get(
+                    "kb_max_context_chars", KB_DEFAULT_MAX_CONTEXT_CHARS
+                )
+            ),
+            step=100,
+            help="Limite de caracteres inyectados al prompt desde la KB.",
+        )
+        st.session_state["kb_top_k"] = int(kb_top_k)
+        st.session_state["kb_min_score"] = float(kb_min_score)
+        st.session_state["kb_max_context_chars"] = int(kb_max_context_chars)
 
         uploaded_kb = st.file_uploader(
             "Archivo KB",
@@ -450,6 +494,7 @@ if check_password():
                     _apply_kb_runtime_bundle(kb_bundle)
 
             st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
+            st.caption(f"Index builds (cache miss): {get_index_build_count()}")
             if st.button("Limpiar KB", use_container_width=False):
                 st.session_state.pop("kb_text", None)
                 st.session_state.pop("kb_name", None)
