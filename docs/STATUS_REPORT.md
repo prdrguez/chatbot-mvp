@@ -8,6 +8,7 @@ Fecha de actualizacion: 2026-02-14
 - Chat usa streaming y soporte de providers Gemini/Groq con fallback a Demo.
 - Admin permite cambiar provider (Gemini/Groq), cargar KB y activar debug de retrieval.
 - Evaluacion guarda resultados locales en `data/submissions.jsonl`.
+- Strict grounding mejorado para consultas asociativas sobre menores/trabajo infantil.
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).
@@ -22,9 +23,9 @@ Fecha de actualizacion: 2026-02-14
 - Base de Conocimiento:
   - Upload de `.txt`/`.md` (un archivo por vez).
   - Parse por articulos/secciones + chunking por tamano.
-  - Retrieval lexical con overlap/substrings/sequence fallback.
+  - Retrieval BM25-like liviano con query expansion rule-based para intents de menores.
   - Modos `General` y `Solo KB (estricto)`.
-  - `Debug KB` en Chat (expander con query, razon, chunks y scores).
+  - `Debug KB` en Chat (query original/expandida, intent/tags, chunks y scores).
 - Dashboard Admin con KPIs + export CSV/JSON + borrado de submissions en modo mantenimiento.
 
 ## Que NO funciona hoy
@@ -106,7 +107,7 @@ python -m streamlit run streamlit_app/Inicio.py --server.port 8502
 
 ## Tests (estado actual)
 - Comando ejecutado: `python -m pytest`
-- Resultado: `22 passed, 1 skipped`
+- Resultado: `26 passed, 1 skipped`
 - Test skippeado: `tests/test_auth_state.py` (legacy Reflex)
 
 ## Backlog

@@ -27,6 +27,29 @@ Notas tecnicas vigentes del repo.
 - Modo `general` y `strict`.
 - Debug opcional de retrieval visible en Chat.
 
+### Query expansion (strict grounding)
+- Archivo: `chatbot_mvp/knowledge/policy_kb.py`.
+- Se aplica expansion rule-based antes del scoring:
+  - Detecta patrones de edad (`\\b(\\d{1,2})\\s*a(ñ|n)os\\b`).
+  - Detecta terminos de menores (`menor`, `niño/nino`, `nene`, `adolescente`, `hijo/hija`).
+  - Si hay contexto de menor o edad <= 15, agrega terminos:
+    - `trabajo infantil`
+    - `esclavitud moderna`
+    - `trabajo forzado`
+    - `menores`
+    - `edad minima`
+    - `derechos humanos`
+- Objetivo: recuperar la seccion correcta (ej. Seccion 12) en preguntas asociativas.
+- Limite: no usa embeddings ni inferencia semantica pesada; solo reglas + BM25-like.
+
+### Heuristica de evidencia suficiente (modo strict)
+- Archivo: `chatbot_mvp/services/chat_service.py`.
+- En `Solo KB (estricto)`:
+  - Sin evidencia: responde fijo `No encuentro eso...` y no llama provider.
+  - Con intent `child_labor`, exige anclajes en evidencia (`trabajo infantil`, `esclavitud moderna`, `trabajo forzado`, `servidumbre`).
+  - Si la consulta pide edad minima exacta y la evidencia no trae edad explicita (numero en contexto de edad), se trata como evidencia insuficiente.
+- Resultado buscado: evitar mezclar secciones tangenciales cuando la pregunta no esta respondida de forma directa.
+
 ## Persistencia de datos
 - Evaluaciones: `data/submissions.jsonl`.
 - Override provider: `chatbot_mvp/data/app_settings.json`.
