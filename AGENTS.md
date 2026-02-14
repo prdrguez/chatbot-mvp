@@ -41,6 +41,16 @@ Instrucciones persistentes para este repo (Streamlit + Python). Seguir estas reg
 - El body del PR debe ser texto plano.
 - No usar backticks ni bloques de codigo en el body del PR.
 
+## Template de prompt minimo
+PROMPT BASE
+- <reglas de trabajo>
+
+SCOPE
+- <archivos permitidos>
+
+ACEPTACION
+- <criterios medibles>
+
 ## Secrets / Keys
 - Nunca commitear keys ni tokens.
 - Usar `.env` local (ignorado) o variables de entorno.
