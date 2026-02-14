@@ -1,49 +1,61 @@
-# Workflow Codex + Git
+﻿# Workflow Codex + Git
 
 ## Regla de oro
-- Scope mínimo, sin refactors masivos.
-- Criterios de aceptación claros y verificables.
-- Salida concreta: archivos tocados, cómo verificar, y link del PR.
+- Scope minimo, sin refactors masivos.
+- Criterios de aceptacion claros y verificables.
+- Salida concreta: archivos tocados, como verificar y link del PR.
 
-## Cómo arrancar una tarea
-1) Pegar contexto:
+## Inicio de cada tarea (PowerShell)
+1. Ejecutar:
    - `git status -sb`
    - `git diff --name-only`
-   - `git log -5 --oneline`
-2) Confirmar branch actual.
+   - `git log -10 --oneline`
+2. Confirmar branch actual.
+3. Confirmar archivos permitidos.
 
-## Cómo debe trabajar Codex
-- Crear un branch por tarea.
-- Commits cortos con mensaje breve.
-- Push y PR a `main`.
-- El usuario aprueba solo cuando Codex lo pide.
+## Como trabaja Codex en este repo
+- Crea branch por tarea.
+- Aplica cambios dentro del scope.
+- Ejecuta verificaciones pedidas.
+- Hace commit(s) cortos.
+- Hace push del branch.
+- Abre PR a `main`.
+- Usuario solo aprueba (no tiene que ejecutar pasos tecnicos).
+
+## Commits y PR
+- Commits: mensaje muy corto, una linea.
+- PR body: texto plano.
+- No usar backticks ni bloques de codigo en el body del PR.
+- Incluir checklist de verificacion en el PR.
+
+## Comandos y snippets
+- Usar siempre PowerShell en cualquier "Como verificar" o bloque de comandos.
 
 ## Template de prompt (copiar/pegar)
-```
 PROMPT BASE
 - Trabajamos paso a paso y sin refactors masivos.
-- Respetá estrictamente el scope: SOLO tocá los archivos permitidos.
-- No agregues cambios "de mas". Si ves algo mejorable fuera de scope, anotarlo en docs/STATUS_REPORT.md como "Backlog" y no lo implementes.
-- Al finalizar: dejá git status limpio, hacé commit(s) con mensaje corto, push y abrí PR a main.
-- Entregá salida concreta: (1) archivos tocados, (2) comandos para verificar, (3) link del PR.
+- Respetar estrictamente el scope: SOLO tocar archivos permitidos.
+- No agregar cambios de mas. Si aparece mejora fuera de scope, anotar en docs/STATUS_REPORT.md como Backlog y no implementarla.
+- Al finalizar: dejar git status limpio, hacer commit(s) cortos, push y abrir PR a main.
+- Entregar salida concreta: (1) archivos tocados, (2) comandos para verificar en PowerShell, (3) link del PR.
+- IMPORTANTE: body del PR en texto plano, sin backticks ni bloques.
 
 SCOPE
-- Archivos permitidos: <lista>
+- Archivos permitidos: <lista exacta>
 
-ACEPTACIÓN
-- <criterios claros>
+ACEPTACION
+- <criterios claros y medibles>
 
-ARCHIVOS PERMITIDOS
-- <lista exacta>
-```
+PASOS (Codex)
+1) Confirmar estado del repo.
+2) Implementar cambios en scope.
+3) Verificar.
+4) Commit + push + PR.
+5) Reportar salida final.
 
-## Política de limpieza
-- Si el working tree está sucio: decidir entre stash/commit/revert.
-- Documentar la decision en `docs/STATUS_REPORT.md` antes de ejecutar cambios.
-
-## Cómo retomar después
-1) Leer `docs/STATUS_REPORT.md`.
-2) Revisar PRs abiertos en GitHub.
-3) Confirmar branch actual y últimos commits:
+## Como retomar una tarea
+1. Leer `docs/STATUS_REPORT.md`.
+2. Revisar PRs abiertos.
+3. Confirmar estado local:
    - `git status -sb`
-   - `git log -5 --oneline`
+   - `git log -10 --oneline`

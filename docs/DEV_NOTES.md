@@ -1,63 +1,46 @@
-# Dev Notes
+﻿# DEV NOTES
 
-Nota: este repo corre en Streamlit. Las secciones marcadas como "Legacy (Reflex)"
-son solo referencia historica y no aplican al runtime actual.
+Notas tecnicas vigentes del repo.
 
-## Streamlit (actual)
+## Estado actual (runtime)
+- Stack productivo: Python + Streamlit.
+- Entry point: `streamlit_app/Inicio.py`.
+- UI multipage en `streamlit_app/`.
+- Logica de negocio en `chatbot_mvp/`.
 
-- UI en `streamlit_app/` (Inicio + pages).
-- Logica en `chatbot_mvp/services` y `chatbot_mvp/data`.
-- Estilos globales en `streamlit_app/assets/style.css`.
+## Paginas activas
+- `streamlit_app/Inicio.py`
+- `streamlit_app/pages/1_Evaluacion.py`
+- `streamlit_app/pages/2_Chat.py`
+- `streamlit_app/pages/3_Admin.py`
 
-## Legacy (Reflex) - Convenciones y estilo
+## Providers
+- Default: Gemini.
+- Selector en Admin: solo `gemini` y `groq`.
+- Persistencia de override: `chatbot_mvp/data/app_settings.json`.
+- `demo` existe y se usa como fallback.
+- `openai` existe en config/env pero no esta conectado end-to-end en UI actual.
 
-- Evitar logica en componentes; delegar a `state/` y `services/`.
-- Reutilizar tokens en `chatbot_mvp/ui/tokens.py` y `ui/evaluacion_tokens.py`.
-- `components/layout.py` aplica overrides globales via `ThemeState`.
-- Preferir `rx.cond` para render condicional con `rx.Var`.
+## Base de Conocimiento (KB)
+- Carga desde Admin (`.txt`, `.md`, un archivo por vez).
+- Runtime en `st.session_state` (`kb_text`, `kb_name`, `kb_chunks`, `kb_index`, etc.).
+- Modo `general` y `strict`.
+- Debug opcional de retrieval visible en Chat.
 
-## Legacy (Reflex) - Reflex Vars: como evitar errores tipicos
+## Persistencia de datos
+- Evaluaciones: `data/submissions.jsonl`.
+- Override provider: `chatbot_mvp/data/app_settings.json`.
 
-- Mal:
-  ```python
-  if AdminState.has_data:
-      ...
-  ```
-- Bien:
-  ```python
-  rx.cond(AdminState.has_data, on_true, on_false)
-  ```
+## Testing
+- Suite principal: `python -m pytest`.
+- Existe un test legacy de Reflex marcado como skipped (`tests/test_auth_state.py`).
 
-Reflex no permite evaluar `rx.Var` en un `if` de Python porque no es un bool real.
+## Legacy (Reflex)
+El runtime actual no usa Reflex.
 
-## Legacy (Reflex) - Como agregar un KPI nuevo (guia corta)
+Restos legacy que aun existen en repo:
+- `chatbot_mvp/components/` (archivos con dependencias historicas de Reflex)
+- `.states/` (cache/artefactos legacy)
+- `tests/test_auth_state.py` (skippeado)
 
-1) Contar el dato en `services/submissions_store.summarize`.
-   - Agrega el bucket en `breakdowns` o una seccion nueva en `summary`.
-
-2) Exponerlo en `state/admin_state.py`.
-   - Crear `@rx.var` para `*_top_items`, `*_extra_count` y `*_chart`.
-   - Reutilizar `_dict_to_items_sorted` y `_items_to_chart`.
-
-3) Renderizar la card en `pages/admin.py`.
-   - Agrega `_kpi_card("Nuevo KPI", ...)` al listado `cards`.
-   - Mantener `height="100%"` y `min_height` en la card.
-
-Ejemplo (estado):
-```python
-@rx.var
-def nuevo_kpi_chart(self) -> list[dict[str, Any]]:
-    data = self._breakdown("nuevo_kpi")
-    items = _dict_to_items_sorted(data, limit=5)
-    return _items_to_chart(items)
-```
-
-Ejemplo (page):
-```python
-_kpi_card(
-    "Nuevo KPI",
-    AdminState.nuevo_kpi_top_items,
-    AdminState.nuevo_kpi_extra_count,
-    chart_data=AdminState.nuevo_kpi_chart,
-)
-```
+Mantener estas referencias solo como contexto historico hasta su limpieza definitiva.
