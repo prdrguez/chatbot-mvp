@@ -1,3 +1,4 @@
+import uuid
 from pathlib import Path
 
 from chatbot_mvp.knowledge import load_kb as public_load_kb
@@ -5,9 +6,12 @@ from chatbot_mvp.knowledge.policy_kb import (
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
     build_bm25_index,
+    build_kb_index,
+    get_index_build_count,
     normalize_kb_mode,
     parse_policy,
     retrieve,
+    retrieve_evidence,
 )
 
 
@@ -77,6 +81,44 @@ def test_retrieve_securion_with_real_kb():
 
     assert results
     assert any("securion" in str(item.get("text", "")).lower() for item in results)
+
+
+def test_retrieve_evidence_uses_exact_bonus():
+    text = (
+        "ARTICULO 1 Valores\\n"
+        "Los valores del Grupo Securion son transparencia y eficacia.\\n\\n"
+        "ARTICULO 2 Regalos\\n"
+        "Los regalos deben declararse y no comprometer decisiones."
+    )
+    bundle = build_kb_index(text=text, kb_name="securin.txt", kb_updated_at="v-exact")
+
+    results = retrieve_evidence(
+        query="valores del grupo securion",
+        index=bundle["index"],
+        top_k=2,
+        min_score=0.0,
+        kb_name="securin.txt",
+    )
+
+    assert results
+    assert "valores" in results[0]["text"].lower()
+    assert results[0]["match_type"] in {"bm25", "bm25_exact"}
+    assert float(results[0].get("score", 0.0)) > 0
+
+
+def test_build_kb_index_cached_by_hash_and_updated_at():
+    marker = uuid.uuid4().hex
+    text = "ARTICULO 1 Integridad\\nLa integridad es obligatoria."
+
+    before = get_index_build_count()
+    bundle_a = build_kb_index(text=text, kb_name="cache.txt", kb_updated_at=marker)
+    mid = get_index_build_count()
+    bundle_b = build_kb_index(text=text, kb_name="cache.txt", kb_updated_at=marker)
+    after = get_index_build_count()
+
+    assert bundle_a["kb_hash"] == bundle_b["kb_hash"]
+    assert mid >= before + 1
+    assert after == mid
 
 
 def test_public_load_kb_accepts_kb_updated_at_kwarg():

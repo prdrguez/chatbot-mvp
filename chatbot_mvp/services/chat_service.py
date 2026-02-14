@@ -8,7 +8,6 @@ This module separates chat logic from UI state, implementing:
 - Context management
 """
 
-import hashlib
 import time
 import logging
 import re
@@ -17,13 +16,15 @@ from abc import ABC, abstractmethod
 
 from chatbot_mvp.config.settings import get_runtime_ai_provider
 from chatbot_mvp.knowledge import (
+    KB_DEFAULT_MAX_CONTEXT_CHARS,
+    KB_DEFAULT_MIN_SCORE,
+    KB_DEFAULT_TOP_K,
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
-    build_bm25_index,
+    build_kb_index,
     get_last_kb_debug as get_policy_kb_debug,
     normalize_kb_mode,
-    parse_policy,
-    retrieve,
+    retrieve_evidence,
 )
 from chatbot_mvp.services.openai_client import AIClientError
 
@@ -439,8 +440,9 @@ class ChatService:
         kb_name = kb_payload["kb_name"]
         kb_mode = kb_payload["kb_mode"]
         kb_hash = kb_payload["kb_hash"]
-        kb_chunks = kb_payload["kb_chunks"]
-        kb_index = kb_payload["kb_index"]
+        kb_top_k = kb_payload["kb_top_k"]
+        kb_min_score = kb_payload["kb_min_score"]
+        kb_max_context_chars = kb_payload["kb_max_context_chars"]
         strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
@@ -456,12 +458,10 @@ class ChatService:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, []
             return message, base_context, [], None, []
 
-        expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
-        runtime_chunks_valid = bool(kb_chunks) and (not kb_hash or kb_hash == expected_hash)
-        if kb_chunks and not runtime_chunks_valid:
-            logger.info("KB chunks hash mismatch detected. Rebuilding chunks from current kb_text.")
-        base_chunks = kb_chunks if runtime_chunks_valid else parse_policy(kb_text)
-        chunks = self._prefix_chunk_sources(kb_name, base_chunks)
+        kb_bundle = self._resolve_kb_bundle(kb_payload)
+        chunks = kb_bundle.get("chunks", [])
+        index = kb_bundle.get("index", {})
+        kb_hash = str(kb_bundle.get("kb_hash", kb_hash))
         if not chunks:
             self.last_kb_debug = {
                 "kb_name": kb_name,
@@ -476,12 +476,17 @@ class ChatService:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, []
             return message, base_context, [], None, []
 
-        index = self._resolve_kb_index(kb_text, kb_hash, kb_index, chunks)
-        retrieved_chunks = retrieve(message, index, chunks, k=4, kb_name=kb_name)
+        retrieved_chunks = retrieve_evidence(
+            query=message,
+            index=index,
+            top_k=kb_top_k,
+            min_score=kb_min_score,
+            kb_name=kb_name,
+        )
         self._log_kb_retrieval(kb_name, retrieved_chunks)
         policy_debug = get_policy_kb_debug()
         debug_chunks = self._normalize_debug_chunks(policy_debug.get("top_candidates", []))
-        if not self._has_sufficient_evidence(retrieved_chunks):
+        if not retrieved_chunks:
             self.last_kb_debug = {
                 "kb_name": kb_name,
                 "kb_mode": kb_mode,
@@ -490,14 +495,21 @@ class ChatService:
                 "reason": str(policy_debug.get("reason", "no_hits")),
                 "query": str(policy_debug.get("query", message)),
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "top_k": kb_top_k,
+                "min_score": kb_min_score,
+                "max_context_chars": kb_max_context_chars,
+                "index_build_count": int(policy_debug.get("index_build_count", 0)),
                 "chunks": debug_chunks,
             }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, retrieved_chunks
             return message, base_context, [], None, retrieved_chunks
 
-        sources = self._extract_sources(retrieved_chunks)
-        context_block = self._build_kb_context_block(kb_name, retrieved_chunks)
+        context_chunks, context_truncated = self._select_context_chunks(
+            retrieved_chunks, kb_max_context_chars
+        )
+        sources = self._extract_sources(context_chunks, max_sources=kb_top_k)
+        context_block = self._build_kb_context_block(kb_name, context_chunks)
         if strict_mode:
             guidance = (
                 "Instrucciones obligatorias:\n"
@@ -524,17 +536,27 @@ class ChatService:
         prepared_context["kb_sources"] = sources
         prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
         prepared_context["kb_hash"] = kb_hash
+        prepared_context["kb_top_k"] = kb_top_k
+        prepared_context["kb_min_score"] = kb_min_score
+        prepared_context["kb_max_context_chars"] = kb_max_context_chars
+        prepared_context["kb_context_truncated"] = context_truncated
+        prepared_context["kb_evidence_count"] = len(context_chunks)
         self.last_kb_debug = {
             "kb_name": kb_name,
             "kb_mode": kb_mode,
-            "retrieved_count": len(retrieved_chunks),
+            "retrieved_count": len(context_chunks),
             "used_context": True,
             "reason": str(policy_debug.get("reason", "contexto_inyectado")),
             "query": str(policy_debug.get("query", message)),
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+            "top_k": kb_top_k,
+            "min_score": kb_min_score,
+            "max_context_chars": kb_max_context_chars,
+            "context_truncated": context_truncated,
+            "index_build_count": int(policy_debug.get("index_build_count", 0)),
             "chunks": debug_chunks,
         }
-        return prepared_message, prepared_context, sources, None, retrieved_chunks
+        return prepared_message, prepared_context, sources, None, context_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, Any]]:
         if not user_context:
@@ -548,43 +570,88 @@ class ChatService:
         kb_hash = str(user_context.get("kb_hash", "")).strip()
         kb_chunks = user_context.get("kb_chunks")
         kb_index = user_context.get("kb_index")
+        kb_updated_at = str(user_context.get("kb_updated_at", "")).strip()
+        kb_top_k = self._coerce_positive_int(
+            user_context.get("kb_top_k"),
+            KB_DEFAULT_TOP_K,
+            minimum=1,
+            maximum=8,
+        )
+        kb_min_score = self._coerce_positive_float(
+            user_context.get("kb_min_score"),
+            KB_DEFAULT_MIN_SCORE,
+            minimum=0.0,
+            maximum=10.0,
+        )
+        kb_max_context_chars = self._coerce_positive_int(
+            user_context.get("kb_max_context_chars"),
+            KB_DEFAULT_MAX_CONTEXT_CHARS,
+            minimum=300,
+            maximum=12000,
+        )
         return {
             "kb_text": kb_text,
             "kb_name": kb_name,
             "kb_mode": kb_mode,
             "kb_hash": kb_hash,
+            "kb_updated_at": kb_updated_at,
+            "kb_top_k": kb_top_k,
+            "kb_min_score": kb_min_score,
+            "kb_max_context_chars": kb_max_context_chars,
             "kb_chunks": kb_chunks if isinstance(kb_chunks, list) else [],
             "kb_index": kb_index if isinstance(kb_index, dict) else {},
         }
 
-    def _resolve_kb_index(
-        self,
-        kb_text: str,
-        kb_hash: str,
-        runtime_index: Dict[str, Any],
-        chunks: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        if self._is_index_compatible(runtime_index, chunks):
-            expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
-            if not kb_hash or kb_hash == expected_hash:
-                return runtime_index
-            logger.info(
-                "KB index hash mismatch detected. Rebuilding index from current kb_text."
-            )
-        return build_bm25_index(chunks)
+    def _resolve_kb_bundle(self, kb_payload: Dict[str, Any]) -> Dict[str, Any]:
+        runtime_index = kb_payload.get("kb_index")
+        runtime_chunks = kb_payload.get("kb_chunks")
+        runtime_hash = str(kb_payload.get("kb_hash", "")).strip()
+        if self._is_index_compatible(runtime_index, runtime_hash):
+            index_chunks = runtime_index.get("chunks")
+            if isinstance(index_chunks, list) and index_chunks:
+                return {
+                    "kb_hash": runtime_hash or str(runtime_index.get("kb_hash", "")),
+                    "chunks": index_chunks,
+                    "index": runtime_index,
+                }
+            if isinstance(runtime_chunks, list) and runtime_chunks:
+                patched_index = dict(runtime_index)
+                patched_index["chunks"] = runtime_chunks
+                return {
+                    "kb_hash": runtime_hash or str(runtime_index.get("kb_hash", "")),
+                    "chunks": runtime_chunks,
+                    "index": patched_index,
+                }
+
+        logger.info("KB cache miss. Rebuilding index bundle from KB text.")
+        rebuilt = build_kb_index(
+            text=kb_payload.get("kb_text", ""),
+            kb_name=kb_payload.get("kb_name", "KB cargada"),
+            kb_updated_at=kb_payload.get("kb_updated_at", ""),
+        )
+        return {
+            "kb_hash": str(rebuilt.get("kb_hash", "")),
+            "chunks": rebuilt.get("chunks", []),
+            "index": rebuilt.get("index", {}),
+        }
 
     def _is_index_compatible(
-        self, index: Dict[str, Any], chunks: List[Dict[str, Any]]
+        self, index: Dict[str, Any], kb_hash: str = ""
     ) -> bool:
         if not isinstance(index, dict):
             return False
-        token_sets = index.get("token_sets")
-        normalized = index.get("normalized_texts")
-        if not isinstance(token_sets, (list, tuple)):
+        required = ("tf_docs", "doc_len", "df", "avgdl")
+        if any(key not in index for key in required):
             return False
-        if not isinstance(normalized, (list, tuple)):
+        if not isinstance(index.get("tf_docs"), list):
             return False
-        return len(token_sets) == len(chunks) and len(normalized) == len(chunks)
+        if not isinstance(index.get("doc_len"), list):
+            return False
+        if not isinstance(index.get("df"), dict):
+            return False
+        if kb_hash and index.get("kb_hash") and str(index.get("kb_hash")) != kb_hash:
+            return False
+        return True
 
     def _normalize_debug_chunks(self, rows: Any) -> List[Dict[str, Any]]:
         normalized_rows: List[Dict[str, Any]] = []
@@ -594,6 +661,8 @@ class ChatService:
             if not isinstance(row, dict):
                 continue
             source = str(row.get("source") or row.get("source_label") or "").strip()
+            preview = str(row.get("preview") or row.get("snippet") or "")
+            section = str(row.get("section") or row.get("title") or "").strip()
             normalized_rows.append(
                 {
                     "chunk_id": row.get("chunk_id"),
@@ -602,41 +671,38 @@ class ChatService:
                     "score": float(row.get("score", 0.0)),
                     "overlap": int(row.get("overlap", 0)),
                     "match_type": str(row.get("match_type", "")),
-                    "snippet": str(row.get("snippet", "")),
+                    "section": section,
+                    "preview": preview,
+                    "snippet": preview,
                 }
             )
         return normalized_rows
 
-    def _prefix_chunk_sources(
-        self, kb_name: str, chunks: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-        prefixed_chunks: List[Dict[str, Any]] = []
-        for idx, chunk in enumerate(chunks, start=1):
-            source = str(chunk.get("source_label", "")).strip() or f"Chunk {idx}"
-            prefixed = dict(chunk)
-            prefixed["chunk_id"] = int(chunk.get("chunk_id") or idx)
-            prefix = f"{kb_name} | "
-            prefixed["source_label"] = (
-                source if source.startswith(prefix) else f"{prefix}{source}"
-            )
-            prefixed["source"] = prefixed["source_label"]
-            prefixed_chunks.append(prefixed)
-        return prefixed_chunks
+    def _coerce_positive_int(
+        self,
+        value: Any,
+        default: int,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
 
-    def _has_sufficient_evidence(self, retrieved_chunks: List[Dict[str, Any]]) -> bool:
-        if not retrieved_chunks:
-            return False
-        top = retrieved_chunks[0]
-        top_overlap = int(top.get("overlap", 0))
-        top_score = float(top.get("score", 0.0))
-        match_type = str(top.get("match_type", ""))
-        if top_overlap >= 1:
-            return True
-        if match_type == "substring":
-            return top_score >= 0.4
-        if match_type == "sequence":
-            return top_score >= 0.32
-        return top_score >= 0.25
+    def _coerce_positive_float(
+        self,
+        value: Any,
+        default: float,
+        minimum: float,
+        maximum: float,
+    ) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
 
     def _log_kb_retrieval(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> None:
         chunk_refs = []
@@ -653,25 +719,68 @@ class ChatService:
             chunk_refs,
         )
 
+    def _select_context_chunks(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        max_context_chars: int,
+    ) -> tuple[List[Dict[str, Any]], bool]:
+        if not retrieved_chunks:
+            return [], False
+        limit = max(300, int(max_context_chars))
+        selected: List[Dict[str, Any]] = []
+        used_chars = 0
+        truncated = False
+
+        for chunk in retrieved_chunks:
+            text = str(chunk.get("text", "")).strip()
+            if not text:
+                continue
+            remaining = limit - used_chars
+            if remaining <= 0:
+                truncated = True
+                break
+            if len(text) <= remaining:
+                selected.append(chunk)
+                used_chars += len(text)
+                continue
+
+            truncated = True
+            # Keep at least one chunk even if the first evidence is larger than the limit.
+            if not selected or remaining >= 120:
+                trimmed_chunk = dict(chunk)
+                trimmed_chunk["text"] = text[: max(40, remaining)].rstrip() + "..."
+                selected.append(trimmed_chunk)
+            break
+
+        return selected, truncated
+
     def _build_kb_context_block(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> str:
         lines = [f"Base de Conocimiento: {kb_name}", "Evidencia recuperada:"]
         for idx, chunk in enumerate(retrieved_chunks, start=1):
             source = chunk.get("source_label") or f"Fragmento {idx}"
+            section = str(chunk.get("section", "")).strip()
             text = str(chunk.get("text", "")).strip()
             lines.append(f"[{idx}] Fuente: {source}")
+            if section:
+                lines.append(f"Seccion: {section}")
             lines.append(text)
         return "\n".join(lines)
 
-    def _extract_sources(self, retrieved_chunks: List[Dict[str, Any]]) -> list[str]:
+    def _extract_sources(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        max_sources: int = 8,
+    ) -> list[str]:
         seen = set()
         ordered_sources: list[str] = []
+        limit = max(1, int(max_sources))
         for chunk in retrieved_chunks:
             source = str(chunk.get("source_label", "")).strip()
             if not source or source in seen:
                 continue
             seen.add(source)
             ordered_sources.append(source)
-            if len(ordered_sources) >= 4:
+            if len(ordered_sources) >= limit:
                 break
         return ordered_sources
 
@@ -682,7 +791,7 @@ class ChatService:
         if lines and lines[-1].strip().lower().startswith("fuentes:"):
             lines = lines[:-1]
         clean_response = "\n".join(lines).rstrip()
-        sources_text = ", ".join(sources[:4])
+        sources_text = ", ".join(sources)
         return f"{clean_response}\n\nFuentes: {sources_text}"
 
     def _build_demo_kb_answer(
@@ -706,7 +815,7 @@ class ChatService:
         def generator() -> Iterator[str]:
             for chunk in stream:
                 yield chunk
-            yield f"\n\nFuentes: {', '.join(sources[:4])}"
+            yield f"\n\nFuentes: {', '.join(sources)}"
 
         return generator()
 
