@@ -225,6 +225,50 @@ def test_kb_strict_with_real_securin_kb_adds_sources():
     assert "Fuentes:" in response
 
 
+def test_kb_strict_minor_age_returns_child_labor_answer_with_sources():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
+        encoding="utf-8"
+    )
+
+    response = service.send_message(
+        message="puede mi hijo de 9 años trabajar?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+
+    assert fake.call_count == 0
+    assert "rechaza el trabajo infantil" in response.lower()
+    assert "Fuentes:" in response
+    assert "12" in response or "esclavitud moderna" in response.lower()
+
+
+def test_kb_strict_exact_age_question_without_number_returns_fixed_message():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
+        encoding="utf-8"
+    )
+
+    response = service.send_message(
+        message="edad minima exacta para contratar",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+
+    assert fake.call_count == 0
+    assert response.startswith("No encuentro eso en el documento cargado.")
+
+
 def test_kb_debug_available_after_no_hits():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
@@ -248,3 +292,4 @@ def test_kb_debug_available_after_no_hits():
     assert debug_payload.get("kb_name") == "securin.txt"
     assert debug_payload.get("used_context") is False
     assert debug_payload.get("chunks") is not None
+    assert "query_expanded" in debug_payload

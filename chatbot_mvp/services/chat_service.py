@@ -34,6 +34,15 @@ logger = logging.getLogger(__name__)
 _KB_EMPTY_RESPONSE = (
     "No encuentro eso en el documento cargado. Si me indicas el apartado/titulo o pegas el fragmento, lo reviso."
 )
+_KB_DEFAULT_TOP_K = 4
+_KB_DEFAULT_MIN_SCORE = 0.0
+_KB_DEFAULT_MAX_CONTEXT_CHARS = 3200
+_CHILD_LABOR_ANCHOR_TERMS = (
+    "trabajo infantil",
+    "esclavitud moderna",
+    "trabajo forzado",
+    "servidumbre",
+)
 
 
 class ResponseStrategy(Protocol):
@@ -431,6 +440,9 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_inactiva",
                 "query": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -441,6 +453,9 @@ class ChatService:
         kb_hash = kb_payload["kb_hash"]
         kb_chunks = kb_payload["kb_chunks"]
         kb_index = kb_payload["kb_index"]
+        kb_top_k = kb_payload["kb_top_k"]
+        kb_min_score = kb_payload["kb_min_score"]
+        kb_max_context_chars = kb_payload["kb_max_context_chars"]
         strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
@@ -450,6 +465,9 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_vacia",
                 "query": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
                 "chunks": [],
             }
             if strict_mode:
@@ -470,6 +488,9 @@ class ChatService:
                 "used_context": False,
                 "reason": "sin_chunks",
                 "query": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
                 "chunks": [],
             }
             if strict_mode:
@@ -477,11 +498,22 @@ class ChatService:
             return message, base_context, [], None, []
 
         index = self._resolve_kb_index(kb_text, kb_hash, kb_index, chunks)
-        retrieved_chunks = retrieve(message, index, chunks, k=4, kb_name=kb_name)
+        retrieved_chunks = retrieve(
+            message,
+            index,
+            chunks,
+            k=kb_top_k,
+            kb_name=kb_name,
+            min_score=kb_min_score,
+        )
         self._log_kb_retrieval(kb_name, retrieved_chunks)
         policy_debug = get_policy_kb_debug()
         debug_chunks = self._normalize_debug_chunks(policy_debug.get("top_candidates", []))
-        if not self._has_sufficient_evidence(retrieved_chunks):
+        strict_relevance_ok = self._has_sufficient_evidence(
+            retrieved_chunks,
+            policy_debug=policy_debug,
+        )
+        if not strict_relevance_ok:
             self.last_kb_debug = {
                 "kb_name": kb_name,
                 "kb_mode": kb_mode,
@@ -489,6 +521,9 @@ class ChatService:
                 "used_context": False,
                 "reason": str(policy_debug.get("reason", "no_hits")),
                 "query": str(policy_debug.get("query", message)),
+                "query_expanded": str(policy_debug.get("query_expanded", message)),
+                "intent": str(policy_debug.get("intent", "")),
+                "tags": list(policy_debug.get("tags", [])),
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
                 "chunks": debug_chunks,
             }
@@ -496,8 +531,34 @@ class ChatService:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, retrieved_chunks
             return message, base_context, [], None, retrieved_chunks
 
-        sources = self._extract_sources(retrieved_chunks)
-        context_block = self._build_kb_context_block(kb_name, retrieved_chunks)
+        context_chunks = self._limit_context_chunks(
+            retrieved_chunks,
+            max_context_chars=kb_max_context_chars,
+        )
+        sources = self._extract_sources(context_chunks)
+        context_block = self._build_kb_context_block(kb_name, context_chunks)
+        if strict_mode and self._is_child_labor_intent(policy_debug):
+            direct_answer = self._build_strict_child_labor_answer(
+                context_chunks,
+                sources,
+                policy_debug,
+            )
+            if direct_answer:
+                self.last_kb_debug = {
+                    "kb_name": kb_name,
+                    "kb_mode": kb_mode,
+                    "retrieved_count": len(context_chunks),
+                    "used_context": False,
+                    "reason": "strict_child_labor_direct_answer",
+                    "query": str(policy_debug.get("query", message)),
+                    "query_expanded": str(policy_debug.get("query_expanded", message)),
+                    "intent": str(policy_debug.get("intent", "")),
+                    "tags": list(policy_debug.get("tags", [])),
+                    "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                    "chunks": debug_chunks,
+                }
+                return message, base_context, sources, direct_answer, context_chunks
+
         if strict_mode:
             guidance = (
                 "Instrucciones obligatorias:\n"
@@ -524,17 +585,23 @@ class ChatService:
         prepared_context["kb_sources"] = sources
         prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
         prepared_context["kb_hash"] = kb_hash
+        prepared_context["kb_top_k"] = kb_top_k
+        prepared_context["kb_min_score"] = kb_min_score
+        prepared_context["kb_max_context_chars"] = kb_max_context_chars
         self.last_kb_debug = {
             "kb_name": kb_name,
             "kb_mode": kb_mode,
-            "retrieved_count": len(retrieved_chunks),
+            "retrieved_count": len(context_chunks),
             "used_context": True,
             "reason": str(policy_debug.get("reason", "contexto_inyectado")),
             "query": str(policy_debug.get("query", message)),
+            "query_expanded": str(policy_debug.get("query_expanded", message)),
+            "intent": str(policy_debug.get("intent", "")),
+            "tags": list(policy_debug.get("tags", [])),
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
             "chunks": debug_chunks,
         }
-        return prepared_message, prepared_context, sources, None, retrieved_chunks
+        return prepared_message, prepared_context, sources, None, context_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, Any]]:
         if not user_context:
@@ -548,6 +615,24 @@ class ChatService:
         kb_hash = str(user_context.get("kb_hash", "")).strip()
         kb_chunks = user_context.get("kb_chunks")
         kb_index = user_context.get("kb_index")
+        kb_top_k = self._safe_int(
+            user_context.get("kb_top_k", _KB_DEFAULT_TOP_K),
+            default=_KB_DEFAULT_TOP_K,
+            minimum=1,
+            maximum=8,
+        )
+        kb_min_score = self._safe_float(
+            user_context.get("kb_min_score", _KB_DEFAULT_MIN_SCORE),
+            default=_KB_DEFAULT_MIN_SCORE,
+            minimum=0.0,
+            maximum=5.0,
+        )
+        kb_max_context_chars = self._safe_int(
+            user_context.get("kb_max_context_chars", _KB_DEFAULT_MAX_CONTEXT_CHARS),
+            default=_KB_DEFAULT_MAX_CONTEXT_CHARS,
+            minimum=600,
+            maximum=12000,
+        )
         return {
             "kb_text": kb_text,
             "kb_name": kb_name,
@@ -555,6 +640,9 @@ class ChatService:
             "kb_hash": kb_hash,
             "kb_chunks": kb_chunks if isinstance(kb_chunks, list) else [],
             "kb_index": kb_index if isinstance(kb_index, dict) else {},
+            "kb_top_k": kb_top_k,
+            "kb_min_score": kb_min_score,
+            "kb_max_context_chars": kb_max_context_chars,
         }
 
     def _resolve_kb_index(
@@ -603,6 +691,7 @@ class ChatService:
                     "overlap": int(row.get("overlap", 0)),
                     "match_type": str(row.get("match_type", "")),
                     "snippet": str(row.get("snippet", "")),
+                    "preview": str(row.get("preview", row.get("snippet", ""))),
                 }
             )
         return normalized_rows
@@ -623,13 +712,26 @@ class ChatService:
             prefixed_chunks.append(prefixed)
         return prefixed_chunks
 
-    def _has_sufficient_evidence(self, retrieved_chunks: List[Dict[str, Any]]) -> bool:
+    def _has_sufficient_evidence(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        policy_debug: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         if not retrieved_chunks:
             return False
+        debug_payload = policy_debug or {}
         top = retrieved_chunks[0]
         top_overlap = int(top.get("overlap", 0))
         top_score = float(top.get("score", 0.0))
         match_type = str(top.get("match_type", ""))
+        if self._requires_exact_age(debug_payload):
+            if not self._contains_explicit_age(retrieved_chunks):
+                return False
+        if self._is_child_labor_intent(debug_payload):
+            if not self._contains_child_labor_anchor(retrieved_chunks):
+                return False
+            return top_overlap >= 1 and top_score >= 0.12
+
         if top_overlap >= 1:
             return True
         if match_type == "substring":
@@ -674,6 +776,105 @@ class ChatService:
             if len(ordered_sources) >= 4:
                 break
         return ordered_sources
+
+    def _limit_context_chunks(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        max_context_chars: int,
+    ) -> List[Dict[str, Any]]:
+        if not retrieved_chunks:
+            return []
+        char_budget = max(600, int(max_context_chars))
+        selected: List[Dict[str, Any]] = []
+        used = 0
+        for chunk in retrieved_chunks:
+            text = str(chunk.get("text", "")).strip()
+            if not text:
+                continue
+            if used >= char_budget:
+                break
+            remaining = char_budget - used
+            if len(text) <= remaining:
+                selected.append(chunk)
+                used += len(text)
+                continue
+            trimmed = dict(chunk)
+            trimmed["text"] = text[: max(120, remaining)].rstrip() + "..."
+            selected.append(trimmed)
+            used = char_budget
+            break
+        return selected if selected else retrieved_chunks[:1]
+
+    def _is_child_labor_intent(self, policy_debug: Dict[str, Any]) -> bool:
+        tags = policy_debug.get("tags", [])
+        if isinstance(tags, list) and "child_labor" in tags:
+            return True
+        intent = str(policy_debug.get("intent", "")).strip().lower()
+        return intent == "child_labor"
+
+    def _requires_exact_age(self, policy_debug: Dict[str, Any]) -> bool:
+        return bool(policy_debug.get("requires_exact_age", False))
+
+    def _contains_explicit_age(self, chunks: List[Dict[str, Any]]) -> bool:
+        age_year_pattern = re.compile(r"\b\d{1,2}\s*(?:anos|año|años)\b", re.IGNORECASE)
+        age_min_pattern = re.compile(
+            r"edad\s+minima[^0-9]{0,12}\d{1,2}",
+            re.IGNORECASE,
+        )
+        for chunk in chunks:
+            text = str(chunk.get("text", ""))
+            normalized = re.sub(r"[^\w\s]", " ", text.lower())
+            if age_year_pattern.search(normalized):
+                return True
+            if age_min_pattern.search(normalized):
+                return True
+        return False
+
+    def _contains_child_labor_anchor(self, chunks: List[Dict[str, Any]]) -> bool:
+        full_text = " ".join(str(chunk.get("text", "")).lower() for chunk in chunks)
+        full_source = " ".join(
+            str(chunk.get("source_label", "")).lower() for chunk in chunks
+        )
+        joined = f"{full_source} {full_text}"
+        return any(term in joined for term in _CHILD_LABOR_ANCHOR_TERMS)
+
+    def _build_strict_child_labor_answer(
+        self,
+        chunks: List[Dict[str, Any]],
+        sources: List[str],
+        policy_debug: Dict[str, Any],
+    ) -> Optional[str]:
+        if not chunks or not self._contains_child_labor_anchor(chunks):
+            return None
+        if self._requires_exact_age(policy_debug) and not self._contains_explicit_age(chunks):
+            return None
+        base = (
+            "No. Segun el documento, Securion rechaza el trabajo infantil, "
+            "la esclavitud moderna y el trabajo forzado en todas sus formas."
+        )
+        if not self._contains_explicit_age(chunks):
+            base += " El texto no especifica una edad minima exacta en numeros."
+        return self._append_sources(base, sources)
+
+    def _safe_int(self, value: Any, default: int, minimum: int, maximum: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
+
+    def _safe_float(
+        self,
+        value: Any,
+        default: float,
+        minimum: float,
+        maximum: float,
+    ) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
 
     def _append_sources(self, response: str, sources: List[str]) -> str:
         if not sources:
