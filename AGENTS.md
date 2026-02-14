@@ -1,37 +1,65 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 Instrucciones persistentes para este repo (Streamlit + Python). Seguir estas reglas en todas las tareas futuras.
 
 ## Alcance y stack
-- Mantener el stack actual: **Python + Streamlit**.
-- No reintroducir Reflex salvo pedido explícito.
-- Default AI: **Gemini** (vía `google-genai`).
-- Streaming enabled por defecto en Chat.
+- Mantener el stack actual: Python + Streamlit.
+- No reintroducir Reflex salvo pedido explicito.
+- Default AI: Gemini (via `google-genai`).
+- Streaming habilitado por defecto en Chat.
 
 ## Estilo de cambios
-- Cambios pequeños y diffs acotados.
+- Cambios pequenos y diffs acotados.
 - Nombres claros y consistentes.
-- Mantener UI "Premium" (Dark mode friendly, `style.css`).
+- Mantener UI "Premium" (dark mode friendly, `streamlit_app/assets/style.css`).
 
-## Verificación
-- Correr la app con `streamlit run streamlit_app/Inicio.py`.
-- Chequear rutas: Home, Evaluación, Chat.
+## Scope y control
+- Respetar estrictamente el scope pedido.
+- No implementar mejoras fuera de scope.
+- Si aparece una mejora fuera de scope: anotarla como `Backlog` en `docs/STATUS_REPORT.md`.
+
+## Verificacion
+- Ejecutar la app con `python -m streamlit run streamlit_app/Inicio.py`.
+- Validar rutas: Inicio, Evaluacion, Chat, Admin.
+- Ejecutar tests con `python -m pytest`.
+
+## Comandos
+- Usar siempre comandos PowerShell en documentacion, prompts y seccion "Como verificar".
 
 ## Commits
-- Si hacés commits: mensajes **MUY cortos** (1 línea).
+- Mensajes MUY cortos (1 linea).
+- Commits pequenos y enfocados.
 
 ## Workflow
-- Guía completa en `docs/WORKFLOW.md` (source of truth).
-- Resumen: branch por tarea, commits cortos, push y PR a `main`.
+- Fuente de verdad: `docs/WORKFLOW.md`.
+- Branch por tarea.
+- Codex hace cambios + commit + push + PR.
+- Usuario solo revisa y aprueba.
+
+## PR
+- Base branch: `main`.
+- El body del PR debe ser texto plano.
+- No usar backticks ni bloques de codigo en el body del PR.
+
+## Template de prompt minimo
+PROMPT BASE
+- <reglas de trabajo>
+
+SCOPE
+- <archivos permitidos>
+
+ACEPTACION
+- <criterios medibles>
 
 ## Secrets / Keys
 - Nunca commitear keys ni tokens.
-- Usar `.env` local (ignorado) o exportar variables de entorno.
-- Si GitHub detecta una key expuesta: rotar inmediatamente.
+- Usar `.env` local (ignorado) o variables de entorno.
+- Si GitHub detecta una key expuesta: rotarla inmediatamente.
 - Chequeo antes de commitear:
   - `git grep -n "AIza" . || true`
   - `git grep -n "GEMINI_API_KEY|GOOGLE_API_KEY" . || true`
 
 ## Output al finalizar
 - Listar archivos tocados.
-- Indicar cómo verificar (comandos de Streamlit).
+- Indicar como verificar (comandos de Streamlit y pytest en PowerShell).
+- Incluir link del PR.
