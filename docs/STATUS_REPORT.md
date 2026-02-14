@@ -4,33 +4,32 @@ Fecha de actualizacion: 2026-02-14
 
 ## Resumen ejecutivo
 - App activa en Streamlit multipage con entry point `streamlit_app/Inicio.py`.
-- Paginas activas: Inicio, Evaluacion, Chat y Admin.
-- Chat usa streaming y soporte de providers Gemini/Groq con fallback a Demo.
-- Admin permite cambiar provider (Gemini/Groq), cargar KB y activar debug de retrieval.
-- Evaluacion guarda resultados locales en `data/submissions.jsonl`.
+- KB grounding actualizado con retrieval BM25 liviano en Python puro y bonus por match exacto.
+- Cache de indice/chunks por `kb_hash + kb_updated_at` para evitar recomputo por mensaje.
+- Modos KB `General` y `Solo KB (estricto)` activos en Chat con control desde Admin.
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).
-- Evaluacion con consentimiento, cuestionario y feedback por nivel (Bajo/Medio/Alto).
-- Persistencia de respuestas y score via `chatbot_mvp/services/submissions_store.py`.
-- Chat con streaming token/chunk en UI y boton "Nuevo chat".
-- Providers de Chat:
-  - Gemini via `google-genai` (`GEMINI_API_KEY` o `GOOGLE_API_KEY`).
-  - Groq via OpenAI SDK + base_url Groq (`GROQ_API_KEY`).
-  - Demo como fallback o provider explicito.
-- Selector de provider en Admin (Gemini/Groq) persistido en `chatbot_mvp/data/app_settings.json`.
-- Base de Conocimiento:
-  - Upload de `.txt`/`.md` (un archivo por vez).
-  - Parse por articulos/secciones + chunking por tamano.
-  - Retrieval lexical con overlap/substrings/sequence fallback.
-  - Modos `General` y `Solo KB (estricto)`.
-  - `Debug KB` en Chat (expander con query, razon, chunks y scores).
-- Dashboard Admin con KPIs + export CSV/JSON + borrado de submissions en modo mantenimiento.
+- Chat con streaming y providers Gemini/Groq, fallback Demo.
+- Selector de provider en Admin persistido en `chatbot_mvp/data/app_settings.json`.
+- KB en Admin:
+  - Upload `.txt` / `.md` (un archivo por vez).
+  - Construccion de indice BM25-like cacheada por `kb_hash` y `kb_updated_at`.
+  - Parametros configurables: `Top K`, `Score minimo`, `Max chars contexto`.
+  - Indicador `Index builds (cache miss)` para validar performance.
+- KB en Chat:
+  - Reutiliza `kb_index` en `st.session_state`.
+  - Recupera evidencia con `top_k/min_score` configurados.
+  - Limita contexto inyectado por cantidad de chunks y caracteres.
+  - Agrega `Fuentes:` en post-proceso del sistema cuando se uso KB.
+  - En `Solo KB (estricto)`, sin evidencia suficiente responde fijo y no llama provider.
+  - `Debug KB retrieval` muestra score, seccion y preview por evidencia.
+- Evaluacion y dashboard Admin siguen operativos (submissions + export CSV/JSON).
 
 ## Que NO funciona hoy
 - `openai` no esta expuesto en el selector de Admin.
-- Si `AI_PROVIDER=openai`, `ChatService` no inicializa cliente OpenAI automaticamente y termina en fallback Demo.
-- Existe test legacy Reflex skippeado (`tests/test_auth_state.py`), sin cobertura activa de ese legado.
+- Si `AI_PROVIDER=openai`, el flujo runtime actual cae en fallback Demo.
+- Existe test legacy Reflex skippeado (`tests/test_auth_state.py`).
 
 ## Comandos de ejecucion (PowerShell)
 
@@ -63,6 +62,18 @@ Run tests:
 ```powershell
 python -m pytest
 ```
+
+## Como probar KB grounding y performance (PowerShell)
+
+1. Levantar app y abrir Admin.
+2. Cargar `docs\securin.txt` en Base de Conocimiento.
+3. Verificar que aparece `KB cargada` e `Index builds (cache miss)`.
+4. Ir a Chat y preguntar:
+   - `Que es Securion?`
+   - `Se pueden recibir regalos?`
+5. Cambiar a `Solo KB (estricto)` y preguntar algo fuera del documento.
+6. Activar `Debug KB` y validar score/seccion/preview.
+7. Hacer 5 preguntas seguidas y verificar que `index_build_count` no sube por cada mensaje.
 
 ## Troubleshooting actual (PowerShell)
 
@@ -106,9 +117,9 @@ python -m streamlit run streamlit_app/Inicio.py --server.port 8502
 
 ## Tests (estado actual)
 - Comando ejecutado: `python -m pytest`
-- Resultado: `22 passed, 1 skipped`
+- Resultado: `25 passed, 1 skipped`
 - Test skippeado: `tests/test_auth_state.py` (legacy Reflex)
 
 ## Backlog
 - Integrar provider OpenAI de punta a punta en Chat (selector + init cliente).
-- Limpiar restos legacy Reflex (codigo/tests) cuando se defina cierre definitivo.
+- Limpiar restos legacy Reflex cuando se defina cierre definitivo.
