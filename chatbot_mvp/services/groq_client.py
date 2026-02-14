@@ -168,6 +168,34 @@ class GroqChatClient:
             if context_info:
                 base_prompt += "\n\nContexto del usuario:\n" + "\n".join(context_info)
 
+            kb_context_block = str(user_context.get("kb_context_block", "")).strip()
+            if kb_context_block:
+                kb_default_reply = str(
+                    user_context.get(
+                        "kb_default_reply",
+                        "No encuentro eso en el documento cargado.",
+                    )
+                ).strip()
+                if user_context.get("kb_strict_mode"):
+                    kb_instructions = [
+                        "Modo KB estricto activado.",
+                        "Responde solo con la evidencia proporcionada.",
+                        f'Si falta evidencia responde exactamente: "{kb_default_reply}"',
+                        "Si piden articulo o item, cita el articulo o seccion exacta.",
+                    ]
+                else:
+                    kb_instructions = [
+                        "KB disponible en modo general.",
+                        "Usa la evidencia de <context> como fuente principal cuando sea relevante.",
+                        "Si no alcanza la evidencia, responde con cautela y no inventes contenido del documento.",
+                    ]
+
+                kb_instructions.append("")
+                kb_instructions.append("<context>")
+                kb_instructions.append(kb_context_block)
+                kb_instructions.append("</context>")
+                base_prompt += "\n\n" + "\n".join(kb_instructions)
+
         return base_prompt
 
     def generate_evaluation(self, answers: Dict[str, Any]) -> str:

@@ -2,17 +2,26 @@ import streamlit as st
 import sys
 import pandas as pd
 import json
+import hashlib
 from datetime import datetime
 from pathlib import Path
 import plotly.express as px
 
 # Add project root
 root_path = Path(__file__).parent.parent.parent
-if str(root_path) not in sys.path:
-    sys.path.append(str(root_path))
+root_path_str = str(root_path)
+if root_path_str in sys.path:
+    sys.path.remove(root_path_str)
+sys.path.insert(0, root_path_str)
 
 from chatbot_mvp.services.submissions_store import read_submissions, summarize
 from chatbot_mvp.config.settings import get_admin_password, is_demo_mode, get_runtime_ai_provider
+from chatbot_mvp.knowledge import (
+    KB_MODE_GENERAL,
+    KB_MODE_STRICT,
+    load_kb,
+    normalize_kb_mode,
+)
 from streamlit_app.components.sidebar import sidebar_branding, load_custom_css
 
 st.set_page_config(page_title="Admin Panel", page_icon="📊", layout="wide")
@@ -61,6 +70,26 @@ def get_chart_config(fig):
     except:
         pass
     return fig
+
+
+def _decode_kb_bytes(raw_bytes: bytes) -> str:
+    for encoding in ("utf-8", "utf-8-sig", "latin-1"):
+        try:
+            return raw_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw_bytes.decode("utf-8", errors="replace")
+
+def _sync_kb_runtime(
+    text: str, name: str, kb_updated_at: str = ""
+) -> dict:
+    return load_kb(text=text, name=name, kb_updated_at=kb_updated_at)
+
+
+def _apply_kb_runtime_bundle(kb_bundle: dict) -> None:
+    st.session_state["kb_hash"] = kb_bundle.get("kb_hash", "")
+    st.session_state["kb_chunks"] = kb_bundle.get("chunks", [])
+    st.session_state["kb_index"] = kb_bundle.get("index", {})
 
 if check_password():
     st.title("Panel de Administración")
@@ -334,3 +363,107 @@ if check_password():
              """
              st.markdown(custom_css, unsafe_allow_html=True)
              st.toast("Estilos aplicados")
+
+        st.divider()
+        st.subheader("Base de Conocimiento")
+        st.caption("Subi una politica o protocolo en formato .txt o .md")
+
+        if "kb_mode" not in st.session_state:
+            st.session_state["kb_mode"] = KB_MODE_GENERAL
+        if "kb_debug" not in st.session_state:
+            st.session_state["kb_debug"] = False
+
+        st.session_state["kb_mode"] = normalize_kb_mode(st.session_state.get("kb_mode"))
+
+        kb_mode = st.radio(
+            "Modo de respuesta",
+            [KB_MODE_GENERAL, KB_MODE_STRICT],
+            index=0 if st.session_state.get("kb_mode") == KB_MODE_GENERAL else 1,
+            format_func=lambda value: "Solo KB (estricto)" if value == KB_MODE_STRICT else "General",
+            horizontal=True,
+            key="admin_kb_mode_radio",
+        )
+        if kb_mode != st.session_state.get("kb_mode"):
+            st.session_state["kb_mode"] = normalize_kb_mode(kb_mode)
+            mode_label = "Solo KB (estricto)" if kb_mode == KB_MODE_STRICT else "General"
+            st.toast(f"Modo KB actualizado: {mode_label}", icon="✅")
+            st.rerun()
+
+        kb_debug = st.checkbox(
+            "Debug KB",
+            value=bool(st.session_state.get("kb_debug", False)),
+            help="Muestra en Chat los chunks recuperados y sus scores.",
+        )
+        if kb_debug != bool(st.session_state.get("kb_debug", False)):
+            st.session_state["kb_debug"] = kb_debug
+            st.rerun()
+
+        uploaded_kb = st.file_uploader(
+            "Archivo KB",
+            type=["txt", "md"],
+            accept_multiple_files=False,
+            key="admin_kb_uploader",
+            help="Solo se permite un archivo por vez.",
+        )
+
+        if uploaded_kb is not None:
+            raw_bytes = uploaded_kb.getvalue()
+            uploaded_text = _decode_kb_bytes(raw_bytes)
+            uploaded_text = uploaded_text.strip()
+            kb_signature = f"{uploaded_kb.name}:{hashlib.sha256(raw_bytes).hexdigest()}"
+            current_signature = st.session_state.get("kb_signature")
+            if uploaded_text and kb_signature != current_signature:
+                new_updated_at = datetime.now().isoformat(timespec="seconds")
+                try:
+                    kb_bundle = _sync_kb_runtime(
+                        uploaded_text,
+                        uploaded_kb.name,
+                        kb_updated_at=new_updated_at,
+                    )
+                except Exception as exc:
+                    st.error(f"No se pudo procesar la KB cargada: {exc}")
+                else:
+                    st.session_state["kb_text"] = uploaded_text
+                    st.session_state["kb_name"] = uploaded_kb.name
+                    st.session_state["kb_updated_at"] = new_updated_at
+                    st.session_state["kb_signature"] = kb_signature
+                    _apply_kb_runtime_bundle(kb_bundle)
+                    st.toast(f"KB cargada: {uploaded_kb.name}", icon="✅")
+                    st.rerun()
+            if not uploaded_text and kb_signature != current_signature:
+                st.toast("El archivo esta vacio o no se pudo leer.", icon="⚠️")
+
+        kb_name = st.session_state.get("kb_name", "")
+        kb_text = st.session_state.get("kb_text", "")
+        if kb_name and kb_text:
+            expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
+            if st.session_state.get("kb_hash") != expected_hash:
+                try:
+                    kb_bundle = _sync_kb_runtime(
+                        kb_text,
+                        kb_name,
+                        kb_updated_at=st.session_state.get("kb_updated_at", ""),
+                    )
+                except Exception as exc:
+                    st.error(f"No se pudo sincronizar la KB activa: {exc}")
+                else:
+                    _apply_kb_runtime_bundle(kb_bundle)
+
+            st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
+            if st.button("Limpiar KB", use_container_width=False):
+                st.session_state.pop("kb_text", None)
+                st.session_state.pop("kb_name", None)
+                st.session_state.pop("kb_updated_at", None)
+                st.session_state.pop("kb_signature", None)
+                st.session_state.pop("kb_hash", None)
+                st.session_state.pop("kb_chunks", None)
+                st.session_state.pop("kb_index", None)
+                st.session_state["admin_kb_uploader"] = None
+                st.toast("KB limpiada", icon="⚠️")
+                st.rerun()
+        else:
+            st.caption("KB cargada: ninguna.")
+        kb_active_label = kb_name if kb_name else "ninguna"
+        kb_mode_caption = "Solo KB (estricto)" if st.session_state.get("kb_mode") == KB_MODE_STRICT else "General"
+        st.caption(f"KB activa: {kb_active_label}")
+        st.caption(f"Modo: {kb_mode_caption}")
