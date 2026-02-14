@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import math
 import re
 import unicodedata
+from collections import Counter
 from typing import Any
 
 import streamlit as st
@@ -28,7 +30,20 @@ _CHAPTER_RE = re.compile(r"(?im)^\s*(cap[i\u00ed]tulo|secci[o\u00f3]n|section)\s
 _NUMBERED_HEADING_RE = re.compile(r"(?m)^\s*(\d+(?:\.\d+)*)\s*[.)-]?\s+([^\n]{3,120})$")
 _TOKEN_RE = re.compile(r"[a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+_AGE_RE = re.compile(r"\b(\d{1,2})\s*a(?:ñ|n)os\b", re.IGNORECASE)
 _LAST_KB_DEBUG: dict[str, Any] = {}
+_BM25_K1 = 1.5
+_BM25_B = 0.75
+_EXACT_SUBSTRING_BONUS = 0.28
+_CHILD_TERMS = (
+    "trabajo infantil",
+    "esclavitud moderna",
+    "trabajo forzado",
+    "menores",
+    "edad minima",
+    "derechos humanos",
+)
+_CHILD_TRIGGER_TERMS = ("menor", "nino", "niño", "nene", "adolescente", "hijo", "hija")
 _STOPWORDS = {
     "a",
     "al",
@@ -114,6 +129,63 @@ def _tokenize(text: str) -> list[str]:
             continue
         tokens.append(token)
     return tokens
+
+
+def _contains_child_trigger(normalized_query: str) -> bool:
+    return any(term in normalized_query for term in _CHILD_TRIGGER_TERMS)
+
+
+def _requires_exact_age_query(normalized_query: str) -> bool:
+    if "edad minima exacta" in normalized_query:
+        return True
+    if "edad exacta" in normalized_query:
+        return True
+    if "exacta" in normalized_query and "edad" in normalized_query:
+        return True
+    return False
+
+
+def expand_query(query: str) -> dict[str, Any]:
+    original = str(query or "").strip()
+    normalized_query = _normalize_for_match(original)
+    ages = [int(match.group(1)) for match in _AGE_RE.finditer(normalized_query)]
+    detected_child_context = bool(ages and min(ages) <= 15) or _contains_child_trigger(
+        normalized_query
+    )
+
+    tags: list[str] = []
+    extra_terms: list[str] = []
+    if detected_child_context:
+        tags.append("child_labor")
+        extra_terms.extend(
+            [
+                "trabajo infantil",
+                "esclavitud moderna",
+                "trabajo forzado",
+                "menores",
+                "edad minima",
+                "derechos humanos",
+            ]
+        )
+    deduped_extra = list(dict.fromkeys(extra_terms))
+    expanded_text = original
+    if deduped_extra:
+        expanded_text = f"{original} {' '.join(deduped_extra)}".strip()
+    expanded_normalized = _normalize_for_match(expanded_text)
+    expanded_terms = _tokenize(expanded_text)
+
+    return {
+        "original_query": original,
+        "normalized_query": normalized_query,
+        "expanded_text": expanded_text,
+        "expanded_normalized": expanded_normalized,
+        "query_terms": _tokenize(original),
+        "expanded_terms": expanded_terms,
+        "tags": tags,
+        "intent": tags[0] if tags else "",
+        "age_values": ages,
+        "requires_exact_age": _requires_exact_age_query(normalized_query),
+    }
 
 
 def _is_upper_heading(line: str) -> bool:
@@ -325,19 +397,111 @@ def _build_index_cached(text_hash: str, corpus: tuple[str, ...]) -> dict[str, An
     token_lists = [tuple(_tokenize(text)) for text in corpus]
     token_sets = [set(tokens) for tokens in token_lists]
     normalized_texts = [ _normalize_for_match(text) for text in corpus ]
+    doc_len = [len(tokens) for tokens in token_lists]
+    avgdl = (sum(doc_len) / float(len(doc_len))) if doc_len else 0.0
+    tf_docs = [dict(Counter(tokens)) for tokens in token_lists]
+    df: dict[str, int] = {}
+    for token_set in token_sets:
+        for token in token_set:
+            df[token] = df.get(token, 0) + 1
     return {
         "token_lists": token_lists,
         "token_sets": token_sets,
         "normalized_texts": normalized_texts,
+        "doc_len": doc_len,
+        "avgdl": avgdl,
+        "tf_docs": tf_docs,
+        "df": df,
     }
 
 
 def build_bm25_index(chunks: list[dict[str, Any]]) -> dict[str, Any]:
     if not chunks:
-        return {"token_lists": [], "token_sets": [], "normalized_texts": []}
+        return {
+            "token_lists": [],
+            "token_sets": [],
+            "normalized_texts": [],
+            "doc_len": [],
+            "avgdl": 0.0,
+            "tf_docs": [],
+            "df": {},
+        }
     corpus = tuple(str(chunk.get("text", "")) for chunk in chunks)
     text_hash = _hash_text("\n".join(corpus))
     return _build_index_cached(text_hash, corpus)
+
+
+def _bm25_idf(term: str, index: dict[str, Any], total_docs: int) -> float:
+    df_map = index.get("df", {})
+    if not isinstance(df_map, dict):
+        return 0.0
+    df_value = int(df_map.get(term, 0))
+    if total_docs <= 0:
+        return 0.0
+    numerator = total_docs - df_value + 0.5
+    denominator = df_value + 0.5
+    if numerator <= 0 or denominator <= 0:
+        return 0.0
+    # Keep positive IDF values and avoid extreme spikes in tiny corpora.
+    return max(0.0, float(math.log1p(numerator / denominator)))
+
+
+def _rank_by_bm25(
+    query_meta: dict[str, Any],
+    index: dict[str, Any],
+    chunks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    expanded_tokens = list(dict.fromkeys(query_meta.get("expanded_terms", [])))
+    if not expanded_tokens:
+        return []
+
+    tf_docs = index.get("tf_docs", [])
+    doc_len = index.get("doc_len", [])
+    normalized_texts = index.get("normalized_texts", [])
+    avgdl = float(index.get("avgdl", 0.0) or 0.0)
+    total_docs = len(chunks)
+
+    ranked: list[dict[str, Any]] = []
+    for idx, chunk in enumerate(chunks):
+        tf = tf_docs[idx] if idx < len(tf_docs) and isinstance(tf_docs[idx], dict) else {}
+        dl = float(doc_len[idx]) if idx < len(doc_len) else float(len(_tokenize(str(chunk.get("text", "")))))
+        normalized_text = normalized_texts[idx] if idx < len(normalized_texts) else ""
+        score = 0.0
+        matched_terms: list[str] = []
+
+        for term in expanded_tokens:
+            tf_value = float(tf.get(term, 0))
+            if tf_value <= 0:
+                continue
+            matched_terms.append(term)
+            idf = _bm25_idf(term, index, total_docs)
+            denominator = tf_value + _BM25_K1 * (1 - _BM25_B + _BM25_B * (dl / max(1.0, avgdl or 1.0)))
+            score += idf * ((tf_value * (_BM25_K1 + 1)) / max(0.0001, denominator))
+
+        exact_bonus = 0.0
+        expanded_normalized = str(query_meta.get("expanded_normalized", ""))
+        if expanded_normalized and expanded_normalized in normalized_text:
+            exact_bonus = _EXACT_SUBSTRING_BONUS
+            score += exact_bonus
+
+        if score <= 0:
+            continue
+
+        ranked.append(
+            {
+                **chunk,
+                "score": score,
+                "overlap": len(matched_terms),
+                "match_type": "bm25_exact" if exact_bonus > 0 else "bm25",
+                "matched_terms": matched_terms,
+            }
+        )
+
+    ranked.sort(
+        key=lambda item: (float(item.get("score", 0.0)), int(item.get("overlap", 0))),
+        reverse=True,
+    )
+    return ranked
 
 
 def _rank_by_token_overlap(
@@ -438,7 +602,7 @@ def _rank_by_sequence_match(
 
 
 def _collect_debug_candidates(
-    query: str,
+    query_meta: dict[str, Any],
     query_tokens: list[str],
     index: dict[str, Any],
     chunks: list[dict[str, Any]],
@@ -446,7 +610,7 @@ def _collect_debug_candidates(
 ) -> list[dict[str, Any]]:
     if not chunks:
         return []
-    query_norm = _normalize_for_match(query)
+    query_norm = str(query_meta.get("expanded_normalized", ""))
     query_terms = sorted(set(query_tokens), key=len, reverse=True)
     total_terms = max(1, len(query_terms))
     candidates: list[dict[str, Any]] = []
@@ -477,14 +641,26 @@ def _collect_debug_candidates(
             seq_ratio,
         )
         snippet = _normalize_spaces(text)[:200]
+        section = str(
+            chunk.get("source_label")
+            or (
+                f"Articulo {chunk.get('article_id')}"
+                if chunk.get("article_id")
+                else f"Seccion {chunk.get('section_id')}"
+                if chunk.get("section_id")
+                else ""
+            )
+        )
         candidates.append(
             {
                 "chunk_id": chunk.get("chunk_id", idx + 1),
                 "source_label": str(chunk.get("source_label", f"Chunk {idx + 1}")),
                 "source": str(chunk.get("source_label", f"Chunk {idx + 1}")),
+                "section": section,
                 "score": round(float(score), 4),
                 "overlap": int(overlap_count),
                 "match_type": match_type,
+                "preview": snippet,
                 "snippet": snippet,
             }
         )
@@ -502,15 +678,21 @@ def retrieve(
     chunks: list[dict[str, Any]],
     k: int = 4,
     kb_name: str = "",
+    min_score: float = 0.0,
 ) -> list[dict[str, Any]]:
     if not query or not chunks:
         _set_last_kb_debug(
             {
                 "query": str(query or ""),
+                "query_original": str(query or ""),
+                "query_expanded": str(query or ""),
+                "intent": "",
+                "tags": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks or []),
                 "retrieved_count": 0,
                 "reason": "no_query_or_chunks",
+                "min_score": float(min_score),
                 "top_candidates": [],
             }
         )
@@ -519,30 +701,45 @@ def retrieve(
         _set_last_kb_debug(
             {
                 "query": str(query),
+                "query_original": str(query),
+                "query_expanded": str(query),
+                "intent": "",
+                "tags": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks),
                 "retrieved_count": 0,
                 "reason": "no_index",
+                "min_score": float(min_score),
                 "top_candidates": [],
             }
         )
         return []
 
-    query_tokens = _tokenize(query)
-    debug_candidates = _collect_debug_candidates(query, query_tokens, index, chunks, top_n=4)
-    ranked = _rank_by_token_overlap(query_tokens, index, chunks)
-    reason = "token_overlap"
+    query_meta = expand_query(query)
+    expanded_text = str(query_meta.get("expanded_text", query))
+    query_tokens = _tokenize(expanded_text)
+    debug_candidates = _collect_debug_candidates(
+        query_meta, query_tokens, index, chunks, top_n=6
+    )
+    ranked = _rank_by_bm25(query_meta, index, chunks)
+    reason = "bm25"
+    if not ranked:
+        ranked = _rank_by_token_overlap(query_tokens, index, chunks)
+        reason = "token_overlap"
     if not ranked:
         ranked = _rank_by_substring(query_tokens, index, chunks)
         reason = "substring_fallback"
     if not ranked:
-        ranked = _rank_by_sequence_match(query, index, chunks)
+        ranked = _rank_by_sequence_match(expanded_text, index, chunks)
         reason = "sequence_fallback"
     if not ranked:
         reason = "no_hits"
 
     results = []
-    for item in ranked[: max(1, k)]:
+    score_threshold = float(min_score)
+    for item in ranked:
+        if float(item.get("score", 0.0)) < score_threshold:
+            continue
         chunk_id = int(item.get("chunk_id", 0)) if str(item.get("chunk_id", "")).isdigit() else item.get("chunk_id")
         source_label = str(item.get("source_label", "")).strip() or f"Chunk {chunk_id or 1}"
         results.append(
@@ -556,13 +753,23 @@ def retrieve(
                 "match_type": str(item.get("match_type", "")),
             }
         )
+        if len(results) >= max(1, k):
+            break
     _set_last_kb_debug(
         {
             "query": query,
+            "query_original": str(query_meta.get("original_query", query)),
+            "query_expanded": str(query_meta.get("expanded_text", query)),
+            "intent": str(query_meta.get("intent", "")),
+            "tags": list(query_meta.get("tags", [])),
+            "expanded_terms": list(query_meta.get("expanded_terms", [])),
+            "query_terms": list(query_meta.get("query_terms", [])),
+            "requires_exact_age": bool(query_meta.get("requires_exact_age", False)),
             "kb_name": kb_name,
             "chunks_total": len(chunks),
             "retrieved_count": len(results),
             "reason": reason,
+            "min_score": score_threshold,
             "top_candidates": debug_candidates,
         }
     )

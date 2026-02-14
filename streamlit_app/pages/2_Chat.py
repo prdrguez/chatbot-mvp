@@ -86,12 +86,18 @@ kb_debug = bool(st.session_state.get("kb_debug", False))
 kb_hash = st.session_state.get("kb_hash", "")
 kb_chunks = st.session_state.get("kb_chunks", [])
 kb_index = st.session_state.get("kb_index", {})
+kb_top_k = int(st.session_state.get("kb_top_k", 4))
+kb_min_score = float(st.session_state.get("kb_min_score", 0.0))
+kb_max_context_chars = int(st.session_state.get("kb_max_context_chars", 3200))
 kb_mode_label = "Solo KB (estricto)" if kb_mode == KB_MODE_STRICT else "General"
 if kb_text and kb_name:
     st.caption(f"KB activa: {kb_name}")
 else:
     st.caption("KB activa: ninguna")
 st.caption(f"Modo: {kb_mode_label}")
+st.caption(
+    f"Retrieval: top_k={kb_top_k}, min_score={kb_min_score}, max_chars={kb_max_context_chars}"
+)
 if kb_name and not kb_text:
     st.warning("Hay nombre de KB activo pero el contenido esta vacio.")
 
@@ -107,6 +113,11 @@ if kb_debug:
                 f"Query: {debug_payload.get('query', '')} | "
                 f"Motivo: {debug_payload.get('reason', '')}"
             )
+            st.caption(f"Query expandida: {debug_payload.get('query_expanded', '')}")
+            st.caption(
+                f"Intent: {debug_payload.get('intent', '')} | "
+                f"Tags: {', '.join(debug_payload.get('tags', []))}"
+            )
             st.caption(
                 f"Chunks recuperados: {debug_payload.get('retrieved_count', 0)} | "
                 f"Contexto usado: {debug_payload.get('used_context', False)}"
@@ -116,11 +127,12 @@ if kb_debug:
                 st.caption("0 hits. Revisa query/threshold y chunking.")
             for row in rows:
                 source = row.get("source") or row.get("source_label", "")
+                section = row.get("section", "")
                 score = row.get("score", 0.0)
                 match_type = row.get("match_type", "")
-                snippet = row.get("snippet", "")
+                snippet = row.get("preview") or row.get("snippet", "")
                 st.caption(
-                    f"{source} | score={score} | match={match_type} | snippet={snippet}"
+                    f"{source} | section={section} | score={score} | match={match_type} | snippet={snippet}"
                 )
 
 if active_provider == "gemini":
@@ -175,6 +187,9 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
             "kb_chunks": kb_chunks,
             "kb_index": kb_index,
             "kb_updated_at": st.session_state.get("kb_updated_at", ""),
+            "kb_top_k": kb_top_k,
+            "kb_min_score": kb_min_score,
+            "kb_max_context_chars": kb_max_context_chars,
         }
         if kb_debug:
             logger.info(

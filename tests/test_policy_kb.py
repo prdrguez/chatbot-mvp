@@ -5,6 +5,7 @@ from chatbot_mvp.knowledge.policy_kb import (
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
     build_bm25_index,
+    expand_query,
     normalize_kb_mode,
     parse_policy,
     retrieve,
@@ -77,6 +78,38 @@ def test_retrieve_securion_with_real_kb():
 
     assert results
     assert any("securion" in str(item.get("text", "")).lower() for item in results)
+
+
+def test_expand_query_detects_child_labor_intent():
+    expanded = expand_query("puede un menor de 9 años trabajar")
+
+    assert expanded["intent"] == "child_labor"
+    assert "child_labor" in expanded["tags"]
+    assert "trabajo infantil" in expanded["expanded_text"].lower()
+
+
+def test_retrieve_minor_age_targets_child_labor_section():
+    kb_path = Path(__file__).resolve().parents[1] / "docs" / "securin.txt"
+    text = kb_path.read_text(encoding="utf-8")
+    chunks = parse_policy(text)
+    index = build_bm25_index(chunks)
+
+    results = retrieve(
+        "puede un menor de 9 años trabajar",
+        index,
+        chunks,
+        k=4,
+        kb_name="securin.txt",
+    )
+
+    assert results
+    hay_child_labor = any(
+        "trabajo infantil" in str(item.get("text", "")).lower()
+        or "esclavitud moderna" in str(item.get("text", "")).lower()
+        or "12" in str(item.get("source_label", "")).lower()
+        for item in results
+    )
+    assert hay_child_labor
 
 
 def test_public_load_kb_accepts_kb_updated_at_kwarg():
