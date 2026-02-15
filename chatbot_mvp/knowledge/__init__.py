@@ -6,6 +6,7 @@ from chatbot_mvp.knowledge import policy_kb as _policy_kb
 KB_MODE_GENERAL = _policy_kb.KB_MODE_GENERAL
 KB_MODE_STRICT = _policy_kb.KB_MODE_STRICT
 normalize_kb_mode = _policy_kb.normalize_kb_mode
+expand_query = _policy_kb.expand_query
 parse_policy = _policy_kb.parse_policy
 build_bm25_index = _policy_kb.build_bm25_index
 retrieve = _policy_kb.retrieve
@@ -49,6 +50,7 @@ __all__ = [
     "KB_MODE_GENERAL",
     "KB_MODE_STRICT",
     "normalize_kb_mode",
+    "expand_query",
     "load_kb",
     "parse_policy",
     "build_bm25_index",

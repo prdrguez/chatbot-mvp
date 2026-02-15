@@ -34,6 +34,52 @@ logger = logging.getLogger(__name__)
 _KB_EMPTY_RESPONSE = (
     "No encuentro eso en el documento cargado. Si me indicas el apartado/titulo o pegas el fragmento, lo reviso."
 )
+_KB_GENERAL_NOTICE = "El documento cargado no menciona esto."
+_KB_GENERAL_PROVIDER_INSTRUCTION = (
+    "Nota: el documento cargado no menciona esta informacion; responde con conocimiento general "
+    "sin atribuirla al documento."
+)
+_KB_ORG_SPECIFIC_PREFIX = (
+    "No encuentro esto en el documento cargado, asi que no puedo confirmar la politica interna."
+)
+_KB_ORG_SPECIFIC_FOLLOWUP = (
+    "Si queres, subi el documento o el fragmento del apartado y lo reviso."
+)
+_KB_ORG_SPECIFIC_GUIDE = (
+    "Guia general (no verificada por el documento):\n"
+    "- Defini por escrito alcance, responsables y excepciones.\n"
+    "- Establece criterios de cumplimiento y controles trazables.\n"
+    "- Inclui un canal de consultas y actualizacion periodica.\n"
+    "- Registra comunicacion, capacitacion y evidencias de aplicacion."
+)
+_KB_DEFAULT_TOP_K = 4
+_KB_DEFAULT_MIN_SCORE = 0.0
+_KB_DEFAULT_MAX_CONTEXT_CHARS = 3200
+_ORG_SPECIFIC_PHRASES = (
+    "en la empresa",
+    "en securion",
+    "nuestra empresa",
+    "politica interna",
+    "protocolo",
+    "codigo de conducta",
+    "regalos de clientes",
+    "rrhh",
+    "compliance",
+    "area legal",
+    "manual interno",
+)
+_ORG_POLICY_WORDS = (
+    "politica",
+    "protocolo",
+    "interna",
+    "interno",
+    "procedimiento",
+    "codigo",
+    "conducta",
+    "rrhh",
+    "compliance",
+    "regalos",
+)
 
 
 class ResponseStrategy(Protocol):
@@ -385,6 +431,9 @@ class ChatService:
         )
 
         if not sources:
+            notice = str(prepared_user_context.get("kb_notice", "")).strip()
+            if notice:
+                return self._prepend_notice(response, notice)
             return response
         return self._append_sources(response, sources)
 
@@ -415,6 +464,9 @@ class ChatService:
         )
 
         if not sources:
+            notice = str(prepared_user_context.get("kb_notice", "")).strip()
+            if notice:
+                return self._stream_with_notice(stream, notice)
             return stream
         return self._stream_with_sources(stream, sources)
 
@@ -431,6 +483,9 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_inactiva",
                 "query": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -441,6 +496,9 @@ class ChatService:
         kb_hash = kb_payload["kb_hash"]
         kb_chunks = kb_payload["kb_chunks"]
         kb_index = kb_payload["kb_index"]
+        kb_top_k = kb_payload["kb_top_k"]
+        kb_min_score = kb_payload["kb_min_score"]
+        kb_max_context_chars = kb_payload["kb_max_context_chars"]
         strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
@@ -450,6 +508,9 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_vacia",
                 "query": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
                 "chunks": [],
             }
             if strict_mode:
@@ -470,6 +531,9 @@ class ChatService:
                 "used_context": False,
                 "reason": "sin_chunks",
                 "query": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
                 "chunks": [],
             }
             if strict_mode:
@@ -477,11 +541,20 @@ class ChatService:
             return message, base_context, [], None, []
 
         index = self._resolve_kb_index(kb_text, kb_hash, kb_index, chunks)
-        retrieved_chunks = retrieve(message, index, chunks, k=4, kb_name=kb_name)
+        retrieved_chunks = retrieve(
+            message,
+            index,
+            chunks,
+            k=kb_top_k,
+            kb_name=kb_name,
+            min_score=kb_min_score,
+        )
         self._log_kb_retrieval(kb_name, retrieved_chunks)
         policy_debug = get_policy_kb_debug()
         debug_chunks = self._normalize_debug_chunks(policy_debug.get("top_candidates", []))
         if not self._has_sufficient_evidence(retrieved_chunks):
+            intent = str(policy_debug.get("intent", ""))
+            tags = list(policy_debug.get("tags", []))
             self.last_kb_debug = {
                 "kb_name": kb_name,
                 "kb_mode": kb_mode,
@@ -489,15 +562,33 @@ class ChatService:
                 "used_context": False,
                 "reason": str(policy_debug.get("reason", "no_hits")),
                 "query": str(policy_debug.get("query", message)),
+                "query_expanded": str(policy_debug.get("query_expanded", message)),
+                "intent": intent,
+                "tags": tags,
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "min_score": float(policy_debug.get("min_score", kb_min_score)),
                 "chunks": debug_chunks,
             }
             if strict_mode:
                 return message, base_context, [], _KB_EMPTY_RESPONSE, retrieved_chunks
-            return message, base_context, [], None, retrieved_chunks
+            if self.is_org_specific_query(message):
+                fixed_response = self._build_org_specific_no_evidence_response()
+                return message, base_context, [], fixed_response, retrieved_chunks
 
-        sources = self._extract_sources(retrieved_chunks)
-        context_block = self._build_kb_context_block(kb_name, retrieved_chunks)
+            prepared_context = dict(base_context)
+            prepared_context["kb_notice"] = _KB_GENERAL_NOTICE
+            prepared_context["kb_notice_required"] = True
+            prepared_context["kb_notice_reason"] = "no_evidence_general"
+            prepared_context["kb_notice_prompt"] = _KB_GENERAL_PROVIDER_INSTRUCTION
+            prompt_with_notice = (
+                f"{_KB_GENERAL_PROVIDER_INSTRUCTION}\n\n"
+                f"Pregunta del usuario: {message}"
+            )
+            return prompt_with_notice, prepared_context, [], None, retrieved_chunks
+
+        context_chunks = self._limit_context_chunks(retrieved_chunks, kb_max_context_chars)
+        sources = self._extract_sources(context_chunks, max_sources=kb_top_k)
+        context_block = self._build_kb_context_block(kb_name, context_chunks)
         if strict_mode:
             guidance = (
                 "Instrucciones obligatorias:\n"
@@ -524,17 +615,24 @@ class ChatService:
         prepared_context["kb_sources"] = sources
         prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
         prepared_context["kb_hash"] = kb_hash
+        prepared_context["kb_top_k"] = kb_top_k
+        prepared_context["kb_min_score"] = kb_min_score
+        prepared_context["kb_max_context_chars"] = kb_max_context_chars
         self.last_kb_debug = {
             "kb_name": kb_name,
             "kb_mode": kb_mode,
-            "retrieved_count": len(retrieved_chunks),
+            "retrieved_count": len(context_chunks),
             "used_context": True,
             "reason": str(policy_debug.get("reason", "contexto_inyectado")),
             "query": str(policy_debug.get("query", message)),
+            "query_expanded": str(policy_debug.get("query_expanded", message)),
+            "intent": str(policy_debug.get("intent", "")),
+            "tags": list(policy_debug.get("tags", [])),
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+            "min_score": float(policy_debug.get("min_score", kb_min_score)),
             "chunks": debug_chunks,
         }
-        return prepared_message, prepared_context, sources, None, retrieved_chunks
+        return prepared_message, prepared_context, sources, None, context_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, Any]]:
         if not user_context:
@@ -548,6 +646,24 @@ class ChatService:
         kb_hash = str(user_context.get("kb_hash", "")).strip()
         kb_chunks = user_context.get("kb_chunks")
         kb_index = user_context.get("kb_index")
+        kb_top_k = self._safe_int(
+            user_context.get("kb_top_k", _KB_DEFAULT_TOP_K),
+            default=_KB_DEFAULT_TOP_K,
+            minimum=1,
+            maximum=8,
+        )
+        kb_min_score = self._safe_float(
+            user_context.get("kb_min_score", _KB_DEFAULT_MIN_SCORE),
+            default=_KB_DEFAULT_MIN_SCORE,
+            minimum=0.0,
+            maximum=10.0,
+        )
+        kb_max_context_chars = self._safe_int(
+            user_context.get("kb_max_context_chars", _KB_DEFAULT_MAX_CONTEXT_CHARS),
+            default=_KB_DEFAULT_MAX_CONTEXT_CHARS,
+            minimum=800,
+            maximum=20000,
+        )
         return {
             "kb_text": kb_text,
             "kb_name": kb_name,
@@ -555,6 +671,9 @@ class ChatService:
             "kb_hash": kb_hash,
             "kb_chunks": kb_chunks if isinstance(kb_chunks, list) else [],
             "kb_index": kb_index if isinstance(kb_index, dict) else {},
+            "kb_top_k": kb_top_k,
+            "kb_min_score": kb_min_score,
+            "kb_max_context_chars": kb_max_context_chars,
         }
 
     def _resolve_kb_index(
@@ -602,6 +721,8 @@ class ChatService:
                     "score": float(row.get("score", 0.0)),
                     "overlap": int(row.get("overlap", 0)),
                     "match_type": str(row.get("match_type", "")),
+                    "section": str(row.get("section", "")),
+                    "preview": str(row.get("preview", row.get("snippet", ""))),
                     "snippet": str(row.get("snippet", "")),
                 }
             )
@@ -662,16 +783,21 @@ class ChatService:
             lines.append(text)
         return "\n".join(lines)
 
-    def _extract_sources(self, retrieved_chunks: List[Dict[str, Any]]) -> list[str]:
+    def _extract_sources(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        max_sources: int = 4,
+    ) -> list[str]:
         seen = set()
         ordered_sources: list[str] = []
+        limit = max(1, int(max_sources))
         for chunk in retrieved_chunks:
             source = str(chunk.get("source_label", "")).strip()
             if not source or source in seen:
                 continue
             seen.add(source)
             ordered_sources.append(source)
-            if len(ordered_sources) >= 4:
+            if len(ordered_sources) >= limit:
                 break
         return ordered_sources
 
@@ -682,7 +808,7 @@ class ChatService:
         if lines and lines[-1].strip().lower().startswith("fuentes:"):
             lines = lines[:-1]
         clean_response = "\n".join(lines).rstrip()
-        sources_text = ", ".join(sources[:4])
+        sources_text = ", ".join(sources)
         return f"{clean_response}\n\nFuentes: {sources_text}"
 
     def _build_demo_kb_answer(
@@ -706,9 +832,115 @@ class ChatService:
         def generator() -> Iterator[str]:
             for chunk in stream:
                 yield chunk
-            yield f"\n\nFuentes: {', '.join(sources[:4])}"
+            yield f"\n\nFuentes: {', '.join(sources)}"
 
         return generator()
+
+    def _prepend_notice(self, response: str, notice: str) -> str:
+        clean_notice = notice.strip()
+        clean_response = response.strip()
+        if not clean_notice:
+            return clean_response
+        if clean_response.lower().startswith(clean_notice.lower()):
+            return clean_response
+        if not clean_response:
+            return clean_notice
+        return f"{clean_notice}\n\nRespuesta general: {clean_response}"
+
+    def _stream_with_notice(
+        self,
+        stream: Iterator[str],
+        notice: str,
+    ) -> Iterator[str]:
+        def generator() -> Iterator[str]:
+            yield notice.strip() + "\n\nRespuesta general: "
+            for chunk in stream:
+                yield chunk
+
+        return generator()
+
+    def _limit_context_chunks(
+        self,
+        chunks: List[Dict[str, Any]],
+        max_context_chars: int,
+    ) -> List[Dict[str, Any]]:
+        if not chunks:
+            return []
+        char_budget = max(300, int(max_context_chars))
+        used = 0
+        limited: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            text = str(chunk.get("text", "")).strip()
+            if not text:
+                continue
+            remaining = char_budget - used
+            if remaining <= 0:
+                break
+            if len(text) <= remaining:
+                limited.append(chunk)
+                used += len(text)
+                continue
+            clipped = dict(chunk)
+            clipped["text"] = text[: max(120, remaining)].rstrip() + "..."
+            limited.append(clipped)
+            break
+        return limited if limited else chunks[:1]
+
+    def _build_org_specific_no_evidence_response(self) -> str:
+        return (
+            f"{_KB_ORG_SPECIFIC_PREFIX}\n\n"
+            f"{_KB_ORG_SPECIFIC_FOLLOWUP}\n\n"
+            f"{_KB_ORG_SPECIFIC_GUIDE}"
+        )
+
+    def is_org_specific_query(self, query: str) -> bool:
+        normalized_query = self._normalize_query(query)
+        if any(phrase in normalized_query for phrase in _ORG_SPECIFIC_PHRASES):
+            return True
+        has_policy_word = self._contains_policy_word(normalized_query)
+        if has_policy_word and self._has_quoted_phrase(query):
+            return True
+        if has_policy_word and self._has_non_initial_proper_token(query):
+            return True
+        return False
+
+    def _normalize_query(self, query: str) -> str:
+        lowered = str(query or "").lower()
+        return re.sub(r"\s+", " ", lowered).strip()
+
+    def _contains_policy_word(self, normalized_query: str) -> bool:
+        return any(term in normalized_query for term in _ORG_POLICY_WORDS)
+
+    def _has_quoted_phrase(self, query: str) -> bool:
+        return bool(re.search(r"['\"][^'\"]+['\"]", str(query or "")))
+
+    def _has_non_initial_proper_token(self, query: str) -> bool:
+        text = str(query or "")
+        matches = re.finditer(r"\b[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9_-]{2,}\b", text)
+        for match in matches:
+            if match.start() > 0:
+                return True
+        return False
+
+    def _safe_int(self, value: Any, default: int, minimum: int, maximum: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
+
+    def _safe_float(
+        self,
+        value: Any,
+        default: float,
+        minimum: float,
+        maximum: float,
+    ) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
 
     def _single_chunk_stream(self, message: str) -> Iterator[str]:
         def generator() -> Iterator[str]:

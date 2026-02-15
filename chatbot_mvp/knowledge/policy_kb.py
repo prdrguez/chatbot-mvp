@@ -75,6 +75,23 @@ _STOPWORDS = {
 }
 
 
+def expand_query(query: str) -> dict[str, Any]:
+    original_query = str(query or "").strip()
+    normalized_query = _normalize_for_match(original_query)
+    expanded_query = original_query
+    tags: list[str] = []
+    intent = ""
+    expanded_tokens = _tokenize(expanded_query)
+    return {
+        "original_query": original_query,
+        "normalized_query": normalized_query,
+        "expanded_text": expanded_query,
+        "expanded_tokens": expanded_tokens,
+        "intent": intent,
+        "tags": tags,
+    }
+
+
 def normalize_kb_mode(mode: Any) -> str:
     if isinstance(mode, str):
         raw = mode.strip().lower()
@@ -502,15 +519,21 @@ def retrieve(
     chunks: list[dict[str, Any]],
     k: int = 4,
     kb_name: str = "",
+    min_score: float = 0.0,
 ) -> list[dict[str, Any]]:
     if not query or not chunks:
         _set_last_kb_debug(
             {
                 "query": str(query or ""),
+                "query_original": str(query or ""),
+                "query_expanded": str(query or ""),
+                "intent": "",
+                "tags": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks or []),
                 "retrieved_count": 0,
                 "reason": "no_query_or_chunks",
+                "min_score": float(min_score),
                 "top_candidates": [],
             }
         )
@@ -519,30 +542,44 @@ def retrieve(
         _set_last_kb_debug(
             {
                 "query": str(query),
+                "query_original": str(query),
+                "query_expanded": str(query),
+                "intent": "",
+                "tags": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks),
                 "retrieved_count": 0,
                 "reason": "no_index",
+                "min_score": float(min_score),
                 "top_candidates": [],
             }
         )
         return []
 
-    query_tokens = _tokenize(query)
-    debug_candidates = _collect_debug_candidates(query, query_tokens, index, chunks, top_n=4)
+    query_meta = expand_query(query)
+    expanded_query = str(query_meta.get("expanded_text", query))
+    query_tokens = list(query_meta.get("expanded_tokens", []))
+    if not query_tokens:
+        query_tokens = _tokenize(expanded_query)
+    debug_candidates = _collect_debug_candidates(
+        expanded_query, query_tokens, index, chunks, top_n=4
+    )
     ranked = _rank_by_token_overlap(query_tokens, index, chunks)
     reason = "token_overlap"
     if not ranked:
         ranked = _rank_by_substring(query_tokens, index, chunks)
         reason = "substring_fallback"
     if not ranked:
-        ranked = _rank_by_sequence_match(query, index, chunks)
+        ranked = _rank_by_sequence_match(expanded_query, index, chunks)
         reason = "sequence_fallback"
     if not ranked:
         reason = "no_hits"
 
     results = []
-    for item in ranked[: max(1, k)]:
+    threshold = float(min_score)
+    for item in ranked:
+        if float(item.get("score", 0.0)) < threshold:
+            continue
         chunk_id = int(item.get("chunk_id", 0)) if str(item.get("chunk_id", "")).isdigit() else item.get("chunk_id")
         source_label = str(item.get("source_label", "")).strip() or f"Chunk {chunk_id or 1}"
         results.append(
@@ -556,13 +593,20 @@ def retrieve(
                 "match_type": str(item.get("match_type", "")),
             }
         )
+        if len(results) >= max(1, k):
+            break
     _set_last_kb_debug(
         {
             "query": query,
+            "query_original": str(query_meta.get("original_query", query)),
+            "query_expanded": expanded_query,
+            "intent": str(query_meta.get("intent", "")),
+            "tags": list(query_meta.get("tags", [])),
             "kb_name": kb_name,
             "chunks_total": len(chunks),
             "retrieved_count": len(results),
             "reason": reason,
+            "min_score": threshold,
             "top_candidates": debug_candidates,
         }
     )

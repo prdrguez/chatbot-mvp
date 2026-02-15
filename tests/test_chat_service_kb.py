@@ -124,7 +124,7 @@ def test_kb_general_mode_allows_fallback_without_evidence():
     )
 
     response = service.send_message(
-        message="Que dice sobre viajes espaciales?",
+        message="Que es la NFL?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
@@ -134,7 +134,33 @@ def test_kb_general_mode_allows_fallback_without_evidence():
     )
 
     assert fake.call_count == 1
-    assert response == "Respuesta basada en evidencia."
+    assert "El documento cargado no menciona esto." in response
+    assert "Respuesta general:" in response
+    assert "documento cargado no menciona esta informacion" in fake.last_message.lower()
+    assert "Fuentes:" not in response
+
+
+def test_kb_general_org_specific_without_evidence_skips_provider():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 10 Integridad\n"
+        "Securion promueve la integridad en todas sus operaciones."
+    )
+
+    response = service.send_message(
+        message="Cual es la politica interna de ACME Corp sobre regalos?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "general",
+        },
+    )
+
+    assert fake.call_count == 0
+    assert response.startswith("No encuentro esto en el documento cargado")
+    assert "no verificada" in response.lower()
     assert "Fuentes:" not in response
 
 
@@ -248,3 +274,4 @@ def test_kb_debug_available_after_no_hits():
     assert debug_payload.get("kb_name") == "securin.txt"
     assert debug_payload.get("used_context") is False
     assert debug_payload.get("chunks") is not None
+    assert "query_expanded" in debug_payload
