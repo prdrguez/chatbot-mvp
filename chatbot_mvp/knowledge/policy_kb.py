@@ -4,6 +4,7 @@ import difflib
 import hashlib
 import re
 import unicodedata
+from collections import Counter
 from typing import Any
 
 import streamlit as st
@@ -28,6 +29,9 @@ _CHAPTER_RE = re.compile(r"(?im)^\s*(cap[i\u00ed]tulo|secci[o\u00f3]n|section)\s
 _NUMBERED_HEADING_RE = re.compile(r"(?m)^\s*(\d+(?:\.\d+)*)\s*[.)-]?\s+([^\n]{3,120})$")
 _TOKEN_RE = re.compile(r"[a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+_ENTITY_TOKEN_RE = re.compile(
+    r"\b(?:[A-Z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1][A-Za-z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]{3,}|[A-Z]{4,})\b"
+)
 _LAST_KB_DEBUG: dict[str, Any] = {}
 _STOPWORDS = {
     "a",
@@ -72,6 +76,28 @@ _STOPWORDS = {
     "un",
     "una",
     "y",
+}
+_ENTITY_STOPWORDS = {
+    "seccion",
+    "secciones",
+    "section",
+    "articulo",
+    "articulos",
+    "capitulo",
+    "capitulos",
+    "codigo",
+    "etico",
+    "politica",
+    "politicas",
+    "linea",
+    "etica",
+    "introduccion",
+    "publicado",
+    "enero",
+    "grupo",
+    "valores",
+    "mision",
+    "vision",
 }
 
 
@@ -131,6 +157,35 @@ def _tokenize(text: str) -> list[str]:
             continue
         tokens.append(token)
     return tokens
+
+
+def infer_primary_entity(text: str) -> str:
+    source = str(text or "")
+    if not source.strip():
+        return ""
+    counts: Counter[str] = Counter()
+    first_seen: dict[str, int] = {}
+    for idx, match in enumerate(_ENTITY_TOKEN_RE.finditer(source)):
+        token = match.group(0).strip()
+        if not token:
+            continue
+        normalized = _strip_accents(token).lower()
+        if normalized in _ENTITY_STOPWORDS:
+            continue
+        canonical = token.title() if token.isupper() else token
+        counts[canonical] += 1
+        first_seen.setdefault(canonical, idx)
+    if not counts:
+        return ""
+    ranked = sorted(
+        counts.items(),
+        key=lambda item: (
+            -int(item[1]),
+            int(first_seen.get(item[0], 0)),
+            str(item[0]).lower(),
+        ),
+    )
+    return str(ranked[0][0])
 
 
 def _is_upper_heading(line: str) -> bool:
@@ -312,18 +367,25 @@ def parse_policy(text: str) -> list[dict[str, Any]]:
     return _parse_policy_cached(_hash_text(text), text)
 
 
-def load_kb(text: str, name: str) -> dict[str, Any]:
+def load_kb(
+    text: str,
+    name: str,
+    kb_updated_at: str | int | None = None,
+) -> dict[str, Any]:
     normalized_text = str(text or "").strip()
     kb_name = str(name or "KB cargada").strip() or "KB cargada"
     kb_hash = _hash_text(normalized_text)
     chunks = parse_policy(normalized_text)
     index = build_bm25_index(chunks)
+    kb_primary_entity = infer_primary_entity(normalized_text)
     return {
         "kb_name": kb_name,
         "kb_hash": kb_hash,
         "chunks": chunks,
         "index": index,
         "chunks_total": len(chunks),
+        "kb_updated_at": str(kb_updated_at or ""),
+        "kb_primary_entity": kb_primary_entity,
     }
 
 

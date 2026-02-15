@@ -88,3 +88,17 @@ def test_public_load_kb_accepts_kb_updated_at_kwarg():
 
     assert isinstance(bundle, dict)
     assert bundle.get("kb_name") == "test.txt"
+    assert bundle.get("kb_updated_at") == "2026-02-13T00:00:00Z"
+
+
+def test_public_load_kb_infers_primary_entity():
+    bundle = public_load_kb(
+        text=(
+            "Codigo Etico Grupo Securion\n"
+            "Securion define principios de cumplimiento.\n"
+            "Securion aplica controles internos."
+        ),
+        name="securin.txt",
+    )
+
+    assert bundle.get("kb_primary_entity") == "Securion"
