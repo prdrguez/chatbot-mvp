@@ -27,6 +27,30 @@ Notas tecnicas vigentes del repo.
 - Modo `general` y `strict`.
 - Debug opcional de retrieval visible en Chat.
 
+### General vs Strict (flujo vigente)
+- `Strict`:
+  - Usa solo evidencia recuperada.
+  - Si no hay evidencia suficiente, responde fijo `No encuentro eso...` y no llama provider.
+- `General`:
+  - Si hay evidencia suficiente, responde grounded y agrega `Fuentes`.
+  - Si no hay evidencia y la consulta no es interna, responde en modo general con aviso explicito: `El documento cargado no menciona esto.`
+  - Si no hay evidencia y la consulta parece politica/procedimiento interno de una organizacion, bloquea invencion de politicas: no llama provider, pide documento/fragmento y devuelve guia general no verificada.
+
+### Query expansion y debug
+- `policy_kb.expand_query` normaliza el formato de consulta para retrieval/debug y deja campos estables:
+  - `query_original`
+  - `query_expanded`
+  - `intent`
+  - `tags`
+- En esta etapa la expansion es rule-based minima (sin embeddings) para mantener latencia y complejidad bajas.
+
+### Heuristica org-specific (anti alucinacion en General)
+- Implementada en `ChatService.is_org_specific_query`.
+- Señales:
+  - Frases directas (`en la empresa`, `politica interna`, `codigo de conducta`, `RRHH`, `compliance`, etc.).
+  - Nombre propio no inicial + terminos de politica/procedimiento.
+  - Frase entre comillas + terminos de politica/procedimiento.
+
 ## Persistencia de datos
 - Evaluaciones: `data/submissions.jsonl`.
 - Override provider: `chatbot_mvp/data/app_settings.json`.

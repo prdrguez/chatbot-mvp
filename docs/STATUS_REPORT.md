@@ -8,6 +8,7 @@ Fecha de actualizacion: 2026-02-14
 - Chat usa streaming y soporte de providers Gemini/Groq con fallback a Demo.
 - Admin permite cambiar provider (Gemini/Groq), cargar KB y activar debug de retrieval.
 - Evaluacion guarda resultados locales en `data/submissions.jsonl`.
+- Modo General ahora distingue entre consultas con evidencia, consultas generales sin evidencia y consultas internas de organizacion sin evidencia.
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).
@@ -24,7 +25,11 @@ Fecha de actualizacion: 2026-02-14
   - Parse por articulos/secciones + chunking por tamano.
   - Retrieval lexical con overlap/substrings/sequence fallback.
   - Modos `General` y `Solo KB (estricto)`.
-  - `Debug KB` en Chat (expander con query, razon, chunks y scores).
+  - `Debug KB` en Chat (query original/expandida, intent/tags, razon, chunks y scores).
+  - En `General`:
+    - Si hay evidencia: respuesta grounded con `Fuentes`.
+    - Si no hay evidencia y la consulta no es interna: agrega aviso `El documento cargado no menciona esto.` y responde en modo general sin atribuir al documento.
+    - Si no hay evidencia y la consulta es de politica interna/organizacion: no llama provider, no inventa, pide documento/fragmento y ofrece guia general no verificada.
 - Dashboard Admin con KPIs + export CSV/JSON + borrado de submissions en modo mantenimiento.
 
 ## Que NO funciona hoy
@@ -106,7 +111,7 @@ python -m streamlit run streamlit_app/Inicio.py --server.port 8502
 
 ## Tests (estado actual)
 - Comando ejecutado: `python -m pytest`
-- Resultado: `22 passed, 1 skipped`
+- Resultado: `23 passed, 1 skipped`
 - Test skippeado: `tests/test_auth_state.py` (legacy Reflex)
 
 ## Backlog
