@@ -4,6 +4,7 @@ import difflib
 import hashlib
 import re
 import unicodedata
+from collections import Counter
 from typing import Any
 
 import streamlit as st
@@ -28,6 +29,9 @@ _CHAPTER_RE = re.compile(r"(?im)^\s*(cap[i\u00ed]tulo|secci[o\u00f3]n|section)\s
 _NUMBERED_HEADING_RE = re.compile(r"(?m)^\s*(\d+(?:\.\d+)*)\s*[.)-]?\s+([^\n]{3,120})$")
 _TOKEN_RE = re.compile(r"[a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+_ENTITY_TOKEN_RE = re.compile(
+    r"\b(?:[A-Z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1][A-Za-z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]{3,}|[A-Z]{4,})\b"
+)
 _LAST_KB_DEBUG: dict[str, Any] = {}
 _STOPWORDS = {
     "a",
@@ -73,6 +77,45 @@ _STOPWORDS = {
     "una",
     "y",
 }
+_ENTITY_STOPWORDS = {
+    "seccion",
+    "secciones",
+    "section",
+    "articulo",
+    "articulos",
+    "capitulo",
+    "capitulos",
+    "codigo",
+    "etico",
+    "politica",
+    "politicas",
+    "linea",
+    "etica",
+    "introduccion",
+    "publicado",
+    "enero",
+    "grupo",
+    "valores",
+    "mision",
+    "vision",
+}
+
+
+def expand_query(query: str) -> dict[str, Any]:
+    original_query = str(query or "").strip()
+    normalized_query = _normalize_for_match(original_query)
+    expanded_query = original_query
+    tags: list[str] = []
+    intent = ""
+    expanded_tokens = _tokenize(expanded_query)
+    return {
+        "original_query": original_query,
+        "normalized_query": normalized_query,
+        "expanded_text": expanded_query,
+        "expanded_tokens": expanded_tokens,
+        "intent": intent,
+        "tags": tags,
+    }
 
 
 def normalize_kb_mode(mode: Any) -> str:
@@ -114,6 +157,35 @@ def _tokenize(text: str) -> list[str]:
             continue
         tokens.append(token)
     return tokens
+
+
+def infer_primary_entity(text: str) -> str:
+    source = str(text or "")
+    if not source.strip():
+        return ""
+    counts: Counter[str] = Counter()
+    first_seen: dict[str, int] = {}
+    for idx, match in enumerate(_ENTITY_TOKEN_RE.finditer(source)):
+        token = match.group(0).strip()
+        if not token:
+            continue
+        normalized = _strip_accents(token).lower()
+        if normalized in _ENTITY_STOPWORDS:
+            continue
+        canonical = token.title() if token.isupper() else token
+        counts[canonical] += 1
+        first_seen.setdefault(canonical, idx)
+    if not counts:
+        return ""
+    ranked = sorted(
+        counts.items(),
+        key=lambda item: (
+            -int(item[1]),
+            int(first_seen.get(item[0], 0)),
+            str(item[0]).lower(),
+        ),
+    )
+    return str(ranked[0][0])
 
 
 def _is_upper_heading(line: str) -> bool:
@@ -295,18 +367,25 @@ def parse_policy(text: str) -> list[dict[str, Any]]:
     return _parse_policy_cached(_hash_text(text), text)
 
 
-def load_kb(text: str, name: str) -> dict[str, Any]:
+def load_kb(
+    text: str,
+    name: str,
+    kb_updated_at: str | int | None = None,
+) -> dict[str, Any]:
     normalized_text = str(text or "").strip()
     kb_name = str(name or "KB cargada").strip() or "KB cargada"
     kb_hash = _hash_text(normalized_text)
     chunks = parse_policy(normalized_text)
     index = build_bm25_index(chunks)
+    kb_primary_entity = infer_primary_entity(normalized_text)
     return {
         "kb_name": kb_name,
         "kb_hash": kb_hash,
         "chunks": chunks,
         "index": index,
         "chunks_total": len(chunks),
+        "kb_updated_at": str(kb_updated_at or ""),
+        "kb_primary_entity": kb_primary_entity,
     }
 
 
@@ -502,15 +581,21 @@ def retrieve(
     chunks: list[dict[str, Any]],
     k: int = 4,
     kb_name: str = "",
+    min_score: float = 0.0,
 ) -> list[dict[str, Any]]:
     if not query or not chunks:
         _set_last_kb_debug(
             {
                 "query": str(query or ""),
+                "query_original": str(query or ""),
+                "query_expanded": str(query or ""),
+                "intent": "",
+                "tags": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks or []),
                 "retrieved_count": 0,
                 "reason": "no_query_or_chunks",
+                "min_score": float(min_score),
                 "top_candidates": [],
             }
         )
@@ -519,30 +604,44 @@ def retrieve(
         _set_last_kb_debug(
             {
                 "query": str(query),
+                "query_original": str(query),
+                "query_expanded": str(query),
+                "intent": "",
+                "tags": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks),
                 "retrieved_count": 0,
                 "reason": "no_index",
+                "min_score": float(min_score),
                 "top_candidates": [],
             }
         )
         return []
 
-    query_tokens = _tokenize(query)
-    debug_candidates = _collect_debug_candidates(query, query_tokens, index, chunks, top_n=4)
+    query_meta = expand_query(query)
+    expanded_query = str(query_meta.get("expanded_text", query))
+    query_tokens = list(query_meta.get("expanded_tokens", []))
+    if not query_tokens:
+        query_tokens = _tokenize(expanded_query)
+    debug_candidates = _collect_debug_candidates(
+        expanded_query, query_tokens, index, chunks, top_n=4
+    )
     ranked = _rank_by_token_overlap(query_tokens, index, chunks)
     reason = "token_overlap"
     if not ranked:
         ranked = _rank_by_substring(query_tokens, index, chunks)
         reason = "substring_fallback"
     if not ranked:
-        ranked = _rank_by_sequence_match(query, index, chunks)
+        ranked = _rank_by_sequence_match(expanded_query, index, chunks)
         reason = "sequence_fallback"
     if not ranked:
         reason = "no_hits"
 
     results = []
-    for item in ranked[: max(1, k)]:
+    threshold = float(min_score)
+    for item in ranked:
+        if float(item.get("score", 0.0)) < threshold:
+            continue
         chunk_id = int(item.get("chunk_id", 0)) if str(item.get("chunk_id", "")).isdigit() else item.get("chunk_id")
         source_label = str(item.get("source_label", "")).strip() or f"Chunk {chunk_id or 1}"
         results.append(
@@ -556,13 +655,20 @@ def retrieve(
                 "match_type": str(item.get("match_type", "")),
             }
         )
+        if len(results) >= max(1, k):
+            break
     _set_last_kb_debug(
         {
             "query": query,
+            "query_original": str(query_meta.get("original_query", query)),
+            "query_expanded": expanded_query,
+            "intent": str(query_meta.get("intent", "")),
+            "tags": list(query_meta.get("tags", [])),
             "kb_name": kb_name,
             "chunks_total": len(chunks),
             "retrieved_count": len(results),
             "reason": reason,
+            "min_score": threshold,
             "top_candidates": debug_candidates,
         }
     )

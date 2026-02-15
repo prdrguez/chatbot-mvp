@@ -116,7 +116,16 @@ def test_kb_grounding_returns_strict_message_with_empty_kb():
 
 
 def test_kb_general_mode_allows_fallback_without_evidence():
-    fake = FakeAIClient()
+    class NoAccessAIClient(FakeAIClient):
+        def generate_chat_response(
+            self, message, conversation_history, user_context=None, **kwargs
+        ):
+            self.call_count += 1
+            self.last_message = message
+            self.last_user_context = user_context or {}
+            return "No tengo acceso a informacion externa. La NFL es una liga profesional."
+
+    fake = NoAccessAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
         "ARTICULO 10 Integridad\n"
@@ -124,7 +133,7 @@ def test_kb_general_mode_allows_fallback_without_evidence():
     )
 
     response = service.send_message(
-        message="Que dice sobre viajes espaciales?",
+        message="Que es la NFL?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
@@ -134,20 +143,49 @@ def test_kb_general_mode_allows_fallback_without_evidence():
     )
 
     assert fake.call_count == 1
-    assert response == "Respuesta basada en evidencia."
+    assert "El documento cargado no menciona esto." in response
+    assert "Respuesta general:" in response
+    assert "responde con conocimiento general" in fake.last_message.lower()
     assert "Fuentes:" not in response
+    assert "no tengo acceso" not in response.lower()
+    assert service.get_last_kb_debug().get("used_context") is False
+
+
+def test_kb_general_org_specific_without_evidence_skips_provider():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (
+        "ARTICULO 10 Integridad\n"
+        "Securion promueve la integridad en todas sus operaciones.\n"
+        "Securion define sus politicas internas por escrito."
+    )
+
+    response = service.send_message(
+        message="Cual es la politica interna de ACME Corp sobre regalos?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "general",
+        },
+    )
+
+    assert fake.call_count == 0
+    assert "documento cargado corresponde a Securion" in response
+    assert "No puedo confirmar politicas internas de ACME" in response
+    assert "Fuentes:" not in response
+    assert service.get_last_kb_debug().get("org_mismatch") is True
 
 
 def test_kb_general_mode_with_evidence_adds_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
-    kb_text = (
-        "ARTICULO 2 Valores fundamentales\n"
-        "Securion prioriza transparencia, responsabilidad y calidad."
+    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
+        encoding="utf-8"
     )
 
     response = service.send_message(
-        message="Cuales son los valores de Securion?",
+        message="Se pueden recibir regalos?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
@@ -158,6 +196,8 @@ def test_kb_general_mode_with_evidence_adds_sources():
 
     assert fake.call_count == 1
     assert "Fuentes:" in response
+    assert response.lower().count("fuentes:") == 1
+    assert service.get_last_kb_debug().get("used_context") is True
 
 
 def test_kb_mode_legacy_strict_label_normalizes_to_strict():
@@ -248,3 +288,4 @@ def test_kb_debug_available_after_no_hits():
     assert debug_payload.get("kb_name") == "securin.txt"
     assert debug_payload.get("used_context") is False
     assert debug_payload.get("chunks") is not None
+    assert "query_expanded" in debug_payload
