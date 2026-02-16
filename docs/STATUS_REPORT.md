@@ -1,6 +1,6 @@
 ﻿# STATUS REPORT - Streamlit MVP
 
-Fecha de actualizacion: 2026-02-14
+Fecha de actualizacion: 2026-02-15
 
 ## Resumen ejecutivo
 - App activa en Streamlit multipage con entry point `streamlit_app/Inicio.py`.
@@ -8,6 +8,10 @@ Fecha de actualizacion: 2026-02-14
 - Chat usa streaming y soporte de providers Gemini/Groq con fallback a Demo.
 - Admin permite cambiar provider (Gemini/Groq), cargar KB y activar debug de retrieval.
 - Evaluacion guarda resultados locales en `data/submissions.jsonl`.
+- Modo General ahora distingue entre consultas con evidencia, consultas generales sin evidencia y consultas internas de organizacion sin evidencia.
+- Modo General ahora aplica un gate de evidencia real por keywords para evitar matches tangenciales (ej: `NFL` no fuerza `Fuentes`).
+- Modo General detecta mismatch de organizacion (ej: query sobre `ACME` con KB de `Securion`) y evita inventar politicas internas de terceros.
+- Grounding KB mejorado para intents implicitos (menores/trabajo infantil) y debug alineado con los chunks reales usados para respuesta/Fuentes.
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).
@@ -24,7 +28,14 @@ Fecha de actualizacion: 2026-02-14
   - Parse por articulos/secciones + chunking por tamano.
   - Retrieval lexical con overlap/substrings/sequence fallback.
   - Modos `General` y `Solo KB (estricto)`.
-  - `Debug KB` en Chat (expander con query, razon, chunks y scores).
+  - `Debug KB` en Chat (query original/expandida, intent/tags, razon, chunks y scores).
+  - Gate de evidencia real (keywords + siglas exactas) antes de marcar `used_context=True`.
+  - Deteccion de `kb_primary_entity` para manejo de mismatch organizacional.
+  - En `General`:
+    - Si hay evidencia: respuesta grounded con `Fuentes`.
+    - Si no hay evidencia y la consulta no es interna: agrega aviso `El documento cargado no menciona esto.` y responde en modo general sin atribuir al documento.
+    - Si no hay evidencia y la consulta es de politica interna/organizacion: no llama provider, no inventa, pide documento/fragmento y ofrece guia general no verificada.
+    - Si hay mismatch de entidad (KB vs query): aclara que el documento corresponde a la entidad de la KB y no confirma politicas internas de la otra organizacion.
 - Dashboard Admin con KPIs + export CSV/JSON + borrado de submissions en modo mantenimiento.
 
 ## Que NO funciona hoy
@@ -104,9 +115,20 @@ Remove-Item chatbot_mvp\data\app_settings.json -ErrorAction SilentlyContinue
 python -m streamlit run streamlit_app/Inicio.py --server.port 8502
 ```
 
+- Verificar casos de grounding en General (manual):
+
+```powershell
+python -m streamlit run streamlit_app/Inicio.py --server.port 8502
+```
+
+Luego en la UI (KB cargada `securin.txt`, modo General):
+- `que es la NFL?` -> aviso de documento no mencionado, respuesta general, sin `Fuentes`.
+- `cual es la politica interna de ACME Corp sobre regalos?` -> mismatch (doc de Securion), sin invencion de ACME.
+- `se pueden recibir regalos?` -> grounded con `Fuentes`.
+
 ## Tests (estado actual)
 - Comando ejecutado: `python -m pytest`
-- Resultado: `22 passed, 1 skipped`
+- Resultado: `24 passed, 1 skipped`
 - Test skippeado: `tests/test_auth_state.py` (legacy Reflex)
 
 ## Backlog

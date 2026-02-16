@@ -12,6 +12,7 @@ import hashlib
 import time
 import logging
 import re
+import unicodedata
 from typing import Any, Dict, List, Optional, Protocol, Iterator
 from abc import ABC, abstractmethod
 
@@ -21,6 +22,7 @@ from chatbot_mvp.knowledge import (
     KB_MODE_STRICT,
     build_bm25_index,
     get_last_kb_debug as get_policy_kb_debug,
+    infer_primary_entity,
     normalize_kb_mode,
     parse_policy,
     retrieve,
@@ -34,6 +36,124 @@ logger = logging.getLogger(__name__)
 _KB_EMPTY_RESPONSE = (
     "No encuentro eso en el documento cargado. Si me indicas el apartado/titulo o pegas el fragmento, lo reviso."
 )
+_KB_GENERAL_NOTICE = "El documento cargado no menciona esto."
+_KB_GENERAL_PROVIDER_INSTRUCTION = (
+    "Nota: el documento cargado no menciona esta informacion; responde con conocimiento general "
+    "sin atribuirla al documento ni a Securion. No uses frases sobre falta de acceso externo."
+)
+_KB_ORG_SPECIFIC_PREFIX = (
+    "No encuentro esto en el documento cargado, asi que no puedo confirmar la politica interna."
+)
+_KB_ORG_SPECIFIC_FOLLOWUP = (
+    "Si queres, subi el documento o el fragmento del apartado y lo reviso."
+)
+_KB_ORG_SPECIFIC_GUIDE = (
+    "Guia general (no verificada por el documento):\n"
+    "- Defini por escrito alcance, responsables y excepciones.\n"
+    "- Establece criterios de cumplimiento y controles trazables.\n"
+    "- Inclui un canal de consultas y actualizacion periodica.\n"
+    "- Registra comunicacion, capacitacion y evidencias de aplicacion."
+)
+_KB_DEFAULT_TOP_K = 4
+_KB_DEFAULT_MIN_SCORE = 0.0
+_KB_DEFAULT_MAX_CONTEXT_CHARS = 3200
+_CHILD_LABOR_EVIDENCE_PHRASES = (
+    "trabajo infantil",
+    "esclavitud moderna",
+    "trabajo forzado",
+)
+_CHILD_LABOR_STRICT_RESPONSE = (
+    "No. El documento rechaza el trabajo infantil y cualquier forma de trabajo forzado "
+    "o esclavitud moderna.\n\n"
+    "No encuentro una edad minima explicita de contratacion en el documento cargado."
+)
+_ORG_SPECIFIC_PHRASES = (
+    "en la empresa",
+    "en securion",
+    "nuestra empresa",
+    "politica interna",
+    "protocolo",
+    "codigo de conducta",
+    "regalos de clientes",
+    "rrhh",
+    "compliance",
+    "area legal",
+    "manual interno",
+)
+_ORG_POLICY_WORDS = (
+    "politica",
+    "protocolo",
+    "interna",
+    "interno",
+    "procedimiento",
+    "codigo",
+    "conducta",
+    "rrhh",
+    "compliance",
+    "regalos",
+)
+_GENERIC_QUERY_TERMS = {
+    "politica",
+    "politicas",
+    "procedimiento",
+    "procedimientos",
+    "empresa",
+    "empresas",
+    "interna",
+    "interno",
+    "documento",
+    "info",
+    "informacion",
+    "protocolo",
+    "codigo",
+    "conducta",
+    "manual",
+}
+_QUERY_STOPWORDS = {
+    "a",
+    "al",
+    "como",
+    "con",
+    "cual",
+    "cuales",
+    "de",
+    "del",
+    "el",
+    "en",
+    "es",
+    "esta",
+    "este",
+    "hay",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "para",
+    "por",
+    "que",
+    "se",
+    "si",
+    "sin",
+    "sobre",
+    "su",
+    "sus",
+    "un",
+    "una",
+    "y",
+}
+_ENTITY_SUFFIXES = ("corp", "inc", "ltd", "company", "co", "sa", "srl", "llc")
+_ENTITY_EXCLUDED_TOKENS = {
+    "cual",
+    "que",
+    "como",
+    "politica",
+    "interna",
+    "protocolo",
+    "codigo",
+    "conducta",
+    "regalos",
+    "empresa",
+}
 
 
 class ResponseStrategy(Protocol):
@@ -385,6 +505,11 @@ class ChatService:
         )
 
         if not sources:
+            notice = str(prepared_user_context.get("kb_notice", "")).strip()
+            if notice:
+                response = self._sanitize_general_no_evidence_response(response)
+            if notice:
+                return self._prepend_notice(response, notice)
             return response
         return self._append_sources(response, sources)
 
@@ -415,6 +540,9 @@ class ChatService:
         )
 
         if not sources:
+            notice = str(prepared_user_context.get("kb_notice", "")).strip()
+            if notice:
+                return self._stream_with_notice(stream, notice)
             return stream
         return self._stream_with_sources(stream, sources)
 
@@ -431,6 +559,11 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_inactiva",
                 "query": message,
+                "query_original": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
+                "retrieval_method": "hybrid",
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -441,6 +574,10 @@ class ChatService:
         kb_hash = kb_payload["kb_hash"]
         kb_chunks = kb_payload["kb_chunks"]
         kb_index = kb_payload["kb_index"]
+        kb_primary_entity = kb_payload["kb_primary_entity"]
+        kb_top_k = kb_payload["kb_top_k"]
+        kb_min_score = kb_payload["kb_min_score"]
+        kb_max_context_chars = kb_payload["kb_max_context_chars"]
         strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
@@ -450,6 +587,11 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_vacia",
                 "query": message,
+                "query_original": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
+                "retrieval_method": "hybrid",
                 "chunks": [],
             }
             if strict_mode:
@@ -462,6 +604,7 @@ class ChatService:
             logger.info("KB chunks hash mismatch detected. Rebuilding chunks from current kb_text.")
         base_chunks = kb_chunks if runtime_chunks_valid else parse_policy(kb_text)
         chunks = self._prefix_chunk_sources(kb_name, base_chunks)
+        kb_primary_entity = kb_primary_entity or infer_primary_entity(kb_text)
         if not chunks:
             self.last_kb_debug = {
                 "kb_name": kb_name,
@@ -470,6 +613,11 @@ class ChatService:
                 "used_context": False,
                 "reason": "sin_chunks",
                 "query": message,
+                "query_original": message,
+                "query_expanded": message,
+                "intent": "",
+                "tags": [],
+                "retrieval_method": "hybrid",
                 "chunks": [],
             }
             if strict_mode:
@@ -477,27 +625,150 @@ class ChatService:
             return message, base_context, [], None, []
 
         index = self._resolve_kb_index(kb_text, kb_hash, kb_index, chunks)
-        retrieved_chunks = retrieve(message, index, chunks, k=4, kb_name=kb_name)
+        retrieved_chunks = retrieve(
+            message,
+            index,
+            chunks,
+            k=kb_top_k,
+            kb_name=kb_name,
+            min_score=kb_min_score,
+        )
         self._log_kb_retrieval(kb_name, retrieved_chunks)
         policy_debug = get_policy_kb_debug()
-        debug_chunks = self._normalize_debug_chunks(policy_debug.get("top_candidates", []))
-        if not self._has_sufficient_evidence(retrieved_chunks):
+        query_original = str(policy_debug.get("query_original", message))
+        query_expanded = str(policy_debug.get("query_expanded", message))
+        intent = str(policy_debug.get("intent", ""))
+        tags = list(policy_debug.get("tags", []))
+        retrieval_method = str(policy_debug.get("retrieval_method", "hybrid"))
+        if strict_mode and intent == "child_labor":
+            child_labor_chunks = self._filter_child_labor_evidence_chunks(retrieved_chunks)
+            evidence_chunks = self._limit_context_chunks(
+                child_labor_chunks,
+                kb_max_context_chars,
+            )
+            debug_chunks = self._build_debug_chunks(evidence_chunks)
             self.last_kb_debug = {
                 "kb_name": kb_name,
                 "kb_mode": kb_mode,
-                "retrieved_count": len(retrieved_chunks),
-                "used_context": False,
-                "reason": str(policy_debug.get("reason", "no_hits")),
-                "query": str(policy_debug.get("query", message)),
+                "retrieved_count": len(evidence_chunks),
+                "used_context": bool(evidence_chunks),
+                "reason": (
+                    "strict_child_labor_grounded"
+                    if evidence_chunks
+                    else "strict_child_labor_no_evidence"
+                ),
+                "query": query_original,
+                "query_original": query_original,
+                "query_expanded": query_expanded,
+                "intent": intent,
+                "tags": tags,
+                "retrieval_method": retrieval_method,
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "min_score": float(policy_debug.get("min_score", kb_min_score)),
+                "chunks": debug_chunks,
+            }
+            if not evidence_chunks:
+                return message, base_context, [], _KB_EMPTY_RESPONSE, []
+            sources = self._extract_sources(evidence_chunks, max_sources=kb_top_k)
+            fixed_response = self._append_sources(_CHILD_LABOR_STRICT_RESPONSE, sources)
+            return message, base_context, [], fixed_response, evidence_chunks
+
+        keyword_meta = self._extract_query_keywords(message)
+        usable_chunks, gate_meta = self._filter_usable_evidence(
+            retrieved_chunks,
+            keyword_meta,
+        )
+        if strict_mode and self._query_requests_explicit_age(message):
+            usable_chunks = self._filter_chunks_with_explicit_age(usable_chunks)
+            if not usable_chunks:
+                gate_meta = {
+                    "reason": "strict_missing_explicit_age",
+                    "by_chunk": {},
+                }
+        evidence_chunks = self._limit_context_chunks(usable_chunks, kb_max_context_chars)
+        debug_chunks = self._build_debug_chunks(evidence_chunks)
+        org_specific = self.is_org_specific_query(message)
+        query_entities = self._extract_query_entities(message)
+        org_mismatch, mismatched_entities = self._detect_org_mismatch(
+            kb_primary_entity,
+            query_entities,
+            org_specific,
+        )
+
+        if org_mismatch:
+            mismatch_response = self._build_org_mismatch_response(
+                kb_primary_entity=kb_primary_entity,
+                mismatched_entities=mismatched_entities,
+                evidence_chunks=evidence_chunks,
+                kb_top_k=kb_top_k,
+            )
+            self.last_kb_debug = {
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+                "retrieved_count": len(evidence_chunks),
+                "used_context": bool(evidence_chunks),
+                "reason": "org_mismatch",
+                "query": query_original,
+                "query_original": query_original,
+                "query_expanded": query_expanded,
+                "intent": intent,
+                "tags": tags,
+                "retrieval_method": retrieval_method,
+                "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "min_score": float(policy_debug.get("min_score", kb_min_score)),
+                "keyword_tokens": list(keyword_meta.get("keyword_tokens", [])),
+                "keyword_required": int(keyword_meta.get("required_matches", 1)),
+                "acronyms": list(keyword_meta.get("acronyms", [])),
+                "query_entities": query_entities,
+                "kb_primary_entity": kb_primary_entity,
+                "org_mismatch": True,
+                "mismatched_entities": mismatched_entities,
+                "chunks": debug_chunks,
+            }
+            return message, base_context, [], mismatch_response, evidence_chunks
+
+        if not evidence_chunks:
+            self.last_kb_debug = {
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+                "retrieved_count": 0,
+                "used_context": False,
+                "reason": str(gate_meta.get("reason", policy_debug.get("reason", "no_hits"))),
+                "query": query_original,
+                "query_original": query_original,
+                "query_expanded": query_expanded,
+                "intent": intent,
+                "tags": tags,
+                "retrieval_method": retrieval_method,
+                "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "min_score": float(policy_debug.get("min_score", kb_min_score)),
+                "keyword_tokens": list(keyword_meta.get("keyword_tokens", [])),
+                "keyword_required": int(keyword_meta.get("required_matches", 1)),
+                "acronyms": list(keyword_meta.get("acronyms", [])),
+                "query_entities": query_entities,
+                "kb_primary_entity": kb_primary_entity,
+                "org_mismatch": False,
                 "chunks": debug_chunks,
             }
             if strict_mode:
-                return message, base_context, [], _KB_EMPTY_RESPONSE, retrieved_chunks
-            return message, base_context, [], None, retrieved_chunks
+                return message, base_context, [], _KB_EMPTY_RESPONSE, []
+            if org_specific:
+                fixed_response = self._build_org_specific_no_evidence_response()
+                return message, base_context, [], fixed_response, []
 
-        sources = self._extract_sources(retrieved_chunks)
-        context_block = self._build_kb_context_block(kb_name, retrieved_chunks)
+            prepared_context = dict(base_context)
+            prepared_context["kb_notice"] = _KB_GENERAL_NOTICE
+            prepared_context["kb_notice_required"] = True
+            prepared_context["kb_notice_reason"] = "no_evidence_general"
+            prepared_context["kb_notice_prompt"] = _KB_GENERAL_PROVIDER_INSTRUCTION
+            prompt_with_notice = (
+                f"{_KB_GENERAL_PROVIDER_INSTRUCTION}\n\n"
+                f"Pregunta del usuario: {message}"
+            )
+            return prompt_with_notice, prepared_context, [], None, []
+
+        sources = self._extract_sources(evidence_chunks, max_sources=kb_top_k)
+        context_block = self._build_kb_context_block(kb_name, evidence_chunks)
         if strict_mode:
             guidance = (
                 "Instrucciones obligatorias:\n"
@@ -524,17 +795,33 @@ class ChatService:
         prepared_context["kb_sources"] = sources
         prepared_context["kb_default_reply"] = _KB_EMPTY_RESPONSE
         prepared_context["kb_hash"] = kb_hash
+        prepared_context["kb_top_k"] = kb_top_k
+        prepared_context["kb_min_score"] = kb_min_score
+        prepared_context["kb_max_context_chars"] = kb_max_context_chars
+        prepared_context["kb_primary_entity"] = kb_primary_entity
         self.last_kb_debug = {
             "kb_name": kb_name,
             "kb_mode": kb_mode,
-            "retrieved_count": len(retrieved_chunks),
+            "retrieved_count": len(evidence_chunks),
             "used_context": True,
             "reason": str(policy_debug.get("reason", "contexto_inyectado")),
-            "query": str(policy_debug.get("query", message)),
+            "query": query_original,
+            "query_original": query_original,
+            "query_expanded": query_expanded,
+            "intent": intent,
+            "tags": tags,
+            "retrieval_method": retrieval_method,
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+            "min_score": float(policy_debug.get("min_score", kb_min_score)),
+            "keyword_tokens": list(keyword_meta.get("keyword_tokens", [])),
+            "keyword_required": int(keyword_meta.get("required_matches", 1)),
+            "acronyms": list(keyword_meta.get("acronyms", [])),
+            "query_entities": query_entities,
+            "kb_primary_entity": kb_primary_entity,
+            "org_mismatch": False,
             "chunks": debug_chunks,
         }
-        return prepared_message, prepared_context, sources, None, retrieved_chunks
+        return prepared_message, prepared_context, sources, None, evidence_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, Any]]:
         if not user_context:
@@ -548,6 +835,25 @@ class ChatService:
         kb_hash = str(user_context.get("kb_hash", "")).strip()
         kb_chunks = user_context.get("kb_chunks")
         kb_index = user_context.get("kb_index")
+        kb_primary_entity = str(user_context.get("kb_primary_entity", "")).strip()
+        kb_top_k = self._safe_int(
+            user_context.get("kb_top_k", _KB_DEFAULT_TOP_K),
+            default=_KB_DEFAULT_TOP_K,
+            minimum=1,
+            maximum=8,
+        )
+        kb_min_score = self._safe_float(
+            user_context.get("kb_min_score", _KB_DEFAULT_MIN_SCORE),
+            default=_KB_DEFAULT_MIN_SCORE,
+            minimum=0.0,
+            maximum=10.0,
+        )
+        kb_max_context_chars = self._safe_int(
+            user_context.get("kb_max_context_chars", _KB_DEFAULT_MAX_CONTEXT_CHARS),
+            default=_KB_DEFAULT_MAX_CONTEXT_CHARS,
+            minimum=800,
+            maximum=20000,
+        )
         return {
             "kb_text": kb_text,
             "kb_name": kb_name,
@@ -555,6 +861,10 @@ class ChatService:
             "kb_hash": kb_hash,
             "kb_chunks": kb_chunks if isinstance(kb_chunks, list) else [],
             "kb_index": kb_index if isinstance(kb_index, dict) else {},
+            "kb_primary_entity": kb_primary_entity,
+            "kb_top_k": kb_top_k,
+            "kb_min_score": kb_min_score,
+            "kb_max_context_chars": kb_max_context_chars,
         }
 
     def _resolve_kb_index(
@@ -602,10 +912,77 @@ class ChatService:
                     "score": float(row.get("score", 0.0)),
                     "overlap": int(row.get("overlap", 0)),
                     "match_type": str(row.get("match_type", "")),
+                    "section": str(row.get("section", "")),
+                    "preview": str(row.get("preview", row.get("snippet", ""))),
                     "snippet": str(row.get("snippet", "")),
+                    "usable": bool(row.get("usable", False)),
+                    "matched_keywords": list(row.get("matched_keywords", [])),
+                    "matched_acronyms": list(row.get("matched_acronyms", [])),
                 }
             )
         return normalized_rows
+
+    def _is_child_labor_evidence_chunk(self, chunk: Dict[str, Any]) -> bool:
+        source = str(chunk.get("source_label") or chunk.get("source") or "")
+        text = str(chunk.get("text", ""))
+        haystack = self._normalize_for_match(f"{source} {text}")
+        return any(
+            phrase in haystack for phrase in _CHILD_LABOR_EVIDENCE_PHRASES
+        )
+
+    def _filter_child_labor_evidence_chunks(
+        self,
+        chunks: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        relevant_chunks: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            if self._is_child_labor_evidence_chunk(chunk):
+                relevant_chunks.append(chunk)
+        return relevant_chunks
+
+    def _query_requests_explicit_age(self, query: str) -> bool:
+        normalized = self._normalize_for_match(query)
+        asks_min_age = "edad minima" in normalized
+        asks_exact_value = any(
+            signal in normalized
+            for signal in ("exacta", "exacto", "especifica", "especifico", "numero")
+        )
+        return bool(asks_min_age and asks_exact_value)
+
+    def _chunk_has_explicit_age(self, chunk: Dict[str, Any]) -> bool:
+        text = str(chunk.get("text", ""))
+        return bool(re.search(r"\b\d{1,2}\s*a(?:ñ|n)os\b", text, flags=re.IGNORECASE))
+
+    def _filter_chunks_with_explicit_age(
+        self,
+        chunks: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        exact_age_chunks: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            if self._chunk_has_explicit_age(chunk):
+                exact_age_chunks.append(chunk)
+        return exact_age_chunks
+
+    def _build_debug_chunks(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            source = str(chunk.get("source_label") or chunk.get("source") or "").strip()
+            section = str(chunk.get("section_id", "")).strip()
+            text = re.sub(r"\s+", " ", str(chunk.get("text", "")).strip())
+            rows.append(
+                {
+                    "chunk_id": chunk.get("chunk_id"),
+                    "source": source,
+                    "source_label": source,
+                    "section": section,
+                    "score": round(float(chunk.get("score", 0.0)), 4),
+                    "overlap": int(chunk.get("overlap", 0)),
+                    "match_type": str(chunk.get("match_type", "")),
+                    "preview": text[:220],
+                    "snippet": text[:220],
+                }
+            )
+        return rows
 
     def _prefix_chunk_sources(
         self, kb_name: str, chunks: List[Dict[str, Any]]
@@ -623,20 +1000,210 @@ class ChatService:
             prefixed_chunks.append(prefixed)
         return prefixed_chunks
 
-    def _has_sufficient_evidence(self, retrieved_chunks: List[Dict[str, Any]]) -> bool:
+    def _strip_accents(self, value: str) -> str:
+        normalized = unicodedata.normalize("NFD", value)
+        return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+
+    def _normalize_for_match(self, text: str) -> str:
+        lowered = self._strip_accents(str(text or "").lower())
+        lowered = re.sub(r"[^\w\s]", " ", lowered)
+        lowered = re.sub(r"\s+", " ", lowered).strip()
+        return lowered
+
+    def _extract_query_keywords(self, query: str) -> Dict[str, Any]:
+        query_text = str(query or "")
+        normalized = self._normalize_for_match(query_text)
+        acronym_tokens: List[str] = []
+        for raw in re.findall(r"\b[A-Z]{2,6}\b", query_text):
+            acronym = raw.strip().lower()
+            if acronym and acronym not in acronym_tokens:
+                acronym_tokens.append(acronym)
+        keywords: List[str] = []
+        for token in re.findall(r"[a-z0-9]+", normalized):
+            if len(token) < 3:
+                continue
+            if token in _QUERY_STOPWORDS:
+                continue
+            if token in _GENERIC_QUERY_TERMS:
+                continue
+            if token not in keywords:
+                keywords.append(token)
+        for acronym in acronym_tokens:
+            if acronym not in keywords:
+                keywords.append(acronym)
+        required_matches = 2 if len(keywords) >= 5 else 1
+        return {
+            "keyword_tokens": keywords,
+            "acronyms": acronym_tokens,
+            "required_matches": required_matches,
+        }
+
+    def _filter_usable_evidence(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        keyword_meta: Dict[str, Any],
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         if not retrieved_chunks:
-            return False
-        top = retrieved_chunks[0]
-        top_overlap = int(top.get("overlap", 0))
-        top_score = float(top.get("score", 0.0))
-        match_type = str(top.get("match_type", ""))
-        if top_overlap >= 1:
-            return True
-        if match_type == "substring":
-            return top_score >= 0.4
-        if match_type == "sequence":
-            return top_score >= 0.32
-        return top_score >= 0.25
+            return [], {"reason": "no_retrieved_chunks", "by_chunk": {}}
+
+        keyword_tokens = list(keyword_meta.get("keyword_tokens", []))
+        acronyms = list(keyword_meta.get("acronyms", []))
+        required_matches = max(1, int(keyword_meta.get("required_matches", 1)))
+        by_chunk: Dict[Any, Dict[str, Any]] = {}
+        usable_chunks: List[Dict[str, Any]] = []
+        if not keyword_tokens:
+            for chunk in retrieved_chunks:
+                chunk_id = chunk.get("chunk_id")
+                by_chunk[chunk_id] = {
+                    "usable": False,
+                    "matched_keywords": [],
+                    "matched_acronyms": [],
+                    "required_matches": required_matches,
+                }
+            return [], {"reason": "no_query_keywords", "by_chunk": by_chunk}
+
+        for chunk in retrieved_chunks:
+            chunk_text = str(chunk.get("text", ""))
+            normalized_text = self._normalize_for_match(chunk_text)
+            chunk_tokens = set(re.findall(r"[a-z0-9]+", normalized_text))
+            matched_keywords = [
+                token for token in keyword_tokens if token in chunk_tokens
+            ]
+            matched_acronyms = [
+                acronym for acronym in acronyms if acronym in chunk_tokens
+            ]
+            acronym_ok = not acronyms or len(matched_acronyms) == len(acronyms)
+            keyword_ok = len(matched_keywords) >= required_matches
+            usable = bool(acronym_ok and keyword_ok)
+            chunk_id = chunk.get("chunk_id")
+            by_chunk[chunk_id] = {
+                "usable": usable,
+                "matched_keywords": matched_keywords,
+                "matched_acronyms": matched_acronyms,
+                "required_matches": required_matches,
+            }
+            if usable:
+                enriched = dict(chunk)
+                enriched["matched_keywords"] = matched_keywords
+                enriched["matched_acronyms"] = matched_acronyms
+                usable_chunks.append(enriched)
+
+        if usable_chunks:
+            return usable_chunks, {"reason": "keyword_gate_pass", "by_chunk": by_chunk}
+        return [], {"reason": "keyword_gate_fail", "by_chunk": by_chunk}
+
+    def _enrich_debug_chunks(
+        self,
+        debug_chunks: List[Dict[str, Any]],
+        gate_meta: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        by_chunk = gate_meta.get("by_chunk", {})
+        if not isinstance(by_chunk, dict):
+            return debug_chunks
+        enriched_rows: List[Dict[str, Any]] = []
+        for row in debug_chunks:
+            enriched = dict(row)
+            chunk_id = row.get("chunk_id")
+            gate_row = by_chunk.get(chunk_id, {})
+            if isinstance(gate_row, dict) and gate_row:
+                enriched["usable"] = bool(gate_row.get("usable", False))
+                enriched["matched_keywords"] = list(
+                    gate_row.get("matched_keywords", [])
+                )
+                enriched["matched_acronyms"] = list(
+                    gate_row.get("matched_acronyms", [])
+                )
+            enriched_rows.append(enriched)
+        return enriched_rows
+
+    def _extract_query_entities(self, query: str) -> List[str]:
+        text = str(query or "")
+        entities: List[str] = []
+        for match in re.finditer(
+            r"\b([A-Z][A-Za-z0-9&.-]{1,}|[A-Z]{2,})\s+"
+            r"(Corp|Inc|Ltd|Company|Co|SA|SRL|LLC)\b",
+            text,
+        ):
+            entity = f"{match.group(1)} {match.group(2)}".strip()
+            if entity not in entities:
+                entities.append(entity)
+        for token in re.findall(r"\b[A-Z]{2,10}\b", text):
+            if token not in entities:
+                entities.append(token)
+        for match in re.finditer(
+            r"\b[A-Z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1]"
+            r"[A-Za-z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1\u00e1\u00e9\u00ed\u00f3\u00fa\u00f10-9_-]{3,}\b",
+            text,
+        ):
+            if match.start() == 0:
+                continue
+            token = match.group(0).strip()
+            normalized = self._normalize_entity_name(token)
+            if normalized in _ENTITY_EXCLUDED_TOKENS:
+                continue
+            if token not in entities:
+                entities.append(token)
+        return entities
+
+    def _normalize_entity_name(self, value: str) -> str:
+        normalized = self._normalize_for_match(value)
+        parts = [part for part in normalized.split(" ") if part]
+        if not parts:
+            return ""
+        if len(parts) >= 2 and parts[-1] in _ENTITY_SUFFIXES:
+            parts = parts[:-1]
+        return " ".join(parts)
+
+    def _detect_org_mismatch(
+        self,
+        kb_primary_entity: str,
+        query_entities: List[str],
+        org_specific: bool,
+    ) -> tuple[bool, List[str]]:
+        if not org_specific:
+            return False, []
+        primary_normalized = self._normalize_entity_name(kb_primary_entity)
+        if not primary_normalized:
+            return False, []
+        mismatches: List[str] = []
+        for entity in query_entities:
+            entity_normalized = self._normalize_entity_name(entity)
+            if not entity_normalized:
+                continue
+            if entity_normalized == primary_normalized:
+                continue
+            if entity not in mismatches:
+                mismatches.append(entity)
+        return bool(mismatches), mismatches
+
+    def _build_org_mismatch_response(
+        self,
+        kb_primary_entity: str,
+        mismatched_entities: List[str],
+        evidence_chunks: List[Dict[str, Any]],
+        kb_top_k: int,
+    ) -> str:
+        primary = kb_primary_entity or "el documento cargado"
+        target = mismatched_entities[0] if mismatched_entities else "esa organizacion"
+        response = (
+            f"El documento cargado corresponde a {primary}. "
+            f"No puedo confirmar politicas internas de {target} porque no estan en el documento."
+        )
+        if not evidence_chunks:
+            followup = (
+                "\n\nSi queres, subi el documento o el fragmento de "
+                f"{target} y lo reviso."
+            )
+            return response + followup
+        excerpt_source = evidence_chunks[0]
+        text = re.sub(r"\s+", " ", str(excerpt_source.get("text", "")).strip())
+        excerpt = text[:360] + ("..." if len(text) > 360 else "")
+        response = (
+            f"{response}\n\nLo que si dice el documento de {primary} sobre este tema:\n"
+            f"- {excerpt}"
+        )
+        sources = self._extract_sources(evidence_chunks, max_sources=kb_top_k)
+        return self._append_sources(response, sources)
 
     def _log_kb_retrieval(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> None:
         chunk_refs = []
@@ -662,27 +1229,34 @@ class ChatService:
             lines.append(text)
         return "\n".join(lines)
 
-    def _extract_sources(self, retrieved_chunks: List[Dict[str, Any]]) -> list[str]:
+    def _extract_sources(
+        self,
+        retrieved_chunks: List[Dict[str, Any]],
+        max_sources: int = 4,
+    ) -> list[str]:
         seen = set()
         ordered_sources: list[str] = []
+        limit = max(1, int(max_sources))
         for chunk in retrieved_chunks:
             source = str(chunk.get("source_label", "")).strip()
             if not source or source in seen:
                 continue
             seen.add(source)
             ordered_sources.append(source)
-            if len(ordered_sources) >= 4:
+            if len(ordered_sources) >= limit:
                 break
         return ordered_sources
 
     def _append_sources(self, response: str, sources: List[str]) -> str:
         if not sources:
             return response
-        lines = response.rstrip().splitlines()
-        if lines and lines[-1].strip().lower().startswith("fuentes:"):
-            lines = lines[:-1]
-        clean_response = "\n".join(lines).rstrip()
-        sources_text = ", ".join(sources[:4])
+        clean_response = re.sub(
+            r"(?:\n\s*)?Fuentes:\s*.+$",
+            "",
+            response.rstrip(),
+            flags=re.IGNORECASE | re.DOTALL,
+        ).rstrip()
+        sources_text = ", ".join(sources)
         return f"{clean_response}\n\nFuentes: {sources_text}"
 
     def _build_demo_kb_answer(
@@ -704,11 +1278,134 @@ class ChatService:
         self, stream: Iterator[str], sources: List[str]
     ) -> Iterator[str]:
         def generator() -> Iterator[str]:
+            full_response = ""
             for chunk in stream:
+                full_response += chunk
                 yield chunk
-            yield f"\n\nFuentes: {', '.join(sources[:4])}"
+            if re.search(r"(^|\n)\s*Fuentes\s*:", full_response, flags=re.IGNORECASE):
+                return
+            yield f"\n\nFuentes: {', '.join(sources)}"
 
         return generator()
+
+    def _prepend_notice(self, response: str, notice: str) -> str:
+        clean_notice = notice.strip()
+        clean_response = response.strip()
+        if not clean_notice:
+            return clean_response
+        if clean_response.lower().startswith(clean_notice.lower()):
+            return clean_response
+        if not clean_response:
+            return clean_notice
+        return f"{clean_notice}\n\nRespuesta general: {clean_response}"
+
+    def _sanitize_general_no_evidence_response(self, response: str) -> str:
+        clean = str(response or "")
+        blocked_patterns = [
+            r"(?i)\bno (?:tengo|cuento con) acceso a (?:internet|informacion externa|datos externos)\b\.?",
+            r"(?i)\bno puedo acceder a (?:informacion en tiempo real|fuentes externas)\b\.?",
+        ]
+        for pattern in blocked_patterns:
+            clean = re.sub(pattern, "", clean)
+        clean = re.sub(r"\n{3,}", "\n\n", clean).strip()
+        return clean or "No tengo una respuesta general util con el contexto actual."
+
+    def _stream_with_notice(
+        self,
+        stream: Iterator[str],
+        notice: str,
+    ) -> Iterator[str]:
+        def generator() -> Iterator[str]:
+            chunks: List[str] = []
+            for chunk in stream:
+                chunks.append(chunk)
+            clean_response = self._sanitize_general_no_evidence_response("".join(chunks))
+            yield notice.strip() + "\n\nRespuesta general: " + clean_response
+
+        return generator()
+
+    def _limit_context_chunks(
+        self,
+        chunks: List[Dict[str, Any]],
+        max_context_chars: int,
+    ) -> List[Dict[str, Any]]:
+        if not chunks:
+            return []
+        char_budget = max(300, int(max_context_chars))
+        used = 0
+        limited: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            text = str(chunk.get("text", "")).strip()
+            if not text:
+                continue
+            remaining = char_budget - used
+            if remaining <= 0:
+                break
+            if len(text) <= remaining:
+                limited.append(chunk)
+                used += len(text)
+                continue
+            clipped = dict(chunk)
+            clipped["text"] = text[: max(120, remaining)].rstrip() + "..."
+            limited.append(clipped)
+            break
+        return limited if limited else chunks[:1]
+
+    def _build_org_specific_no_evidence_response(self) -> str:
+        return (
+            f"{_KB_ORG_SPECIFIC_PREFIX}\n\n"
+            f"{_KB_ORG_SPECIFIC_FOLLOWUP}\n\n"
+            f"{_KB_ORG_SPECIFIC_GUIDE}"
+        )
+
+    def is_org_specific_query(self, query: str) -> bool:
+        normalized_query = self._normalize_query(query)
+        if any(phrase in normalized_query for phrase in _ORG_SPECIFIC_PHRASES):
+            return True
+        has_policy_word = self._contains_policy_word(normalized_query)
+        if has_policy_word and self._has_quoted_phrase(query):
+            return True
+        if has_policy_word and self._has_non_initial_proper_token(query):
+            return True
+        return False
+
+    def _normalize_query(self, query: str) -> str:
+        lowered = str(query or "").lower()
+        return re.sub(r"\s+", " ", lowered).strip()
+
+    def _contains_policy_word(self, normalized_query: str) -> bool:
+        return any(term in normalized_query for term in _ORG_POLICY_WORDS)
+
+    def _has_quoted_phrase(self, query: str) -> bool:
+        return bool(re.search(r"['\"][^'\"]+['\"]", str(query or "")))
+
+    def _has_non_initial_proper_token(self, query: str) -> bool:
+        text = str(query or "")
+        matches = re.finditer(r"\b[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9_-]{2,}\b", text)
+        for match in matches:
+            if match.start() > 0:
+                return True
+        return False
+
+    def _safe_int(self, value: Any, default: int, minimum: int, maximum: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
+
+    def _safe_float(
+        self,
+        value: Any,
+        default: float,
+        minimum: float,
+        maximum: float,
+    ) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
 
     def _single_chunk_stream(self, message: str) -> Iterator[str]:
         def generator() -> Iterator[str]:

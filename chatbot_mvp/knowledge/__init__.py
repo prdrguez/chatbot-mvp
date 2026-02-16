@@ -6,6 +6,9 @@ from chatbot_mvp.knowledge import policy_kb as _policy_kb
 KB_MODE_GENERAL = _policy_kb.KB_MODE_GENERAL
 KB_MODE_STRICT = _policy_kb.KB_MODE_STRICT
 normalize_kb_mode = _policy_kb.normalize_kb_mode
+detect_intent_and_expand = _policy_kb.detect_intent_and_expand
+expand_query = _policy_kb.expand_query
+infer_primary_entity = _policy_kb.infer_primary_entity
 parse_policy = _policy_kb.parse_policy
 build_bm25_index = _policy_kb.build_bm25_index
 retrieve = _policy_kb.retrieve
@@ -37,18 +40,24 @@ def load_kb(
     chunks = parse_policy(normalized_text)
     index = build_bm25_index(chunks)
     kb_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+    kb_primary_entity = infer_primary_entity(normalized_text)
     return {
         "kb_name": kb_name,
         "kb_hash": kb_hash,
         "chunks": chunks,
         "index": index,
         "chunks_total": len(chunks),
+        "kb_updated_at": str(kb_updated_at or ""),
+        "kb_primary_entity": kb_primary_entity,
     }
 
 __all__ = [
     "KB_MODE_GENERAL",
     "KB_MODE_STRICT",
     "normalize_kb_mode",
+    "detect_intent_and_expand",
+    "expand_query",
+    "infer_primary_entity",
     "load_kb",
     "parse_policy",
     "build_bm25_index",

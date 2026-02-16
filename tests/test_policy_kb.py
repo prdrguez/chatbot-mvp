@@ -5,6 +5,7 @@ from chatbot_mvp.knowledge.policy_kb import (
     KB_MODE_GENERAL,
     KB_MODE_STRICT,
     build_bm25_index,
+    detect_intent_and_expand,
     normalize_kb_mode,
     parse_policy,
     retrieve,
@@ -88,3 +89,41 @@ def test_public_load_kb_accepts_kb_updated_at_kwarg():
 
     assert isinstance(bundle, dict)
     assert bundle.get("kb_name") == "test.txt"
+    assert bundle.get("kb_updated_at") == "2026-02-13T00:00:00Z"
+
+
+def test_public_load_kb_infers_primary_entity():
+    bundle = public_load_kb(
+        text=(
+            "Codigo Etico Grupo Securion\n"
+            "Securion define principios de cumplimiento.\n"
+            "Securion aplica controles internos."
+        ),
+        name="securin.txt",
+    )
+
+    assert bundle.get("kb_primary_entity") == "Securion"
+
+
+def test_detect_intent_and_expand_child_labor():
+    meta = detect_intent_and_expand("puede un menor de 9 años trabajar")
+
+    assert meta.get("intent") == "child_labor"
+    assert "child_labor" in list(meta.get("tags", []))
+    assert "trabajo infantil" in str(meta.get("expanded_query", "")).lower()
+
+
+def test_retrieve_child_labor_hits_section_12_on_real_kb():
+    kb_path = Path(__file__).resolve().parents[1] / "docs" / "securin.txt"
+    text = kb_path.read_text(encoding="utf-8")
+    chunks = parse_policy(text)
+    index = build_bm25_index(chunks)
+
+    results = retrieve("puede un menor de 9 años trabajar", index, chunks, k=4)
+
+    assert results
+    assert any(
+        "esclavitud moderna" in str(item.get("source_label", "")).lower()
+        or "trabajo infantil" in str(item.get("text", "")).lower()
+        for item in results
+    )
