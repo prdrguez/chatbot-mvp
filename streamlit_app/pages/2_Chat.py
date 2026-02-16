@@ -107,10 +107,13 @@ if kb_debug:
             st.caption(f"KB: {debug_payload.get('kb_name', 'ninguna')}")
             st.caption(f"Modo: {debug_payload.get('kb_mode', 'general')}")
             st.caption(
-                f"Query: {debug_payload.get('query', '')} | "
-                f"Motivo: {debug_payload.get('reason', '')}"
+                f"Query original: {debug_payload.get('query_original', debug_payload.get('query', ''))}"
             )
             st.caption(f"Query expandida: {debug_payload.get('query_expanded', '')}")
+            st.caption(
+                f"Metodo retrieval: {debug_payload.get('retrieval_method', '')} | "
+                f"Motivo: {debug_payload.get('reason', '')}"
+            )
             st.caption(
                 f"Intent: {debug_payload.get('intent', '')} | "
                 f"Tags: {', '.join(debug_payload.get('tags', []))}"

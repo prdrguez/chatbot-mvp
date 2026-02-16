@@ -57,6 +57,16 @@ _KB_ORG_SPECIFIC_GUIDE = (
 _KB_DEFAULT_TOP_K = 4
 _KB_DEFAULT_MIN_SCORE = 0.0
 _KB_DEFAULT_MAX_CONTEXT_CHARS = 3200
+_CHILD_LABOR_EVIDENCE_PHRASES = (
+    "trabajo infantil",
+    "esclavitud moderna",
+    "trabajo forzado",
+)
+_CHILD_LABOR_STRICT_RESPONSE = (
+    "No. El documento rechaza el trabajo infantil y cualquier forma de trabajo forzado "
+    "o esclavitud moderna.\n\n"
+    "No encuentro una edad minima explicita de contratacion en el documento cargado."
+)
 _ORG_SPECIFIC_PHRASES = (
     "en la empresa",
     "en securion",
@@ -549,9 +559,11 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_inactiva",
                 "query": message,
+                "query_original": message,
                 "query_expanded": message,
                 "intent": "",
                 "tags": [],
+                "retrieval_method": "hybrid",
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -575,9 +587,11 @@ class ChatService:
                 "used_context": False,
                 "reason": "kb_vacia",
                 "query": message,
+                "query_original": message,
                 "query_expanded": message,
                 "intent": "",
                 "tags": [],
+                "retrieval_method": "hybrid",
                 "chunks": [],
             }
             if strict_mode:
@@ -599,9 +613,11 @@ class ChatService:
                 "used_context": False,
                 "reason": "sin_chunks",
                 "query": message,
+                "query_original": message,
                 "query_expanded": message,
                 "intent": "",
                 "tags": [],
+                "retrieval_method": "hybrid",
                 "chunks": [],
             }
             if strict_mode:
@@ -619,13 +635,58 @@ class ChatService:
         )
         self._log_kb_retrieval(kb_name, retrieved_chunks)
         policy_debug = get_policy_kb_debug()
-        debug_chunks = self._normalize_debug_chunks(policy_debug.get("top_candidates", []))
+        query_original = str(policy_debug.get("query_original", message))
+        query_expanded = str(policy_debug.get("query_expanded", message))
+        intent = str(policy_debug.get("intent", ""))
+        tags = list(policy_debug.get("tags", []))
+        retrieval_method = str(policy_debug.get("retrieval_method", "hybrid"))
+        if strict_mode and intent == "child_labor":
+            child_labor_chunks = self._filter_child_labor_evidence_chunks(retrieved_chunks)
+            evidence_chunks = self._limit_context_chunks(
+                child_labor_chunks,
+                kb_max_context_chars,
+            )
+            debug_chunks = self._build_debug_chunks(evidence_chunks)
+            self.last_kb_debug = {
+                "kb_name": kb_name,
+                "kb_mode": kb_mode,
+                "retrieved_count": len(evidence_chunks),
+                "used_context": bool(evidence_chunks),
+                "reason": (
+                    "strict_child_labor_grounded"
+                    if evidence_chunks
+                    else "strict_child_labor_no_evidence"
+                ),
+                "query": query_original,
+                "query_original": query_original,
+                "query_expanded": query_expanded,
+                "intent": intent,
+                "tags": tags,
+                "retrieval_method": retrieval_method,
+                "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "min_score": float(policy_debug.get("min_score", kb_min_score)),
+                "chunks": debug_chunks,
+            }
+            if not evidence_chunks:
+                return message, base_context, [], _KB_EMPTY_RESPONSE, []
+            sources = self._extract_sources(evidence_chunks, max_sources=kb_top_k)
+            fixed_response = self._append_sources(_CHILD_LABOR_STRICT_RESPONSE, sources)
+            return message, base_context, [], fixed_response, evidence_chunks
+
         keyword_meta = self._extract_query_keywords(message)
         usable_chunks, gate_meta = self._filter_usable_evidence(
             retrieved_chunks,
             keyword_meta,
         )
-        debug_chunks = self._enrich_debug_chunks(debug_chunks, gate_meta)
+        if strict_mode and self._query_requests_explicit_age(message):
+            usable_chunks = self._filter_chunks_with_explicit_age(usable_chunks)
+            if not usable_chunks:
+                gate_meta = {
+                    "reason": "strict_missing_explicit_age",
+                    "by_chunk": {},
+                }
+        evidence_chunks = self._limit_context_chunks(usable_chunks, kb_max_context_chars)
+        debug_chunks = self._build_debug_chunks(evidence_chunks)
         org_specific = self.is_org_specific_query(message)
         query_entities = self._extract_query_entities(message)
         org_mismatch, mismatched_entities = self._detect_org_mismatch(
@@ -638,19 +699,21 @@ class ChatService:
             mismatch_response = self._build_org_mismatch_response(
                 kb_primary_entity=kb_primary_entity,
                 mismatched_entities=mismatched_entities,
-                evidence_chunks=usable_chunks,
+                evidence_chunks=evidence_chunks,
                 kb_top_k=kb_top_k,
             )
             self.last_kb_debug = {
                 "kb_name": kb_name,
                 "kb_mode": kb_mode,
-                "retrieved_count": len(usable_chunks),
-                "used_context": bool(usable_chunks),
+                "retrieved_count": len(evidence_chunks),
+                "used_context": bool(evidence_chunks),
                 "reason": "org_mismatch",
-                "query": str(policy_debug.get("query", message)),
-                "query_expanded": str(policy_debug.get("query_expanded", message)),
-                "intent": str(policy_debug.get("intent", "")),
-                "tags": list(policy_debug.get("tags", [])),
+                "query": query_original,
+                "query_original": query_original,
+                "query_expanded": query_expanded,
+                "intent": intent,
+                "tags": tags,
+                "retrieval_method": retrieval_method,
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
                 "min_score": float(policy_debug.get("min_score", kb_min_score)),
                 "keyword_tokens": list(keyword_meta.get("keyword_tokens", [])),
@@ -662,21 +725,21 @@ class ChatService:
                 "mismatched_entities": mismatched_entities,
                 "chunks": debug_chunks,
             }
-            return message, base_context, [], mismatch_response, usable_chunks
+            return message, base_context, [], mismatch_response, evidence_chunks
 
-        if not usable_chunks:
-            intent = str(policy_debug.get("intent", ""))
-            tags = list(policy_debug.get("tags", []))
+        if not evidence_chunks:
             self.last_kb_debug = {
                 "kb_name": kb_name,
                 "kb_mode": kb_mode,
-                "retrieved_count": len(retrieved_chunks),
+                "retrieved_count": 0,
                 "used_context": False,
                 "reason": str(gate_meta.get("reason", policy_debug.get("reason", "no_hits"))),
-                "query": str(policy_debug.get("query", message)),
-                "query_expanded": str(policy_debug.get("query_expanded", message)),
+                "query": query_original,
+                "query_original": query_original,
+                "query_expanded": query_expanded,
                 "intent": intent,
                 "tags": tags,
+                "retrieval_method": retrieval_method,
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
                 "min_score": float(policy_debug.get("min_score", kb_min_score)),
                 "keyword_tokens": list(keyword_meta.get("keyword_tokens", [])),
@@ -688,10 +751,10 @@ class ChatService:
                 "chunks": debug_chunks,
             }
             if strict_mode:
-                return message, base_context, [], _KB_EMPTY_RESPONSE, retrieved_chunks
+                return message, base_context, [], _KB_EMPTY_RESPONSE, []
             if org_specific:
                 fixed_response = self._build_org_specific_no_evidence_response()
-                return message, base_context, [], fixed_response, retrieved_chunks
+                return message, base_context, [], fixed_response, []
 
             prepared_context = dict(base_context)
             prepared_context["kb_notice"] = _KB_GENERAL_NOTICE
@@ -702,11 +765,10 @@ class ChatService:
                 f"{_KB_GENERAL_PROVIDER_INSTRUCTION}\n\n"
                 f"Pregunta del usuario: {message}"
             )
-            return prompt_with_notice, prepared_context, [], None, retrieved_chunks
+            return prompt_with_notice, prepared_context, [], None, []
 
-        context_chunks = self._limit_context_chunks(usable_chunks, kb_max_context_chars)
-        sources = self._extract_sources(context_chunks, max_sources=kb_top_k)
-        context_block = self._build_kb_context_block(kb_name, context_chunks)
+        sources = self._extract_sources(evidence_chunks, max_sources=kb_top_k)
+        context_block = self._build_kb_context_block(kb_name, evidence_chunks)
         if strict_mode:
             guidance = (
                 "Instrucciones obligatorias:\n"
@@ -740,13 +802,15 @@ class ChatService:
         self.last_kb_debug = {
             "kb_name": kb_name,
             "kb_mode": kb_mode,
-            "retrieved_count": len(context_chunks),
+            "retrieved_count": len(evidence_chunks),
             "used_context": True,
             "reason": str(policy_debug.get("reason", "contexto_inyectado")),
-            "query": str(policy_debug.get("query", message)),
-            "query_expanded": str(policy_debug.get("query_expanded", message)),
-            "intent": str(policy_debug.get("intent", "")),
-            "tags": list(policy_debug.get("tags", [])),
+            "query": query_original,
+            "query_original": query_original,
+            "query_expanded": query_expanded,
+            "intent": intent,
+            "tags": tags,
+            "retrieval_method": retrieval_method,
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
             "min_score": float(policy_debug.get("min_score", kb_min_score)),
             "keyword_tokens": list(keyword_meta.get("keyword_tokens", [])),
@@ -757,7 +821,7 @@ class ChatService:
             "org_mismatch": False,
             "chunks": debug_chunks,
         }
-        return prepared_message, prepared_context, sources, None, context_chunks
+        return prepared_message, prepared_context, sources, None, evidence_chunks
 
     def _extract_kb_payload(self, user_context: Optional[Dict]) -> Optional[Dict[str, Any]]:
         if not user_context:
@@ -857,6 +921,68 @@ class ChatService:
                 }
             )
         return normalized_rows
+
+    def _is_child_labor_evidence_chunk(self, chunk: Dict[str, Any]) -> bool:
+        source = str(chunk.get("source_label") or chunk.get("source") or "")
+        text = str(chunk.get("text", ""))
+        haystack = self._normalize_for_match(f"{source} {text}")
+        return any(
+            phrase in haystack for phrase in _CHILD_LABOR_EVIDENCE_PHRASES
+        )
+
+    def _filter_child_labor_evidence_chunks(
+        self,
+        chunks: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        relevant_chunks: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            if self._is_child_labor_evidence_chunk(chunk):
+                relevant_chunks.append(chunk)
+        return relevant_chunks
+
+    def _query_requests_explicit_age(self, query: str) -> bool:
+        normalized = self._normalize_for_match(query)
+        asks_min_age = "edad minima" in normalized
+        asks_exact_value = any(
+            signal in normalized
+            for signal in ("exacta", "exacto", "especifica", "especifico", "numero")
+        )
+        return bool(asks_min_age and asks_exact_value)
+
+    def _chunk_has_explicit_age(self, chunk: Dict[str, Any]) -> bool:
+        text = str(chunk.get("text", ""))
+        return bool(re.search(r"\b\d{1,2}\s*a(?:ñ|n)os\b", text, flags=re.IGNORECASE))
+
+    def _filter_chunks_with_explicit_age(
+        self,
+        chunks: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        exact_age_chunks: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            if self._chunk_has_explicit_age(chunk):
+                exact_age_chunks.append(chunk)
+        return exact_age_chunks
+
+    def _build_debug_chunks(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            source = str(chunk.get("source_label") or chunk.get("source") or "").strip()
+            section = str(chunk.get("section_id", "")).strip()
+            text = re.sub(r"\s+", " ", str(chunk.get("text", "")).strip())
+            rows.append(
+                {
+                    "chunk_id": chunk.get("chunk_id"),
+                    "source": source,
+                    "source_label": source,
+                    "section": section,
+                    "score": round(float(chunk.get("score", 0.0)), 4),
+                    "overlap": int(chunk.get("overlap", 0)),
+                    "match_type": str(chunk.get("match_type", "")),
+                    "preview": text[:220],
+                    "snippet": text[:220],
+                }
+            )
+        return rows
 
     def _prefix_chunk_sources(
         self, kb_name: str, chunks: List[Dict[str, Any]]
@@ -1069,15 +1195,14 @@ class ChatService:
                 f"{target} y lo reviso."
             )
             return response + followup
-        limited = self._limit_context_chunks(evidence_chunks, max_context_chars=900)
-        excerpt_source = limited[0]
+        excerpt_source = evidence_chunks[0]
         text = re.sub(r"\s+", " ", str(excerpt_source.get("text", "")).strip())
         excerpt = text[:360] + ("..." if len(text) > 360 else "")
         response = (
             f"{response}\n\nLo que si dice el documento de {primary} sobre este tema:\n"
             f"- {excerpt}"
         )
-        sources = self._extract_sources(limited, max_sources=kb_top_k)
+        sources = self._extract_sources(evidence_chunks, max_sources=kb_top_k)
         return self._append_sources(response, sources)
 
     def _log_kb_retrieval(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> None:

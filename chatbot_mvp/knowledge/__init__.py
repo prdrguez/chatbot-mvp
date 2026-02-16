@@ -6,6 +6,7 @@ from chatbot_mvp.knowledge import policy_kb as _policy_kb
 KB_MODE_GENERAL = _policy_kb.KB_MODE_GENERAL
 KB_MODE_STRICT = _policy_kb.KB_MODE_STRICT
 normalize_kb_mode = _policy_kb.normalize_kb_mode
+detect_intent_and_expand = _policy_kb.detect_intent_and_expand
 expand_query = _policy_kb.expand_query
 infer_primary_entity = _policy_kb.infer_primary_entity
 parse_policy = _policy_kb.parse_policy
@@ -54,6 +55,7 @@ __all__ = [
     "KB_MODE_GENERAL",
     "KB_MODE_STRICT",
     "normalize_kb_mode",
+    "detect_intent_and_expand",
     "expand_query",
     "infer_primary_entity",
     "load_kb",

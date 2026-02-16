@@ -289,3 +289,77 @@ def test_kb_debug_available_after_no_hits():
     assert debug_payload.get("used_context") is False
     assert debug_payload.get("chunks") is not None
     assert "query_expanded" in debug_payload
+
+
+def test_kb_strict_child_labor_intent_returns_grounded_fixed_answer():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
+        encoding="utf-8"
+    )
+
+    response = service.send_message(
+        message="puede mi hijo de 9 años trabajar?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+
+    assert fake.call_count == 0
+    assert "rechaza" in response.lower()
+    assert "trabajo infantil" in response.lower()
+    assert "edad minima explicita" in response.lower()
+    assert "Fuentes:" in response
+    assert "Seccion 12" in response
+
+    debug_payload = service.get_last_kb_debug()
+    assert debug_payload.get("intent") == "child_labor"
+    assert "trabajo infantil" in str(debug_payload.get("query_expanded", "")).lower()
+    assert debug_payload.get("chunks")
+
+
+def test_kb_strict_nfl_returns_fixed_message_without_sources():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
+        encoding="utf-8"
+    )
+
+    response = service.send_message(
+        message="que es la NFL?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+
+    assert fake.call_count == 0
+    assert response.startswith("No encuentro eso en el documento cargado.")
+    assert "Fuentes:" not in response
+
+
+def test_kb_strict_explicit_min_age_without_number_returns_fixed_message():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
+        encoding="utf-8"
+    )
+
+    response = service.send_message(
+        message="cual es la edad minima exacta de contratacion?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "securin.txt",
+            "kb_mode": "strict",
+        },
+    )
+
+    assert fake.call_count == 0
+    assert response.startswith("No encuentro eso en el documento cargado.")
+    assert "Fuentes:" not in response

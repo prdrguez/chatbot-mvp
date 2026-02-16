@@ -11,6 +11,7 @@ Fecha de actualizacion: 2026-02-15
 - Modo General ahora distingue entre consultas con evidencia, consultas generales sin evidencia y consultas internas de organizacion sin evidencia.
 - Modo General ahora aplica un gate de evidencia real por keywords para evitar matches tangenciales (ej: `NFL` no fuerza `Fuentes`).
 - Modo General detecta mismatch de organizacion (ej: query sobre `ACME` con KB de `Securion`) y evita inventar politicas internas de terceros.
+- Grounding KB mejorado para intents implicitos (menores/trabajo infantil) y debug alineado con los chunks reales usados para respuesta/Fuentes.
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).

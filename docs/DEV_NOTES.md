@@ -77,6 +77,21 @@ Notas tecnicas vigentes del repo.
   - `intent`
   - `tags`
 - En esta etapa la expansion es rule-based minima (sin embeddings) para mantener latencia y complejidad bajas.
+- Adicionalmente, `policy_kb.detect_intent_and_expand` detecta intenciones implicitas y expande SIEMPRE la query antes de retrieval.
+  - Caso implementado: `child_labor`.
+  - Reglas minimas: menciones de menor/niño/adolescente/trabajo infantil o edad <= 15 + raiz `trabaj`.
+  - Expansion forzada: `trabajo infantil`, `esclavitud moderna`, `trabajo forzado`, `menores`, `edad minima`, `derechos humanos`.
+- Retrieval ahora es `hybrid` (token overlap + BM25 con normalizacion y dedup), con boost explicito para chunks sobre trabajo infantil/esclavitud moderna/trabajo forzado.
+- En intent `child_labor`, si no aparece evidencia relevante en top-k, se aplica fallback por match exacto de esas frases para no perder la Seccion 12 cuando corresponde.
+- Debug KB se alinea con evidencia real usada:
+  - muestra query original/expandida, intent/tags y `retrieval_method`;
+  - lista final de chunks usados (los mismos que alimentan contexto y `Fuentes`).
+
+### Strict gating especifico
+- En `Solo KB (estricto)` + intent `child_labor`:
+  - sin evidencia relevante: respuesta fija `No encuentro eso...` sin `Fuentes`;
+  - con evidencia relevante: respuesta grounded fija (`rechaza trabajo infantil`) + aclaracion de que no hay edad minima explicita, con `Fuentes` de los chunks usados.
+- En consultas que piden edad minima exacta en strict, si la evidencia no trae una edad explicita (ej. `X años`), se responde con fallback estricto sin `Fuentes`.
 
 ### Heuristica org-specific (anti alucinacion en General)
 - Implementada en `ChatService.is_org_specific_query`.

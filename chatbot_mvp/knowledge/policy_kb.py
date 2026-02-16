@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import math
 import re
 import unicodedata
 from collections import Counter
@@ -99,14 +100,83 @@ _ENTITY_STOPWORDS = {
     "mision",
     "vision",
 }
+_CHILD_LABOR_TERMS = (
+    "menor",
+    "nino",
+    "nene",
+    "adolescente",
+    "trabajo infantil",
+)
+_CHILD_LABOR_EXPANSION_TERMS = (
+    "trabajo infantil",
+    "esclavitud moderna",
+    "trabajo forzado",
+    "menores",
+    "edad minima",
+    "derechos humanos",
+)
+_CHILD_LABOR_EVIDENCE_PHRASES = (
+    "trabajo infantil",
+    "esclavitud moderna",
+    "trabajo forzado",
+)
+_CHILD_LABOR_AGE_RE = re.compile(r"\b(\d{1,2})\s*a(?:ñ|n)os\b", re.IGNORECASE)
+_CHILD_LABOR_BOOST = 1.8
+
+
+def detect_intent_and_expand(query: str) -> dict[str, Any]:
+    original_query = str(query or "").strip()
+    normalized_query = _normalize_for_match(original_query)
+    intent = ""
+    tags: list[str] = []
+    expanded_terms: list[str] = []
+
+    has_minor_term = any(
+        re.search(rf"\b{re.escape(term)}\b", normalized_query)
+        for term in _CHILD_LABOR_TERMS
+    )
+    has_work_root = "trabaj" in normalized_query
+    has_minor_age = False
+    for match in _CHILD_LABOR_AGE_RE.finditer(original_query):
+        try:
+            age = int(match.group(1))
+        except (TypeError, ValueError):
+            continue
+        if age <= 15:
+            has_minor_age = True
+            break
+    if (has_minor_term or has_minor_age) and has_work_root:
+        intent = "child_labor"
+        tags = ["child_labor"]
+        expanded_terms.extend(_CHILD_LABOR_EXPANSION_TERMS)
+
+    expanded_query = original_query
+    if expanded_terms:
+        existing = set(_tokenize(expanded_query))
+        additions: list[str] = []
+        for term in expanded_terms:
+            term_tokens = _tokenize(term)
+            if term_tokens and all(token in existing for token in term_tokens):
+                continue
+            additions.append(term)
+            existing.update(term_tokens)
+        if additions:
+            expanded_query = f"{expanded_query} {' '.join(additions)}".strip()
+
+    return {
+        "expanded_query": expanded_query,
+        "intent": intent,
+        "tags": tags,
+    }
 
 
 def expand_query(query: str) -> dict[str, Any]:
     original_query = str(query or "").strip()
     normalized_query = _normalize_for_match(original_query)
-    expanded_query = original_query
-    tags: list[str] = []
-    intent = ""
+    intent_meta = detect_intent_and_expand(original_query)
+    expanded_query = str(intent_meta.get("expanded_query", original_query))
+    tags = list(intent_meta.get("tags", []))
+    intent = str(intent_meta.get("intent", ""))
     expanded_tokens = _tokenize(expanded_query)
     return {
         "original_query": original_query,
@@ -403,17 +473,45 @@ def _build_index_cached(text_hash: str, corpus: tuple[str, ...]) -> dict[str, An
     _ = text_hash
     token_lists = [tuple(_tokenize(text)) for text in corpus]
     token_sets = [set(tokens) for tokens in token_lists]
-    normalized_texts = [ _normalize_for_match(text) for text in corpus ]
+    normalized_texts = [_normalize_for_match(text) for text in corpus]
+    token_freqs = [dict(Counter(tokens)) for tokens in token_lists]
+    doc_lens = [len(tokens) for tokens in token_lists]
+    avg_doc_len = (
+        sum(doc_lens) / float(len(doc_lens))
+        if doc_lens
+        else 0.0
+    )
+    doc_freq: Counter[str] = Counter()
+    for token_set in token_sets:
+        for token in token_set:
+            doc_freq[token] += 1
+    total_docs = max(1, len(token_lists))
+    idf = {
+        token: math.log((total_docs - freq + 0.5) / (freq + 0.5) + 1.0)
+        for token, freq in doc_freq.items()
+    }
     return {
         "token_lists": token_lists,
         "token_sets": token_sets,
         "normalized_texts": normalized_texts,
+        "token_freqs": token_freqs,
+        "doc_lens": doc_lens,
+        "avg_doc_len": avg_doc_len,
+        "idf": idf,
     }
 
 
 def build_bm25_index(chunks: list[dict[str, Any]]) -> dict[str, Any]:
     if not chunks:
-        return {"token_lists": [], "token_sets": [], "normalized_texts": []}
+        return {
+            "token_lists": [],
+            "token_sets": [],
+            "normalized_texts": [],
+            "token_freqs": [],
+            "doc_lens": [],
+            "avg_doc_len": 0.0,
+            "idf": {},
+        }
     corpus = tuple(str(chunk.get("text", "")) for chunk in chunks)
     text_hash = _hash_text("\n".join(corpus))
     return _build_index_cached(text_hash, corpus)
@@ -449,6 +547,203 @@ def _rank_by_token_overlap(
         reverse=True,
     )
     return ranked
+
+
+def _rank_by_bm25(
+    query_tokens: list[str],
+    index: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    k1: float = 1.5,
+    b: float = 0.75,
+) -> list[dict[str, Any]]:
+    if not query_tokens:
+        return []
+    query_counts = Counter(query_tokens)
+    token_freqs = index.get("token_freqs", [])
+    doc_lens = index.get("doc_lens", [])
+    avg_doc_len = float(index.get("avg_doc_len", 0.0) or 0.0)
+    idf = index.get("idf", {})
+    ranked: list[dict[str, Any]] = []
+    for idx, chunk in enumerate(chunks):
+        freqs = token_freqs[idx] if idx < len(token_freqs) else {}
+        if not isinstance(freqs, dict) or not freqs:
+            continue
+        doc_len = float(doc_lens[idx]) if idx < len(doc_lens) else 0.0
+        norm = 1.0 - b + b * (doc_len / avg_doc_len) if avg_doc_len > 0 else 1.0
+        score = 0.0
+        matched_terms: list[str] = []
+        for term, query_tf in query_counts.items():
+            term_tf = float(freqs.get(term, 0.0))
+            if term_tf <= 0:
+                continue
+            idf_score = float(idf.get(term, 0.0))
+            denom = term_tf + (k1 * norm)
+            if denom <= 0:
+                continue
+            term_score = idf_score * ((term_tf * (k1 + 1.0)) / denom)
+            score += term_score * float(max(1, query_tf))
+            matched_terms.append(term)
+        if score <= 0:
+            continue
+        ranked.append(
+            {
+                **chunk,
+                "score": score,
+                "overlap": len(matched_terms),
+                "match_type": "bm25",
+                "matched_terms": sorted(set(matched_terms)),
+            }
+        )
+    ranked.sort(
+        key=lambda item: (float(item.get("score", 0.0)), int(item.get("overlap", 0))),
+        reverse=True,
+    )
+    return ranked
+
+
+def _build_chunk_key(item: dict[str, Any], fallback_idx: int = 0) -> str:
+    chunk_id = item.get("chunk_id")
+    source = str(item.get("source_label") or item.get("source") or "").strip()
+    if chunk_id not in (None, "") or source:
+        return f"{chunk_id}|{source}"
+    return f"fallback:{fallback_idx}"
+
+
+def _normalize_scores(items: list[dict[str, Any]]) -> dict[str, float]:
+    if not items:
+        return {}
+    max_score = max(float(item.get("score", 0.0)) for item in items)
+    if max_score <= 0:
+        return {}
+    normalized: dict[str, float] = {}
+    for idx, item in enumerate(items):
+        key = _build_chunk_key(item, fallback_idx=idx)
+        normalized[key] = float(item.get("score", 0.0)) / max_score
+    return normalized
+
+
+def _contains_child_labor_evidence(chunk: dict[str, Any]) -> bool:
+    title = str(
+        chunk.get("section_title")
+        or chunk.get("source_label")
+        or chunk.get("source")
+        or ""
+    )
+    text = str(chunk.get("text", ""))
+    haystack = _normalize_for_match(f"{title} {text}")
+    return any(phrase in haystack for phrase in _CHILD_LABOR_EVIDENCE_PHRASES)
+
+
+def _build_hybrid_ranking(
+    token_ranked: list[dict[str, Any]],
+    bm25_ranked: list[dict[str, Any]],
+    intent: str,
+) -> list[dict[str, Any]]:
+    combined: dict[str, dict[str, Any]] = {}
+    token_norm = _normalize_scores(token_ranked)
+    bm25_norm = _normalize_scores(bm25_ranked)
+
+    def merge_items(
+        rows: list[dict[str, Any]],
+        normalized: dict[str, float],
+        method: str,
+        weight: float,
+    ) -> None:
+        for idx, row in enumerate(rows):
+            key = _build_chunk_key(row, fallback_idx=idx)
+            existing = combined.get(key)
+            if existing is None:
+                existing = {
+                    **row,
+                    "score": 0.0,
+                    "overlap": int(row.get("overlap", 0)),
+                    "matched_terms": set(row.get("matched_terms", [])),
+                    "match_types": set(),
+                }
+                combined[key] = existing
+            score_component = float(normalized.get(key, 0.0))
+            existing["score"] = float(existing.get("score", 0.0)) + (weight * score_component)
+            existing["overlap"] = max(
+                int(existing.get("overlap", 0)),
+                int(row.get("overlap", 0)),
+            )
+            existing["matched_terms"].update(row.get("matched_terms", []))
+            existing["match_types"].add(method)
+
+    merge_items(token_ranked, token_norm, method="token_overlap", weight=0.5)
+    merge_items(bm25_ranked, bm25_norm, method="bm25", weight=0.5)
+
+    ranked: list[dict[str, Any]] = []
+    for item in combined.values():
+        enriched = dict(item)
+        match_types = set(enriched.pop("match_types", set()))
+        matched_terms = set(enriched.pop("matched_terms", set()))
+        if intent == "child_labor" and _contains_child_labor_evidence(enriched):
+            enriched["score"] = float(enriched.get("score", 0.0)) + _CHILD_LABOR_BOOST
+            match_types.add("child_labor_boost")
+        enriched["matched_terms"] = sorted(matched_terms)
+        if match_types:
+            enriched["match_type"] = "hybrid:" + "+".join(sorted(match_types))
+        else:
+            enriched["match_type"] = "hybrid"
+        ranked.append(enriched)
+    ranked.sort(
+        key=lambda row: (float(row.get("score", 0.0)), int(row.get("overlap", 0))),
+        reverse=True,
+    )
+    return ranked
+
+
+def _ensure_child_labor_evidence_in_top_k(
+    ranked: list[dict[str, Any]],
+    chunks: list[dict[str, Any]],
+    top_k: int,
+) -> list[dict[str, Any]]:
+    if top_k <= 0:
+        return ranked
+    if any(_contains_child_labor_evidence(item) for item in ranked[:top_k]):
+        return ranked
+    for idx, row in enumerate(ranked):
+        if not _contains_child_labor_evidence(row):
+            continue
+        boosted = dict(row)
+        boosted["score"] = float(boosted.get("score", 0.0)) + _CHILD_LABOR_BOOST
+        boosted["match_type"] = str(boosted.get("match_type", "hybrid")) + "+child_labor_topk"
+        reordered = [boosted] + ranked[:idx] + ranked[idx + 1 :]
+        return reordered
+    for idx, chunk in enumerate(chunks):
+        if not _contains_child_labor_evidence(chunk):
+            continue
+        fallback = {
+            **chunk,
+            "score": _CHILD_LABOR_BOOST + 1.0,
+            "overlap": 1,
+            "match_type": "child_labor_exact_fallback",
+            "matched_terms": list(_CHILD_LABOR_EVIDENCE_PHRASES),
+        }
+        return [fallback] + ranked
+    return ranked
+
+
+def _debug_chunk_row(item: dict[str, Any], idx: int) -> dict[str, Any]:
+    chunk_id = item.get("chunk_id")
+    if str(chunk_id).isdigit():
+        chunk_id = int(chunk_id)
+    source_label = str(item.get("source_label") or item.get("source") or "").strip()
+    if not source_label:
+        source_label = f"Chunk {idx + 1}"
+    text = str(item.get("text", ""))
+    section_id = str(item.get("section_id", "")).strip()
+    return {
+        "chunk_id": chunk_id,
+        "source_label": source_label,
+        "source": source_label,
+        "section": section_id,
+        "score": round(float(item.get("score", 0.0)), 4),
+        "overlap": int(item.get("overlap", 0)),
+        "match_type": str(item.get("match_type", "hybrid")),
+        "snippet": _normalize_spaces(text)[:200],
+    }
 
 
 def _rank_by_substring(
@@ -591,11 +886,13 @@ def retrieve(
                 "query_expanded": str(query or ""),
                 "intent": "",
                 "tags": [],
+                "retrieval_method": "hybrid",
                 "kb_name": kb_name,
                 "chunks_total": len(chunks or []),
                 "retrieved_count": 0,
                 "reason": "no_query_or_chunks",
                 "min_score": float(min_score),
+                "chunks_final": [],
                 "top_candidates": [],
             }
         )
@@ -608,11 +905,13 @@ def retrieve(
                 "query_expanded": str(query),
                 "intent": "",
                 "tags": [],
+                "retrieval_method": "hybrid",
                 "kb_name": kb_name,
                 "chunks_total": len(chunks),
                 "retrieved_count": 0,
                 "reason": "no_index",
                 "min_score": float(min_score),
+                "chunks_final": [],
                 "top_candidates": [],
             }
         )
@@ -620,22 +919,21 @@ def retrieve(
 
     query_meta = expand_query(query)
     expanded_query = str(query_meta.get("expanded_text", query))
+    intent = str(query_meta.get("intent", ""))
+    tags = list(query_meta.get("tags", []))
     query_tokens = list(query_meta.get("expanded_tokens", []))
     if not query_tokens:
         query_tokens = _tokenize(expanded_query)
-    debug_candidates = _collect_debug_candidates(
-        expanded_query, query_tokens, index, chunks, top_n=4
-    )
-    ranked = _rank_by_token_overlap(query_tokens, index, chunks)
-    reason = "token_overlap"
-    if not ranked:
-        ranked = _rank_by_substring(query_tokens, index, chunks)
-        reason = "substring_fallback"
+    overlap_ranked = _rank_by_token_overlap(query_tokens, index, chunks)
+    bm25_ranked = _rank_by_bm25(query_tokens, index, chunks)
+    ranked = _build_hybrid_ranking(overlap_ranked, bm25_ranked, intent=intent)
+    reason = "hybrid"
+    if intent == "child_labor":
+        ranked = _ensure_child_labor_evidence_in_top_k(ranked, chunks, top_k=max(1, int(k)))
+        reason = "hybrid_child_labor_boost"
     if not ranked:
         ranked = _rank_by_sequence_match(expanded_query, index, chunks)
         reason = "sequence_fallback"
-    if not ranked:
-        reason = "no_hits"
 
     results = []
     threshold = float(min_score)
@@ -657,19 +955,24 @@ def retrieve(
         )
         if len(results) >= max(1, k):
             break
+    debug_rows = [_debug_chunk_row(item, idx) for idx, item in enumerate(results)]
+    if not results and reason == "hybrid":
+        reason = "no_hits"
     _set_last_kb_debug(
         {
             "query": query,
             "query_original": str(query_meta.get("original_query", query)),
             "query_expanded": expanded_query,
-            "intent": str(query_meta.get("intent", "")),
-            "tags": list(query_meta.get("tags", [])),
+            "intent": intent,
+            "tags": tags,
+            "retrieval_method": "hybrid",
             "kb_name": kb_name,
             "chunks_total": len(chunks),
             "retrieved_count": len(results),
             "reason": reason,
             "min_score": threshold,
-            "top_candidates": debug_candidates,
+            "chunks_final": debug_rows,
+            "top_candidates": debug_rows,
         }
     )
     return results
