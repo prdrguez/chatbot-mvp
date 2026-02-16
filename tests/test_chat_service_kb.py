@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from chatbot_mvp.services.chat_service import ChatService
 
 
@@ -26,52 +24,61 @@ class FakeAIClient:
         yield "Respuesta basada en evidencia."
 
 
+def _extract_response_sources(response: str) -> list[str]:
+    marker = "Fuentes:"
+    if marker not in response:
+        return []
+    tail = response.split(marker, maxsplit=1)[1]
+    return [item.strip() for item in tail.split(",") if item.strip()]
+
+
 def test_kb_grounding_injects_context_and_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
         "ARTICULO 3 Valores fundamentales\n"
-        "Los valores fundamentales de Securion son transparencia y eficacia."
+        "La organizacion define transparencia y eficacia como valores centrales."
     )
 
     response = service.send_message(
-        message="Cuales son los valores fundamentales de Securion?",
+        message="cuales son los valores fundamentales?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "strict",
         },
     )
 
     assert fake.call_count == 1
-    assert "Base de Conocimiento: securin.txt" in fake.last_message
+    assert "Base de Conocimiento: politica.txt" in fake.last_message
     assert "Articulo 3" in fake.last_message
     assert fake.last_user_context.get("kb_strict_mode") is True
     assert "Fuentes:" in response
     assert "Articulo 3" in response
 
 
-def test_kb_grounding_returns_strict_message_without_evidence():
+def test_kb_grounding_returns_strict_message_without_evidence_and_without_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
         "ARTICULO 10 Integridad\n"
-        "Securion promueve la integridad en todas sus operaciones."
+        "La organizacion promueve la integridad en todas sus operaciones."
     )
 
     response = service.send_message(
-        message="Que dice sobre viajes espaciales?",
+        message="que dice sobre viajes espaciales?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "strict",
         },
     )
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
+    assert "Fuentes:" not in response
 
 
 def test_kb_grounding_stream_strict_without_evidence_skips_provider():
@@ -79,15 +86,15 @@ def test_kb_grounding_stream_strict_without_evidence_skips_provider():
     service = ChatService(ai_client=fake)
     kb_text = (
         "ARTICULO 10 Integridad\n"
-        "Securion promueve la integridad en todas sus operaciones."
+        "La organizacion promueve la integridad en todas sus operaciones."
     )
 
     stream = service.send_message_stream(
-        message="Que dice sobre la NBA?",
+        message="que dice sobre la nba?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "strict",
         },
     )
@@ -95,6 +102,7 @@ def test_kb_grounding_stream_strict_without_evidence_skips_provider():
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
+    assert "Fuentes:" not in response
 
 
 def test_kb_grounding_returns_strict_message_with_empty_kb():
@@ -102,11 +110,11 @@ def test_kb_grounding_returns_strict_message_with_empty_kb():
     service = ChatService(ai_client=fake)
 
     response = service.send_message(
-        message="Que dice sobre regalos?",
+        message="que dice sobre regalos?",
         conversation_history=[],
         user_context={
             "kb_text": "",
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "strict",
         },
     )
@@ -120,15 +128,15 @@ def test_kb_general_mode_allows_fallback_without_evidence():
     service = ChatService(ai_client=fake)
     kb_text = (
         "ARTICULO 10 Integridad\n"
-        "Securion promueve la integridad en todas sus operaciones."
+        "La organizacion promueve la integridad en todas sus operaciones."
     )
 
     response = service.send_message(
-        message="Que dice sobre viajes espaciales?",
+        message="que dice sobre viajes espaciales?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "general",
         },
     )
@@ -142,16 +150,16 @@ def test_kb_general_mode_with_evidence_adds_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
-        "ARTICULO 2 Valores fundamentales\n"
-        "Securion prioriza transparencia, responsabilidad y calidad."
+        "ARTICULO 2 Teletrabajo flexible\n"
+        "El trabajo remoto se permite dos veces por semana."
     )
 
     response = service.send_message(
-        message="Cuales son los valores de Securion?",
+        message="se permite el trabajo remoto?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "general",
         },
     )
@@ -165,21 +173,22 @@ def test_kb_mode_legacy_strict_label_normalizes_to_strict():
     service = ChatService(ai_client=fake)
     kb_text = (
         "ARTICULO 7 Integridad\n"
-        "Securion protege la integridad de la informacion."
+        "La organizacion protege la integridad de la informacion."
     )
 
     response = service.send_message(
-        message="Que es la NBA?",
+        message="que es la nba?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "Solo KB (estricto)",
         },
     )
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
+    assert "Fuentes:" not in response
 
 
 def test_kb_mode_unknown_value_falls_back_to_general():
@@ -187,15 +196,15 @@ def test_kb_mode_unknown_value_falls_back_to_general():
     service = ChatService(ai_client=fake)
     kb_text = (
         "ARTICULO 7 Integridad\n"
-        "Securion protege la integridad de la informacion."
+        "La organizacion protege la integridad de la informacion."
     )
 
     response = service.send_message(
-        message="Que es la NBA?",
+        message="que es la nba?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "modo-raro",
         },
     )
@@ -204,47 +213,56 @@ def test_kb_mode_unknown_value_falls_back_to_general():
     assert "Fuentes:" not in response
 
 
-def test_kb_strict_with_real_securin_kb_adds_sources():
+def test_kb_query_with_synonym_like_wording_retrieves_heading():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
-    kb_text = (Path(__file__).resolve().parents[1] / "docs" / "securin.txt").read_text(
-        encoding="utf-8"
+    kb_text = (
+        "1. Teletrabajo flexible\n"
+        "El trabajo remoto se permite con aprobacion del lider.\n\n"
+        "2. Acceso fisico\n"
+        "El ingreso a edificios requiere credencial."
     )
 
     response = service.send_message(
-        message="Cuales son los valores del Grupo Securion?",
+        message="se puede teletrabajar los viernes?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "strict",
         },
     )
 
     assert fake.call_count == 1
     assert "Fuentes:" in response
+    debug_payload = service.get_last_kb_debug()
+    assert "teletrabajo" in str(debug_payload.get("query_expanded", ""))
+    assert debug_payload.get("retrieval_method") == "hybrid"
 
 
-def test_kb_debug_available_after_no_hits():
+def test_kb_debug_chunks_are_coherent_with_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
-        "ARTICULO 1 Integridad\n"
-        "Solo se habla de integridad y conducta."
+        "1. Teletrabajo flexible\n"
+        "El trabajo remoto se permite con aprobacion del lider."
     )
 
-    _ = service.send_message(
-        message="Que es la NBA?",
+    response = service.send_message(
+        message="se permite teletrabajar?",
         conversation_history=[],
         user_context={
             "kb_text": kb_text,
-            "kb_name": "securin.txt",
+            "kb_name": "politica.txt",
             "kb_mode": "strict",
         },
     )
 
+    response_sources = _extract_response_sources(response)
+    assert response_sources
+
     debug_payload = service.get_last_kb_debug()
-    assert debug_payload is not None
-    assert debug_payload.get("kb_name") == "securin.txt"
-    assert debug_payload.get("used_context") is False
-    assert debug_payload.get("chunks") is not None
+    debug_rows = list(debug_payload.get("chunks", []))
+    debug_sources = [str(row.get("source", "")).strip() for row in debug_rows if isinstance(row, dict)]
+    assert debug_sources
+    assert debug_sources == response_sources

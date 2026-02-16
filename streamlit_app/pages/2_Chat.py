@@ -104,9 +104,22 @@ if kb_debug:
             st.caption(f"KB: {debug_payload.get('kb_name', 'ninguna')}")
             st.caption(f"Modo: {debug_payload.get('kb_mode', 'general')}")
             st.caption(
-                f"Query: {debug_payload.get('query', '')} | "
+                f"Query original: {debug_payload.get('query_original', debug_payload.get('query', ''))}"
+            )
+            st.caption(f"Query expandida: {debug_payload.get('query_expanded', '')}")
+            st.caption(
+                f"Metodo: {debug_payload.get('retrieval_method', '')} | "
                 f"Motivo: {debug_payload.get('reason', '')}"
             )
+            expansion_notes = debug_payload.get("expansion_notes", [])
+            if expansion_notes:
+                for note in expansion_notes:
+                    if not isinstance(note, dict):
+                        continue
+                    term = note.get("term", "")
+                    source = note.get("source", "")
+                    reason = note.get("reason", "")
+                    st.caption(f"Expansion: {term} ({source}) <- {reason}")
             st.caption(
                 f"Chunks recuperados: {debug_payload.get('retrieved_count', 0)} | "
                 f"Contexto usado: {debug_payload.get('used_context', False)}"

@@ -1,6 +1,6 @@
 ﻿# STATUS REPORT - Streamlit MVP
 
-Fecha de actualizacion: 2026-02-14
+Fecha de actualizacion: 2026-02-16
 
 ## Resumen ejecutivo
 - App activa en Streamlit multipage con entry point `streamlit_app/Inicio.py`.
@@ -8,6 +8,7 @@ Fecha de actualizacion: 2026-02-14
 - Chat usa streaming y soporte de providers Gemini/Groq con fallback a Demo.
 - Admin permite cambiar provider (Gemini/Groq), cargar KB y activar debug de retrieval.
 - Evaluacion guarda resultados locales en `data/submissions.jsonl`.
+- Grounding KB refactorizado con expansion de query guiada por el propio documento (agnostica al dominio).
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).
@@ -22,9 +23,13 @@ Fecha de actualizacion: 2026-02-14
 - Base de Conocimiento:
   - Upload de `.txt`/`.md` (un archivo por vez).
   - Parse por articulos/secciones + chunking por tamano.
-  - Retrieval lexical con overlap/substrings/sequence fallback.
+  - KB index enriquecido con headings, vocab (terminos + bigrams/trigrams) y co-ocurrencia.
+  - Query expansion KB-driven sin LLM (heading/fuzzy/vocab/cooc).
+  - Retrieval hibrido unificado (`hybrid`) con score combinado y dedup por seccion/chunk.
   - Modos `General` y `Solo KB (estricto)`.
-  - `Debug KB` en Chat (expander con query, razon, chunks y scores).
+  - Criterio generico de evidencia suficiente (sin reglas tematicas hardcodeadas).
+  - `Debug KB` en Chat con query original/expandida, expansion notes, metodo y chunks finales usados.
+  - Knobs soportados en runtime: `kb_top_k`, `kb_min_score`, `kb_max_context_chars`.
 - Dashboard Admin con KPIs + export CSV/JSON + borrado de submissions en modo mantenimiento.
 
 ## Que NO funciona hoy
@@ -106,7 +111,7 @@ python -m streamlit run streamlit_app/Inicio.py --server.port 8502
 
 ## Tests (estado actual)
 - Comando ejecutado: `python -m pytest`
-- Resultado: `22 passed, 1 skipped`
+- Resultado esperado: suite verde + skip legacy Reflex.
 - Test skippeado: `tests/test_auth_state.py` (legacy Reflex)
 
 ## Backlog

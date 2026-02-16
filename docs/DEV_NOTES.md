@@ -27,6 +27,48 @@ Notas tecnicas vigentes del repo.
 - Modo `general` y `strict`.
 - Debug opcional de retrieval visible en Chat.
 
+### KB-driven query expansion (agnostico al dominio)
+- El retrieval aplica expansion de query sin LLM, derivada del documento cargado.
+- `policy_kb.build_bm25_index` construye un indice enriquecido con:
+  - `section_titles_normalized`: titulos/secciones normalizados del documento.
+  - `vocab_terms`: terminos frecuentes + bigrams/trigrams del propio KB.
+  - `cooc_map`: terminos relacionados por co-ocurrencia en ventana local.
+- `policy_kb.expand_query_with_kb` agrega terminos a la consulta y guarda notas de origen:
+  - `heading_match`
+  - `fuzzy_heading`
+  - `vocab`
+  - `cooc`
+- La query expandida y sus notas quedan en debug (`query_expanded`, `expansion_notes`).
+
+### Retrieval hibrido unificado
+- `policy_kb.retrieve` siempre usa un pipeline `hybrid` y devuelve un unico resultado final.
+- Score final por chunk:
+  - `bm25_norm`
+  - `overlap_norm`
+  - `exact_bonus`
+  - `heading_bonus`
+  - `fuzzy_bonus`
+- Se deduplica por `section_id`/`chunk_id` y se aplica `top_k` + `min_score`.
+- Debug guarda `chunks_final` con score y breakdown por senal.
+
+### Evidencia suficiente (criterio generico)
+- `ChatService` evalua evidencia sin reglas tematicas hardcodeadas:
+  - pasa si hay `strong_match` y score tope razonable, o
+  - suma de scores altos en top chunks, o
+  - score tope alto por si solo.
+- `Strict`:
+  - si no hay evidencia suficiente: respuesta fija y sin `Fuentes`.
+  - no llama provider.
+- `General`:
+  - con evidencia suficiente: grounded + `Fuentes`.
+  - sin evidencia suficiente: responde normal sin `Fuentes`.
+
+### Knobs runtime (en user_context)
+- `kb_top_k`: maximo de chunks candidatos.
+- `kb_min_score`: corte minimo de score en retrieval.
+- `kb_max_context_chars`: presupuesto maximo de contexto inyectado.
+- Si no se proveen, se aplican defaults en `ChatService`.
+
 ## Persistencia de datos
 - Evaluaciones: `data/submissions.jsonl`.
 - Override provider: `chatbot_mvp/data/app_settings.json`.

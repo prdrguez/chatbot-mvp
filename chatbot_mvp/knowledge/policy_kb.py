@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import math
 import re
 import unicodedata
+from collections import Counter, defaultdict
 from typing import Any
 
 import streamlit as st
@@ -29,6 +31,10 @@ _NUMBERED_HEADING_RE = re.compile(r"(?m)^\s*(\d+(?:\.\d+)*)\s*[.)-]?\s+([^\n]{3,
 _TOKEN_RE = re.compile(r"[a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
 _LAST_KB_DEBUG: dict[str, Any] = {}
+_SIGNAL_WEIGHTS = {
+    "bm25": 0.50,
+    "overlap": 0.30,
+}
 _STOPWORDS = {
     "a",
     "al",
@@ -99,14 +105,14 @@ def _normalize_spaces(text: str) -> str:
 
 
 def _normalize_for_match(text: str) -> str:
-    lowered = _strip_accents(text.lower())
+    lowered = _strip_accents(str(text or "").lower())
     lowered = re.sub(r"[^\w\s]", " ", lowered)
     return _normalize_spaces(lowered)
 
 
 def _tokenize(text: str) -> list[str]:
     tokens: list[str] = []
-    for raw in _TOKEN_RE.findall(text):
+    for raw in _TOKEN_RE.findall(str(text or "")):
         token = _strip_accents(raw.lower())
         if len(token) < 3:
             continue
@@ -154,6 +160,7 @@ def _chunk_by_size(
                     "chunk_id": len(chunks) + 1,
                     "article_id": None,
                     "section_id": None,
+                    "section_title": "",
                     "source_label": f"{label_prefix} {chunk_number}",
                     "text": chunk_text,
                 }
@@ -181,6 +188,7 @@ def _extract_headings(text: str) -> list[dict[str, Any]]:
                     "line": idx,
                     "article_id": article_id,
                     "section_id": None,
+                    "section_title": f"Articulo {article_id}",
                     "source_label": f"Articulo {article_id}",
                 }
             )
@@ -194,6 +202,7 @@ def _extract_headings(text: str) -> list[dict[str, Any]]:
                     "line": idx,
                     "article_id": None,
                     "section_id": None,
+                    "section_title": chapter_name[:110],
                     "source_label": chapter_name[:110],
                 }
             )
@@ -211,18 +220,21 @@ def _extract_headings(text: str) -> list[dict[str, Any]]:
                     "line": idx,
                     "article_id": None,
                     "section_id": section_id,
+                    "section_title": title,
                     "source_label": source_label,
                 }
             )
             continue
 
         if _is_upper_heading(stripped):
+            title = _normalize_spaces(stripped.title())[:110]
             headings.append(
                 {
                     "line": idx,
                     "article_id": None,
                     "section_id": None,
-                    "source_label": _normalize_spaces(stripped.title())[:110],
+                    "section_title": title,
+                    "source_label": title,
                 }
             )
 
@@ -253,6 +265,7 @@ def _chunk_by_sections(text: str) -> list[dict[str, Any]]:
             for split in split_chunks:
                 split["article_id"] = heading.get("article_id")
                 split["section_id"] = heading.get("section_id")
+                split["section_title"] = heading.get("section_title", "")
                 split["source_label"] = str(split.get("source_label", heading["source_label"]))[:140]
                 split["chunk_id"] = len(chunks) + 1
                 chunks.append(split)
@@ -263,6 +276,7 @@ def _chunk_by_sections(text: str) -> list[dict[str, Any]]:
                 "chunk_id": len(chunks) + 1,
                 "article_id": heading.get("article_id"),
                 "section_id": heading.get("section_id"),
+                "section_title": heading.get("section_title", ""),
                 "source_label": heading["source_label"],
                 "text": section_text,
             }
@@ -295,18 +309,27 @@ def parse_policy(text: str) -> list[dict[str, Any]]:
     return _parse_policy_cached(_hash_text(text), text)
 
 
-def load_kb(text: str, name: str) -> dict[str, Any]:
+def load_kb(
+    text: str,
+    name: str,
+    kb_updated_at: str | int | None = None,
+) -> dict[str, Any]:
     normalized_text = str(text or "").strip()
     kb_name = str(name or "KB cargada").strip() or "KB cargada"
     kb_hash = _hash_text(normalized_text)
     chunks = parse_policy(normalized_text)
-    index = build_bm25_index(chunks)
+    index = build_bm25_index(
+        chunks,
+        kb_hash=kb_hash,
+        kb_updated_at=kb_updated_at,
+    )
     return {
         "kb_name": kb_name,
         "kb_hash": kb_hash,
         "chunks": chunks,
         "index": index,
         "chunks_total": len(chunks),
+        "kb_updated_at": str(kb_updated_at or ""),
     }
 
 
@@ -319,181 +342,485 @@ def get_last_kb_debug() -> dict[str, Any]:
     return dict(_LAST_KB_DEBUG)
 
 
+def _iter_ngrams(tokens: tuple[str, ...] | list[str], n: int) -> list[str]:
+    if n <= 1 or len(tokens) < n:
+        return []
+    return [" ".join(tokens[idx : idx + n]) for idx in range(0, len(tokens) - n + 1)]
+
+
+def _clean_heading_phrase(value: str) -> str:
+    text = _normalize_for_match(value)
+    text = re.sub(
+        r"\b(?:seccion|section|articulo|capitulo)\b\s+[0-9a-z.-]+\s*",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return _normalize_spaces(text)
+
+
+def _build_vocab_terms(
+    token_lists: list[tuple[str, ...]],
+    section_titles_normalized: list[str],
+) -> dict[str, Any]:
+    unigram_counts: Counter[str] = Counter()
+    bigram_counts: Counter[str] = Counter()
+    trigram_counts: Counter[str] = Counter()
+    for tokens in token_lists:
+        unigram_counts.update(tokens)
+        bigram_counts.update(_iter_ngrams(tokens, 2))
+        trigram_counts.update(_iter_ngrams(tokens, 3))
+
+    total_tokens = sum(unigram_counts.values())
+    min_count = 2 if total_tokens >= 240 else 1
+    top_unigrams = [
+        term
+        for term, count in unigram_counts.most_common(140)
+        if count >= min_count
+    ]
+    top_bigrams = [
+        term
+        for term, count in bigram_counts.most_common(100)
+        if count >= min_count
+    ]
+    top_trigrams = [
+        term
+        for term, count in trigram_counts.most_common(80)
+        if count >= min_count
+    ]
+
+    ordered_terms: list[str] = []
+    seen_terms: set[str] = set()
+
+    def add_term(raw: str) -> None:
+        term = _normalize_spaces(raw)
+        if not term:
+            return
+        if term in seen_terms:
+            return
+        seen_terms.add(term)
+        ordered_terms.append(term)
+
+    for title in section_titles_normalized:
+        cleaned = _clean_heading_phrase(title)
+        if cleaned:
+            add_term(cleaned)
+    for phrase in top_trigrams:
+        add_term(phrase)
+    for phrase in top_bigrams:
+        add_term(phrase)
+    for term in top_unigrams:
+        add_term(term)
+
+    vocab_terms = ordered_terms[:220]
+    vocab_unigrams = sorted(set(top_unigrams))
+    return {
+        "vocab_terms": vocab_terms,
+        "vocab_unigrams": vocab_unigrams,
+    }
+
+
+def _build_cooc_map(
+    token_lists: list[tuple[str, ...]],
+    window_size: int = 4,
+    max_related: int = 6,
+) -> dict[str, list[dict[str, Any]]]:
+    token_counts: Counter[str] = Counter()
+    pair_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    total_tokens = 0
+
+    for tokens in token_lists:
+        token_counts.update(tokens)
+        total_tokens += len(tokens)
+        for idx, token in enumerate(tokens):
+            start = max(0, idx - window_size)
+            end = min(len(tokens), idx + window_size + 1)
+            for ctx_idx in range(start, end):
+                if ctx_idx == idx:
+                    continue
+                related = tokens[ctx_idx]
+                if related == token:
+                    continue
+                pair_counts[token][related] += 1
+
+    if not pair_counts:
+        return {}
+
+    min_pair_count = 2 if total_tokens >= 180 else 1
+    corpus_size = max(1, total_tokens)
+    cooc_map: dict[str, list[dict[str, Any]]] = {}
+    for term, related_counter in pair_counts.items():
+        ranked: list[tuple[float, int, str, float]] = []
+        for related, count in related_counter.items():
+            if count < min_pair_count:
+                continue
+            denom = float(max(1, token_counts[term] * token_counts[related]))
+            pmi = math.log((count * corpus_size) / denom)
+            normalized = count / float(max(1, token_counts[term]))
+            association = pmi + normalized
+            ranked.append((association, count, related, pmi))
+
+        if not ranked:
+            fallback = related_counter.most_common(max_related)
+            cooc_map[term] = [
+                {
+                    "term": related,
+                    "score": round(count / float(max(1, token_counts[term])), 4),
+                    "count": int(count),
+                    "pmi": 0.0,
+                }
+                for related, count in fallback
+            ]
+            continue
+
+        ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        cooc_map[term] = [
+            {
+                "term": related,
+                "score": round(float(association), 4),
+                "count": int(count),
+                "pmi": round(float(pmi), 4),
+            }
+            for association, count, related, pmi in ranked[:max_related]
+        ]
+    return cooc_map
+
+
 @st.cache_resource(show_spinner=False)
-def _build_index_cached(text_hash: str, corpus: tuple[str, ...]) -> dict[str, Any]:
-    _ = text_hash
+def _build_index_cached(
+    cache_key: str,
+    corpus: tuple[str, ...],
+    source_labels: tuple[str, ...],
+) -> dict[str, Any]:
+    _ = cache_key
     token_lists = [tuple(_tokenize(text)) for text in corpus]
     token_sets = [set(tokens) for tokens in token_lists]
-    normalized_texts = [ _normalize_for_match(text) for text in corpus ]
+    normalized_texts = [_normalize_for_match(text) for text in corpus]
+    token_freqs = [dict(Counter(tokens)) for tokens in token_lists]
+    doc_lens = [len(tokens) for tokens in token_lists]
+    avg_doc_len = (
+        sum(doc_lens) / float(len(doc_lens))
+        if doc_lens
+        else 0.0
+    )
+    doc_freq: Counter[str] = Counter()
+    for token_set in token_sets:
+        for token in token_set:
+            doc_freq[token] += 1
+    total_docs = max(1, len(token_lists))
+    idf = {
+        token: math.log((total_docs - freq + 0.5) / (freq + 0.5) + 1.0)
+        for token, freq in doc_freq.items()
+    }
+
+    section_titles: list[str] = []
+    section_titles_normalized: list[str] = []
+    section_title_tokens: list[list[str]] = []
+    title_seen: set[str] = set()
+    heading_term_counter: Counter[str] = Counter()
+    for raw_title in source_labels:
+        title = str(raw_title or "").strip()
+        if not title:
+            continue
+        title_norm = _normalize_for_match(title)
+        if not title_norm or title_norm in title_seen:
+            continue
+        title_seen.add(title_norm)
+        section_titles.append(title)
+        section_titles_normalized.append(title_norm)
+        tokens = _tokenize(title_norm)
+        section_title_tokens.append(tokens)
+        heading_term_counter.update(tokens)
+
+    vocab_meta = _build_vocab_terms(token_lists, section_titles_normalized)
+    cooc_map = _build_cooc_map(token_lists)
+    heading_terms = [
+        term
+        for term, _ in heading_term_counter.most_common(180)
+    ]
+
     return {
         "token_lists": token_lists,
         "token_sets": token_sets,
         "normalized_texts": normalized_texts,
+        "token_freqs": token_freqs,
+        "doc_lens": doc_lens,
+        "avg_doc_len": avg_doc_len,
+        "idf": idf,
+        "section_titles": section_titles,
+        "section_titles_normalized": section_titles_normalized,
+        "section_title_tokens": section_title_tokens,
+        "heading_terms": heading_terms,
+        "vocab_terms": list(vocab_meta.get("vocab_terms", [])),
+        "vocab_unigrams": list(vocab_meta.get("vocab_unigrams", [])),
+        "cooc_map": cooc_map,
     }
 
 
-def build_bm25_index(chunks: list[dict[str, Any]]) -> dict[str, Any]:
+def build_bm25_index(
+    chunks: list[dict[str, Any]],
+    kb_hash: str = "",
+    kb_updated_at: str | int | None = None,
+) -> dict[str, Any]:
     if not chunks:
-        return {"token_lists": [], "token_sets": [], "normalized_texts": []}
-    corpus = tuple(str(chunk.get("text", "")) for chunk in chunks)
-    text_hash = _hash_text("\n".join(corpus))
-    return _build_index_cached(text_hash, corpus)
-
-
-def _rank_by_token_overlap(
-    query_tokens: list[str],
-    index: dict[str, Any],
-    chunks: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    if not query_tokens:
-        return []
-    query_set = set(query_tokens)
-    ranked: list[dict[str, Any]] = []
-    for idx, chunk in enumerate(chunks):
-        chunk_set = index["token_sets"][idx] if idx < len(index["token_sets"]) else set()
-        overlap = query_set.intersection(chunk_set)
-        overlap_count = len(overlap)
-        if overlap_count <= 0:
-            continue
-        score = overlap_count / float(max(1, len(query_set)))
-        ranked.append(
-            {
-                **chunk,
-                "score": score,
-                "overlap": overlap_count,
-                "match_type": "token_overlap",
-                "matched_terms": sorted(overlap),
-            }
-        )
-    ranked.sort(
-        key=lambda item: (int(item.get("overlap", 0)), float(item.get("score", 0.0))),
-        reverse=True,
-    )
-    return ranked
-
-
-def _rank_by_substring(
-    query_tokens: list[str],
-    index: dict[str, Any],
-    chunks: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    if not query_tokens:
-        return []
-    ranked: list[dict[str, Any]] = []
-    query_terms = sorted(set(query_tokens), key=len, reverse=True)
-    for idx, chunk in enumerate(chunks):
-        normalized_text = index["normalized_texts"][idx] if idx < len(index["normalized_texts"]) else ""
-        if not normalized_text:
-            continue
-        matched = [term for term in query_terms if term in normalized_text]
-        if not matched:
-            continue
-        score = len(matched) / float(max(1, len(query_terms)))
-        ranked.append(
-            {
-                **chunk,
-                "score": score,
-                "overlap": len(matched),
-                "match_type": "substring",
-                "matched_terms": matched,
-            }
-        )
-    ranked.sort(
-        key=lambda item: (int(item.get("overlap", 0)), float(item.get("score", 0.0))),
-        reverse=True,
-    )
-    return ranked
-
-
-def _rank_by_sequence_match(
-    query: str,
-    index: dict[str, Any],
-    chunks: list[dict[str, Any]],
-    min_ratio: float = 0.28,
-) -> list[dict[str, Any]]:
-    query_norm = _normalize_for_match(query)
-    if not query_norm:
-        return []
-    best_item: dict[str, Any] | None = None
-    best_ratio = 0.0
-    for idx, chunk in enumerate(chunks):
-        normalized_text = index["normalized_texts"][idx] if idx < len(index["normalized_texts"]) else ""
-        if not normalized_text:
-            continue
-        ratio = difflib.SequenceMatcher(None, query_norm, normalized_text[:2500]).ratio()
-        if ratio > best_ratio:
-            best_ratio = ratio
-            best_item = chunk
-    if best_item is None or best_ratio < min_ratio:
-        return []
-    return [
-        {
-            **best_item,
-            "score": best_ratio,
-            "overlap": 0,
-            "match_type": "sequence",
-            "matched_terms": [],
+        return {
+            "token_lists": [],
+            "token_sets": [],
+            "normalized_texts": [],
+            "token_freqs": [],
+            "doc_lens": [],
+            "avg_doc_len": 0.0,
+            "idf": {},
+            "section_titles": [],
+            "section_titles_normalized": [],
+            "section_title_tokens": [],
+            "heading_terms": [],
+            "vocab_terms": [],
+            "vocab_unigrams": [],
+            "cooc_map": {},
         }
-    ]
+    corpus = tuple(str(chunk.get("text", "")) for chunk in chunks)
+    source_labels = tuple(str(chunk.get("source_label", "")) for chunk in chunks)
+    text_hash = _hash_text("\n".join(corpus))
+    resolved_hash = str(kb_hash or text_hash)
+    cache_key = f"{resolved_hash}:{str(kb_updated_at or '')}:{len(chunks)}"
+    return _build_index_cached(cache_key, corpus, source_labels)
 
 
-def _collect_debug_candidates(
+def expand_query_with_kb(
     query: str,
-    query_tokens: list[str],
-    index: dict[str, Any],
-    chunks: list[dict[str, Any]],
-    top_n: int = 4,
-) -> list[dict[str, Any]]:
-    if not chunks:
-        return []
-    query_norm = _normalize_for_match(query)
-    query_terms = sorted(set(query_tokens), key=len, reverse=True)
-    total_terms = max(1, len(query_terms))
-    candidates: list[dict[str, Any]] = []
-    for idx, chunk in enumerate(chunks):
-        text = str(chunk.get("text", ""))
-        norm_text = index["normalized_texts"][idx] if idx < len(index["normalized_texts"]) else ""
-        chunk_tokens = index["token_sets"][idx] if idx < len(index["token_sets"]) else set()
-        overlap_count = len(set(query_tokens).intersection(chunk_tokens))
-        substring_hits = 0
-        if norm_text and query_terms:
-            substring_hits = sum(1 for term in query_terms if term in norm_text)
-        seq_ratio = 0.0
-        if query_norm and norm_text:
-            seq_ratio = difflib.SequenceMatcher(None, query_norm, norm_text[:2500]).ratio()
+    kb_index: dict[str, Any],
+    max_added_terms: int = 8,
+) -> dict[str, Any]:
+    original_query = str(query or "").strip()
+    normalized_query = _normalize_for_match(original_query)
+    query_tokens = _tokenize(original_query)
+    existing_tokens = set(query_tokens)
+    existing_terms = set()
+    added_terms: list[str] = []
+    expansion_notes: list[dict[str, str]] = []
 
-        if overlap_count > 0:
-            match_type = "token_overlap"
-        elif substring_hits > 0:
-            match_type = "substring"
-        elif seq_ratio > 0:
-            match_type = "sequence"
-        else:
-            match_type = "none"
-
-        score = max(
-            overlap_count / float(total_terms),
-            substring_hits / float(total_terms),
-            seq_ratio,
-        )
-        snippet = _normalize_spaces(text)[:200]
-        candidates.append(
+    def add_term(term: str, source: str, reason: str) -> None:
+        if len(added_terms) >= max(1, int(max_added_terms)):
+            return
+        normalized_term = _normalize_for_match(term)
+        if not normalized_term:
+            return
+        if normalized_term in existing_terms:
+            return
+        term_tokens = _tokenize(normalized_term)
+        if not term_tokens:
+            return
+        if all(token in existing_tokens for token in term_tokens):
+            return
+        existing_terms.add(normalized_term)
+        existing_tokens.update(term_tokens)
+        added_terms.append(normalized_term)
+        expansion_notes.append(
             {
-                "chunk_id": chunk.get("chunk_id", idx + 1),
-                "source_label": str(chunk.get("source_label", f"Chunk {idx + 1}")),
-                "source": str(chunk.get("source_label", f"Chunk {idx + 1}")),
-                "score": round(float(score), 4),
-                "overlap": int(overlap_count),
-                "match_type": match_type,
-                "snippet": snippet,
+                "term": normalized_term,
+                "source": source,
+                "reason": reason,
             }
         )
 
-    candidates.sort(
-        key=lambda item: (float(item.get("score", 0.0)), int(item.get("overlap", 0))),
+    section_titles_norm = list(kb_index.get("section_titles_normalized", []))
+    section_title_tokens = list(kb_index.get("section_title_tokens", []))
+    heading_terms = list(kb_index.get("heading_terms", []))
+    vocab_terms = list(kb_index.get("vocab_terms", []))
+    vocab_unigrams = list(kb_index.get("vocab_unigrams", []))
+    cooc_map = kb_index.get("cooc_map", {})
+    query_token_set = set(query_tokens)
+
+    for title_norm, title_tokens in zip(section_titles_norm, section_title_tokens):
+        if len(added_terms) >= max_added_terms:
+            break
+        title_token_set = set(title_tokens)
+        overlap_terms = sorted(query_token_set.intersection(title_token_set))
+        if not overlap_terms:
+            continue
+        cleaned_title = _clean_heading_phrase(title_norm) or title_norm
+        add_term(
+            cleaned_title,
+            "heading_match",
+            f"overlap:{','.join(overlap_terms)}",
+        )
+
+    if query_tokens and heading_terms:
+        for token in query_tokens:
+            if len(added_terms) >= max_added_terms:
+                break
+            if token in heading_terms:
+                continue
+            close = difflib.get_close_matches(token, heading_terms, n=1, cutoff=0.82)
+            if not close:
+                continue
+            add_term(close[0], "fuzzy_heading", f"token:{token}")
+
+    if normalized_query and section_titles_norm:
+        ratios: list[tuple[float, str]] = []
+        for title_norm in section_titles_norm:
+            ratio = difflib.SequenceMatcher(None, normalized_query, title_norm).ratio()
+            if ratio < 0.55:
+                continue
+            ratios.append((ratio, title_norm))
+        ratios.sort(key=lambda item: item[0], reverse=True)
+        for ratio, title_norm in ratios[:2]:
+            cleaned_title = _clean_heading_phrase(title_norm) or title_norm
+            add_term(cleaned_title, "fuzzy_heading", f"title_ratio:{ratio:.2f}")
+
+    if query_tokens and vocab_unigrams:
+        for token in query_tokens:
+            if len(added_terms) >= max_added_terms:
+                break
+            close = difflib.get_close_matches(token, vocab_unigrams, n=1, cutoff=0.84)
+            if not close:
+                continue
+            add_term(close[0], "vocab", f"token:{token}")
+
+    for phrase in vocab_terms[:60]:
+        if len(added_terms) >= max_added_terms:
+            break
+        phrase_tokens = set(_tokenize(phrase))
+        if len(phrase_tokens) < 2:
+            continue
+        overlap = sorted(query_token_set.intersection(phrase_tokens))
+        if not overlap:
+            continue
+        add_term(phrase, "vocab", f"overlap:{','.join(overlap[:2])}")
+
+    if isinstance(cooc_map, dict):
+        seed_tokens = list(existing_tokens)
+        for seed in seed_tokens:
+            if len(added_terms) >= max_added_terms:
+                break
+            related_rows = cooc_map.get(seed, [])
+            if not isinstance(related_rows, list):
+                continue
+            for row in related_rows[:2]:
+                if len(added_terms) >= max_added_terms:
+                    break
+                if isinstance(row, dict):
+                    related_term = str(row.get("term", "")).strip()
+                else:
+                    related_term = str(row).strip()
+                if not related_term:
+                    continue
+                add_term(related_term, "cooc", f"seed:{seed}")
+
+    expanded_query = original_query
+    if added_terms:
+        expanded_query = f"{original_query} {' '.join(added_terms)}".strip()
+    expanded_tokens = _tokenize(expanded_query)
+    return {
+        "query_original": original_query,
+        "query_expanded": expanded_query,
+        "expanded_tokens": expanded_tokens,
+        "added_terms": added_terms,
+        "expansion_notes": expansion_notes,
+    }
+
+
+def expand_query(query: str, kb_index: dict[str, Any] | None = None) -> dict[str, Any]:
+    return expand_query_with_kb(query, kb_index or {})
+
+
+def _compute_bm25_scores(
+    query_tokens: list[str],
+    index: dict[str, Any],
+    k1: float = 1.5,
+    b: float = 0.75,
+) -> list[float]:
+    if not query_tokens:
+        return []
+    token_freqs = index.get("token_freqs", [])
+    doc_lens = index.get("doc_lens", [])
+    avg_doc_len = float(index.get("avg_doc_len", 0.0) or 0.0)
+    idf = index.get("idf", {})
+    query_counts = Counter(query_tokens)
+
+    scores: list[float] = []
+    for idx, freqs in enumerate(token_freqs):
+        if not isinstance(freqs, dict) or not freqs:
+            scores.append(0.0)
+            continue
+        doc_len = float(doc_lens[idx]) if idx < len(doc_lens) else 0.0
+        norm = 1.0 - b + b * (doc_len / avg_doc_len) if avg_doc_len > 0 else 1.0
+        score = 0.0
+        for term, query_tf in query_counts.items():
+            term_tf = float(freqs.get(term, 0.0))
+            if term_tf <= 0:
+                continue
+            idf_score = float(idf.get(term, 0.0))
+            denom = term_tf + (k1 * norm)
+            if denom <= 0:
+                continue
+            score += idf_score * ((term_tf * (k1 + 1.0)) / denom) * float(max(1, query_tf))
+        scores.append(score)
+    return scores
+
+
+def _normalize_scores(scores: list[float]) -> list[float]:
+    if not scores:
+        return []
+    max_score = max(scores)
+    if max_score <= 0:
+        return [0.0 for _ in scores]
+    return [float(score) / max_score for score in scores]
+
+
+def _build_query_ngrams(query_tokens: list[str]) -> list[str]:
+    ngrams: list[str] = []
+    unique = set()
+    for size in (3, 2):
+        for ngram in _iter_ngrams(query_tokens, size):
+            if ngram in unique:
+                continue
+            unique.add(ngram)
+            ngrams.append(ngram)
+    return ngrams
+
+
+def _dedupe_ranked_chunks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for idx, row in enumerate(rows):
+        section_id = str(row.get("section_id", "")).strip()
+        chunk_id = row.get("chunk_id")
+        key = f"section:{section_id}" if section_id else f"chunk:{chunk_id}:{idx}"
+        existing = deduped.get(key)
+        if existing is None or float(row.get("score", 0.0)) > float(existing.get("score", 0.0)):
+            deduped[key] = row
+    ranked = list(deduped.values())
+    ranked.sort(
+        key=lambda item: (
+            float(item.get("score", 0.0)),
+            int(item.get("overlap", 0)),
+        ),
         reverse=True,
     )
-    return candidates[: max(1, top_n)]
+    return ranked
+
+
+def _debug_chunk_row(item: dict[str, Any], idx: int) -> dict[str, Any]:
+    chunk_id = item.get("chunk_id")
+    if str(chunk_id).isdigit():
+        chunk_id = int(chunk_id)
+    source_label = str(item.get("source_label") or item.get("source") or "").strip()
+    if not source_label:
+        source_label = f"Chunk {idx + 1}"
+    text = str(item.get("text", ""))
+    return {
+        "chunk_id": chunk_id,
+        "source_label": source_label,
+        "source": source_label,
+        "section": str(item.get("section_id", "")).strip(),
+        "score": round(float(item.get("score", 0.0)), 4),
+        "overlap": int(item.get("overlap", 0)),
+        "match_type": str(item.get("match_type", "hybrid")),
+        "strong_match": bool(item.get("strong_match", False)),
+        "score_components": dict(item.get("score_components", {})),
+        "snippet": _normalize_spaces(text)[:220],
+    }
 
 
 def retrieve(
@@ -502,15 +829,22 @@ def retrieve(
     chunks: list[dict[str, Any]],
     k: int = 4,
     kb_name: str = "",
+    min_score: float = 0.0,
 ) -> list[dict[str, Any]]:
     if not query or not chunks:
         _set_last_kb_debug(
             {
                 "query": str(query or ""),
+                "query_original": str(query or ""),
+                "query_expanded": str(query or ""),
+                "expansion_notes": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks or []),
                 "retrieved_count": 0,
                 "reason": "no_query_or_chunks",
+                "retrieval_method": "hybrid",
+                "min_score": float(min_score),
+                "chunks_final": [],
                 "top_candidates": [],
             }
         )
@@ -519,51 +853,194 @@ def retrieve(
         _set_last_kb_debug(
             {
                 "query": str(query),
+                "query_original": str(query),
+                "query_expanded": str(query),
+                "expansion_notes": [],
                 "kb_name": kb_name,
                 "chunks_total": len(chunks),
                 "retrieved_count": 0,
                 "reason": "no_index",
+                "retrieval_method": "hybrid",
+                "min_score": float(min_score),
+                "chunks_final": [],
                 "top_candidates": [],
             }
         )
         return []
 
-    query_tokens = _tokenize(query)
-    debug_candidates = _collect_debug_candidates(query, query_tokens, index, chunks, top_n=4)
-    ranked = _rank_by_token_overlap(query_tokens, index, chunks)
-    reason = "token_overlap"
-    if not ranked:
-        ranked = _rank_by_substring(query_tokens, index, chunks)
-        reason = "substring_fallback"
-    if not ranked:
-        ranked = _rank_by_sequence_match(query, index, chunks)
-        reason = "sequence_fallback"
-    if not ranked:
-        reason = "no_hits"
+    expansion_meta = expand_query_with_kb(query, index)
+    expanded_query = str(expansion_meta.get("query_expanded", query))
+    query_tokens = list(expansion_meta.get("expanded_tokens", []))
+    if not query_tokens:
+        query_tokens = _tokenize(expanded_query)
 
-    results = []
-    for item in ranked[: max(1, k)]:
-        chunk_id = int(item.get("chunk_id", 0)) if str(item.get("chunk_id", "")).isdigit() else item.get("chunk_id")
-        source_label = str(item.get("source_label", "")).strip() or f"Chunk {chunk_id or 1}"
-        results.append(
+    if not query_tokens:
+        _set_last_kb_debug(
             {
-                **item,
-                "chunk_id": chunk_id,
-                "source_label": source_label,
-                "source": source_label,
-                "score": float(item.get("score", 0.0)),
-                "overlap": int(item.get("overlap", 0)),
-                "match_type": str(item.get("match_type", "")),
+                "query": query,
+                "query_original": str(expansion_meta.get("query_original", query)),
+                "query_expanded": expanded_query,
+                "expansion_notes": list(expansion_meta.get("expansion_notes", [])),
+                "kb_name": kb_name,
+                "chunks_total": len(chunks),
+                "retrieved_count": 0,
+                "reason": "no_query_tokens",
+                "retrieval_method": "hybrid",
+                "min_score": float(min_score),
+                "chunks_final": [],
+                "top_candidates": [],
             }
         )
+        return []
+
+    query_token_set = set(query_tokens)
+    original_tokens = _tokenize(query)
+    query_ngrams = _build_query_ngrams(original_tokens)
+    query_norm = _normalize_for_match(query)
+    normalized_texts = index.get("normalized_texts", [])
+    token_sets = index.get("token_sets", [])
+    bm25_scores = _compute_bm25_scores(query_tokens, index)
+    bm25_norm = _normalize_scores(bm25_scores)
+
+    rows: list[dict[str, Any]] = []
+    for idx, chunk in enumerate(chunks):
+        text = str(chunk.get("text", ""))
+        chunk_norm = (
+            normalized_texts[idx]
+            if idx < len(normalized_texts)
+            else _normalize_for_match(text)
+        )
+        chunk_tokens = (
+            token_sets[idx]
+            if idx < len(token_sets)
+            else set(_tokenize(text))
+        )
+
+        overlap_terms = sorted(query_token_set.intersection(chunk_tokens))
+        overlap_norm = len(overlap_terms) / float(max(1, len(query_token_set)))
+        bm25_component = bm25_norm[idx] if idx < len(bm25_norm) else 0.0
+
+        exact_ngram_hits = 0
+        if chunk_norm and query_ngrams:
+            exact_ngram_hits = sum(1 for ngram in query_ngrams if ngram in chunk_norm)
+        exact_token_hits = len(set(original_tokens).intersection(chunk_tokens))
+        exact_bonus = min(0.36, 0.12 * exact_ngram_hits)
+        if exact_token_hits >= max(2, int(math.ceil(len(set(original_tokens)) * 0.6))):
+            exact_bonus += 0.06
+
+        source_label = str(chunk.get("source_label") or chunk.get("source") or "")
+        source_norm = _normalize_for_match(source_label)
+        heading_tokens = set(_tokenize(source_norm))
+        heading_overlap_terms = sorted(query_token_set.intersection(heading_tokens))
+        heading_overlap = len(heading_overlap_terms) / float(max(1, len(query_token_set)))
+        heading_bonus = min(0.28, heading_overlap * 0.28)
+
+        fuzzy_ratio = 0.0
+        if source_norm and query_norm:
+            fuzzy_ratio = difflib.SequenceMatcher(None, query_norm, source_norm).ratio()
+        fuzzy_bonus = 0.0
+        if fuzzy_ratio >= 0.72:
+            fuzzy_bonus = min(0.24, (fuzzy_ratio - 0.72) * 0.6)
+
+        score = (
+            (_SIGNAL_WEIGHTS["bm25"] * bm25_component)
+            + (_SIGNAL_WEIGHTS["overlap"] * overlap_norm)
+            + exact_bonus
+            + heading_bonus
+            + fuzzy_bonus
+        )
+        if score <= 0:
+            continue
+
+        match_signals: list[str] = []
+        if bm25_component > 0.01:
+            match_signals.append("bm25")
+        if overlap_norm > 0:
+            match_signals.append("overlap")
+        if exact_bonus > 0:
+            match_signals.append("exact")
+        if heading_bonus > 0:
+            match_signals.append("heading")
+        if fuzzy_bonus > 0:
+            match_signals.append("fuzzy")
+        match_type = "hybrid"
+        if match_signals:
+            match_type = "hybrid:" + "+".join(match_signals)
+
+        strong_match = bool(
+            exact_ngram_hits > 0
+            or exact_bonus >= 0.18
+            or len(heading_overlap_terms) >= 2
+            or heading_overlap >= 0.40
+            or fuzzy_ratio >= 0.88
+        )
+
+        rows.append(
+            {
+                **chunk,
+                "score": float(score),
+                "overlap": len(overlap_terms),
+                "match_type": match_type,
+                "matched_terms": overlap_terms,
+                "strong_match": strong_match,
+                "score_components": {
+                    "bm25_norm": round(float(bm25_component), 4),
+                    "overlap_norm": round(float(overlap_norm), 4),
+                    "exact_bonus": round(float(exact_bonus), 4),
+                    "heading_bonus": round(float(heading_bonus), 4),
+                    "fuzzy_bonus": round(float(fuzzy_bonus), 4),
+                    "fuzzy_ratio": round(float(fuzzy_ratio), 4),
+                },
+            }
+        )
+
+    ranked = _dedupe_ranked_chunks(rows)
+    threshold = float(min_score)
+    results: list[dict[str, Any]] = []
+    for row in ranked:
+        if float(row.get("score", 0.0)) < threshold:
+            continue
+        chunk_id = row.get("chunk_id")
+        if str(chunk_id).isdigit():
+            chunk_id = int(chunk_id)
+        source_label = str(row.get("source_label", "")).strip() or f"Chunk {chunk_id or 1}"
+        result_row = {
+            **row,
+            "chunk_id": chunk_id,
+            "source_label": source_label,
+            "source": source_label,
+            "score": float(row.get("score", 0.0)),
+            "overlap": int(row.get("overlap", 0)),
+            "match_type": str(row.get("match_type", "hybrid")),
+            "strong_match": bool(row.get("strong_match", False)),
+            "score_components": dict(row.get("score_components", {})),
+        }
+        results.append(result_row)
+        if len(results) >= max(1, int(k)):
+            break
+
+    reason = "hybrid"
+    if not ranked:
+        reason = "no_hits"
+    elif not results:
+        reason = "below_min_score"
+
+    top_candidates = [_debug_chunk_row(item, idx) for idx, item in enumerate(ranked[:8])]
+    chunks_final = [_debug_chunk_row(item, idx) for idx, item in enumerate(results)]
     _set_last_kb_debug(
         {
             "query": query,
+            "query_original": str(expansion_meta.get("query_original", query)),
+            "query_expanded": expanded_query,
+            "expansion_notes": list(expansion_meta.get("expansion_notes", [])),
             "kb_name": kb_name,
             "chunks_total": len(chunks),
             "retrieved_count": len(results),
             "reason": reason,
-            "top_candidates": debug_candidates,
+            "retrieval_method": "hybrid",
+            "min_score": threshold,
+            "chunks_final": chunks_final,
+            "top_candidates": top_candidates,
         }
     )
     return results
