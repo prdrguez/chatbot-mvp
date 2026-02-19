@@ -28,8 +28,14 @@ _KB_MODE_GENERAL_ALIASES = {
 _ARTICLE_RE = re.compile(r"(?im)^\s*art[i\u00ed]culo\s+([0-9]+[a-zA-Z0-9-]*)\b")
 _CHAPTER_RE = re.compile(r"(?im)^\s*(cap[i\u00ed]tulo|secci[o\u00f3]n|section)\s+([^\n]{1,80})")
 _NUMBERED_HEADING_RE = re.compile(r"(?m)^\s*(\d+(?:\.\d+)*)\s*[.)-]?\s+([^\n]{3,120})$")
+_MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*$")
 _TOKEN_RE = re.compile(r"[a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+_PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n+")
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\u00c1\u00c9\u00cd\u00d3\u00da\u00dc\u00d1])")
+_DEFAULT_TARGET_CHUNK_CHARS = 1100
+_DEFAULT_MAX_CHUNK_CHARS = 1400
+_DEFAULT_OVERLAP_MAX_CHARS = 260
 _LAST_KB_DEBUG: dict[str, Any] = {}
 _SIGNAL_WEIGHTS = {
     "bm25": 0.50,
@@ -133,42 +139,190 @@ def _is_upper_heading(line: str) -> bool:
     return ratio_upper >= 0.8
 
 
-def _chunk_by_size(
-    text: str,
-    chunk_size: int = 1200,
-    overlap: int = 220,
-    label_prefix: str = "Chunk",
-) -> list[dict[str, Any]]:
-    normalized = _normalize_spaces(text)
+def _split_paragraphs(text: str) -> list[str]:
+    normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not normalized:
         return []
 
-    chunks: list[dict[str, Any]] = []
-    start = 0
-    text_len = len(normalized)
-    chunk_number = 1
-    while start < text_len:
-        end = min(text_len, start + chunk_size)
-        if end < text_len:
-            boundary = normalized.rfind(" ", start, end)
-            if boundary > start + 120:
-                end = boundary
-        chunk_text = normalized[start:end].strip()
+    paragraphs = [
+        block.strip()
+        for block in _PARAGRAPH_SPLIT_RE.split(normalized)
+        if block and block.strip()
+    ]
+    if paragraphs:
+        return paragraphs
+    return [line.strip() for line in normalized.splitlines() if line.strip()]
+
+
+def _split_sentences(text: str) -> list[str]:
+    normalized = _normalize_spaces(text)
+    if not normalized:
+        return []
+    parts = [part.strip() for part in _SENTENCE_SPLIT_RE.split(normalized) if part.strip()]
+    return parts if parts else [normalized]
+
+
+def _split_paragraph_to_units(paragraph: str, max_chars: int) -> list[str]:
+    clean_paragraph = str(paragraph or "").strip()
+    if not clean_paragraph:
+        return []
+    if len(clean_paragraph) <= max(240, int(max_chars)):
+        return [clean_paragraph]
+
+    sentences = _split_sentences(clean_paragraph)
+    if len(sentences) <= 1:
+        return [clean_paragraph]
+
+    resolved_max = max(240, int(max_chars))
+    units: list[str] = []
+    current = ""
+    for sentence in sentences:
+        candidate = sentence if not current else f"{current} {sentence}"
+        if current and len(candidate) > resolved_max:
+            units.append(current.strip())
+            current = sentence
+            continue
+        current = candidate
+    if current.strip():
+        units.append(current.strip())
+    return units if units else [clean_paragraph]
+
+
+def _build_chunk_texts_from_paragraphs(
+    paragraphs: list[str],
+    target_chunk_chars: int,
+    max_chunk_chars: int,
+) -> list[str]:
+    resolved_target = max(500, int(target_chunk_chars))
+    resolved_max = max(resolved_target, int(max_chunk_chars))
+    units: list[str] = []
+    for paragraph in paragraphs:
+        units.extend(_split_paragraph_to_units(paragraph, resolved_max))
+    if not units:
+        return []
+
+    chunks: list[str] = []
+    current_parts: list[str] = []
+    current_chars = 0
+    for unit in units:
+        unit_text = str(unit or "").strip()
+        if not unit_text:
+            continue
+        sep = 2 if current_parts else 0
+        next_chars = current_chars + sep + len(unit_text)
+        if current_parts and next_chars > resolved_max:
+            chunk_text = "\n\n".join(current_parts).strip()
+            if chunk_text:
+                chunks.append(chunk_text)
+            current_parts = [unit_text]
+            current_chars = len(unit_text)
+            continue
+
+        current_parts.append(unit_text)
+        current_chars = next_chars
+        if current_chars >= resolved_target:
+            chunk_text = "\n\n".join(current_parts).strip()
+            if chunk_text:
+                chunks.append(chunk_text)
+            current_parts = []
+            current_chars = 0
+
+    if current_parts:
+        chunk_text = "\n\n".join(current_parts).strip()
         if chunk_text:
-            chunks.append(
-                {
-                    "chunk_id": len(chunks) + 1,
-                    "article_id": None,
-                    "section_id": None,
-                    "section_title": "",
-                    "source_label": f"{label_prefix} {chunk_number}",
-                    "text": chunk_text,
-                }
-            )
-            chunk_number += 1
-        if end >= text_len:
-            break
-        start = max(0, end - overlap)
+            chunks.append(chunk_text)
+
+    return chunks
+
+
+def _extract_overlap_text(
+    previous_chunk_text: str,
+    max_overlap_chars: int = _DEFAULT_OVERLAP_MAX_CHARS,
+) -> str:
+    max_chars = max(80, int(max_overlap_chars))
+    previous = str(previous_chunk_text or "").strip()
+    if not previous:
+        return ""
+
+    previous_paragraphs = _split_paragraphs(previous)
+    if previous_paragraphs:
+        last_paragraph = previous_paragraphs[-1].strip()
+        if 40 <= len(last_paragraph) <= max_chars:
+            return last_paragraph
+        if len(last_paragraph) < 40 and len(previous_paragraphs) >= 2:
+            merged = f"{previous_paragraphs[-2].strip()} {last_paragraph}".strip()
+            if 40 <= len(merged) <= max_chars:
+                return merged
+
+    sentences = _split_sentences(previous)
+    if not sentences:
+        return ""
+    tail = " ".join(sentences[-2:]).strip()
+    if len(tail) > max_chars and len(sentences) >= 1:
+        tail = sentences[-1].strip()
+    if len(tail) > max_chars:
+        return ""
+    return tail
+
+
+def _apply_chunk_overlap(
+    chunk_texts: list[str],
+    max_overlap_chars: int = _DEFAULT_OVERLAP_MAX_CHARS,
+) -> list[str]:
+    if len(chunk_texts) < 2:
+        return chunk_texts
+
+    resolved: list[str] = [chunk_texts[0].strip()]
+    for idx in range(1, len(chunk_texts)):
+        current = chunk_texts[idx].strip()
+        overlap_text = _extract_overlap_text(chunk_texts[idx - 1], max_overlap_chars=max_overlap_chars)
+        if overlap_text:
+            overlap_norm = _normalize_for_match(overlap_text)
+            current_start_norm = _normalize_for_match(current[: max(240, len(overlap_text) + 40)])
+            if overlap_norm and overlap_norm not in current_start_norm:
+                current = f"{overlap_text}\n\n{current}".strip()
+        resolved.append(current)
+    return resolved
+
+
+def _chunk_by_size(
+    text: str,
+    chunk_size: int = _DEFAULT_TARGET_CHUNK_CHARS,
+    overlap: int = _DEFAULT_OVERLAP_MAX_CHARS,
+    label_prefix: str = "Chunk",
+) -> list[dict[str, Any]]:
+    paragraphs = _split_paragraphs(text)
+    if not paragraphs:
+        return []
+
+    target_chunk_chars = max(700, min(1600, int(chunk_size or _DEFAULT_TARGET_CHUNK_CHARS)))
+    max_chunk_chars = max(target_chunk_chars, min(1800, target_chunk_chars + 300))
+    chunk_texts = _build_chunk_texts_from_paragraphs(
+        paragraphs,
+        target_chunk_chars=target_chunk_chars,
+        max_chunk_chars=max_chunk_chars,
+    )
+    chunk_texts = _apply_chunk_overlap(
+        chunk_texts,
+        max_overlap_chars=max(120, int(overlap or _DEFAULT_OVERLAP_MAX_CHARS)),
+    )
+
+    chunks: list[dict[str, Any]] = []
+    for idx, chunk_text in enumerate(chunk_texts, start=1):
+        source = f"{label_prefix} {idx}"
+        chunks.append(
+            {
+                "chunk_id": len(chunks) + 1,
+                "article_id": None,
+                "section_id": None,
+                "section_key": "",
+                "section_chunk_index": idx,
+                "section_chunks_total": len(chunk_texts),
+                "section_title": "",
+                "source_label": source[:140],
+                "text": chunk_text,
+            }
+        )
     return chunks
 
 
@@ -179,6 +333,23 @@ def _extract_headings(text: str) -> list[dict[str, Any]]:
         stripped = line.strip()
         if not stripped:
             continue
+
+        markdown_match = _MARKDOWN_HEADING_RE.match(stripped)
+        if markdown_match:
+            level = len(markdown_match.group(1))
+            title = _normalize_spaces(markdown_match.group(2))
+            if title:
+                headings.append(
+                    {
+                        "line": idx,
+                        "article_id": None,
+                        "section_id": f"md-{idx + 1}",
+                        "section_title": title[:110],
+                        "source_label": f"Seccion {title[:100]}",
+                        "heading_level": level,
+                    }
+                )
+                continue
 
         article_match = _ARTICLE_RE.match(stripped)
         if article_match:
@@ -255,32 +426,48 @@ def _chunk_by_sections(text: str) -> list[dict[str, Any]]:
         if not section_text:
             continue
 
-        if len(section_text) > 1600:
-            split_chunks = _chunk_by_size(
-                section_text,
-                chunk_size=1200,
-                overlap=220,
-                label_prefix=heading["source_label"],
-            )
-            for split in split_chunks:
-                split["article_id"] = heading.get("article_id")
-                split["section_id"] = heading.get("section_id")
-                split["section_title"] = heading.get("section_title", "")
-                split["source_label"] = str(split.get("source_label", heading["source_label"]))[:140]
-                split["chunk_id"] = len(chunks) + 1
-                chunks.append(split)
-            continue
+        section_key_parts = [
+            str(heading.get("section_id", "")).strip(),
+            str(heading.get("article_id", "")).strip(),
+            str(heading.get("source_label", "")).strip().lower(),
+            str(idx + 1),
+        ]
+        section_key = "|".join(part for part in section_key_parts if part) or f"section|{idx + 1}"
 
-        chunks.append(
-            {
-                "chunk_id": len(chunks) + 1,
-                "article_id": heading.get("article_id"),
-                "section_id": heading.get("section_id"),
-                "section_title": heading.get("section_title", ""),
-                "source_label": heading["source_label"],
-                "text": section_text,
-            }
+        section_paragraphs = _split_paragraphs(section_text)
+        section_chunk_texts = _build_chunk_texts_from_paragraphs(
+            section_paragraphs,
+            target_chunk_chars=_DEFAULT_TARGET_CHUNK_CHARS,
+            max_chunk_chars=_DEFAULT_MAX_CHUNK_CHARS,
         )
+        section_chunk_texts = _apply_chunk_overlap(
+            section_chunk_texts,
+            max_overlap_chars=_DEFAULT_OVERLAP_MAX_CHARS,
+        )
+        if not section_chunk_texts:
+            section_chunk_texts = [section_text]
+
+        section_chunks_total = len(section_chunk_texts)
+        for section_chunk_index, chunk_text in enumerate(section_chunk_texts, start=1):
+            source_label = str(heading["source_label"]).strip() or f"Seccion {idx + 1}"
+            if section_chunks_total > 1:
+                source_label = (
+                    f"{source_label} (parte {section_chunk_index}/{section_chunks_total})"
+                )
+
+            chunks.append(
+                {
+                    "chunk_id": len(chunks) + 1,
+                    "article_id": heading.get("article_id"),
+                    "section_id": heading.get("section_id"),
+                    "section_key": section_key,
+                    "section_chunk_index": section_chunk_index,
+                    "section_chunks_total": section_chunks_total,
+                    "section_title": heading.get("section_title", ""),
+                    "source_label": source_label[:140],
+                    "text": chunk_text,
+                }
+            )
 
     return chunks
 
@@ -784,9 +971,8 @@ def _build_query_ngrams(query_tokens: list[str]) -> list[str]:
 def _dedupe_ranked_chunks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     deduped: dict[str, dict[str, Any]] = {}
     for idx, row in enumerate(rows):
-        section_id = str(row.get("section_id", "")).strip()
         chunk_id = row.get("chunk_id")
-        key = f"section:{section_id}" if section_id else f"chunk:{chunk_id}:{idx}"
+        key = f"chunk:{chunk_id}" if str(chunk_id).isdigit() else f"chunk:{idx}"
         existing = deduped.get(key)
         if existing is None or float(row.get("score", 0.0)) > float(existing.get("score", 0.0)):
             deduped[key] = row
@@ -799,6 +985,153 @@ def _dedupe_ranked_chunks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         reverse=True,
     )
     return ranked
+
+
+def _safe_chunk_int(value: Any) -> int | None:
+    if str(value).isdigit():
+        return int(value)
+    return None
+
+
+def _chunk_text_len(row: dict[str, Any]) -> int:
+    return len(str(row.get("text", "")).strip())
+
+
+def _is_stitch_anchor(row: dict[str, Any]) -> bool:
+    match_type = str(row.get("match_type", "")).lower()
+    score = float(row.get("score", 0.0))
+    overlap = int(row.get("overlap", 0))
+    if bool(row.get("strong_match", False)):
+        return True
+    if "heading" in match_type or "exact" in match_type:
+        return score >= 0.16
+    return overlap >= 3 and score >= 0.16
+
+
+def _stitch_section_chunks(
+    selected_rows: list[dict[str, Any]],
+    all_chunks: list[dict[str, Any]],
+    max_context_chars: int | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    if not selected_rows:
+        return [], [], 0
+
+    try:
+        context_budget = int(max_context_chars or 0)
+    except (TypeError, ValueError):
+        context_budget = 0
+    if context_budget <= 0:
+        total = sum(_chunk_text_len(row) for row in selected_rows)
+        return selected_rows, [], total
+
+    merged_rows = [dict(row) for row in selected_rows]
+    for idx, row in enumerate(merged_rows):
+        row["_context_rank"] = float(idx)
+
+    selected_ids = {
+        chunk_id
+        for chunk_id in (_safe_chunk_int(row.get("chunk_id")) for row in merged_rows)
+        if chunk_id is not None
+    }
+
+    section_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for doc_index, chunk in enumerate(all_chunks):
+        section_key = str(chunk.get("section_key", "")).strip()
+        if not section_key:
+            continue
+        chunk_id = _safe_chunk_int(chunk.get("chunk_id"))
+        if chunk_id is None:
+            continue
+        row = dict(chunk)
+        row["_doc_index"] = doc_index
+        row["_section_chunk_index"] = int(chunk.get("section_chunk_index") or 0)
+        section_map[section_key].append(row)
+
+    for items in section_map.values():
+        items.sort(
+            key=lambda item: (
+                int(item.get("_section_chunk_index", 0)),
+                int(item.get("_doc_index", 0)),
+            )
+        )
+
+    used_chars = sum(_chunk_text_len(row) for row in merged_rows)
+    added_rows: list[dict[str, Any]] = []
+    if used_chars >= context_budget:
+        for row in merged_rows:
+            row.pop("_context_rank", None)
+        return merged_rows, added_rows, used_chars
+
+    for anchor in list(merged_rows):
+        if used_chars >= context_budget:
+            break
+        if not _is_stitch_anchor(anchor):
+            continue
+
+        section_key = str(anchor.get("section_key", "")).strip()
+        if not section_key:
+            continue
+        section_chunks = section_map.get(section_key, [])
+        if len(section_chunks) < 2:
+            continue
+
+        anchor_chunk_id = _safe_chunk_int(anchor.get("chunk_id"))
+        if anchor_chunk_id is None:
+            continue
+        anchor_idx = next(
+            (
+                idx
+                for idx, row in enumerate(section_chunks)
+                if _safe_chunk_int(row.get("chunk_id")) == anchor_chunk_id
+            ),
+            -1,
+        )
+        if anchor_idx < 0:
+            continue
+
+        anchor_rank = float(anchor.get("_context_rank", 0.0))
+        candidate_positions: list[int] = []
+        for distance in range(1, len(section_chunks)):
+            right = anchor_idx + distance
+            left = anchor_idx - distance
+            if right < len(section_chunks):
+                candidate_positions.append(right)
+            if left >= 0:
+                candidate_positions.append(left)
+
+        stitched_for_anchor = 0
+        for pos in candidate_positions:
+            if used_chars >= context_budget:
+                break
+            candidate = section_chunks[pos]
+            candidate_chunk_id = _safe_chunk_int(candidate.get("chunk_id"))
+            if candidate_chunk_id is None or candidate_chunk_id in selected_ids:
+                continue
+            candidate_text_len = _chunk_text_len(candidate)
+            if candidate_text_len <= 0:
+                continue
+            if used_chars + candidate_text_len > context_budget:
+                continue
+
+            stitched_for_anchor += 1
+            selected_ids.add(candidate_chunk_id)
+            used_chars += candidate_text_len
+            stitched = dict(candidate)
+            stitched["score"] = float(anchor.get("score", 0.0)) * 0.96
+            stitched["overlap"] = int(stitched.get("overlap", 0))
+            stitched["match_type"] = "stitched_section"
+            stitched["strong_match"] = bool(anchor.get("strong_match", False))
+            stitched["added_by_stitching"] = True
+            stitched["stitch_anchor_chunk_id"] = anchor_chunk_id
+            stitched["score_components"] = dict(stitched.get("score_components", {}))
+            stitched["_context_rank"] = anchor_rank + (stitched_for_anchor / 100.0)
+            merged_rows.append(stitched)
+            added_rows.append(stitched)
+
+    merged_rows.sort(key=lambda row: float(row.get("_context_rank", 0.0)))
+    for row in merged_rows:
+        row.pop("_context_rank", None)
+    return merged_rows, added_rows, used_chars
 
 
 def _debug_chunk_row(item: dict[str, Any], idx: int) -> dict[str, Any]:
@@ -814,10 +1147,13 @@ def _debug_chunk_row(item: dict[str, Any], idx: int) -> dict[str, Any]:
         "source_label": source_label,
         "source": source_label,
         "section": str(item.get("section_id", "")).strip(),
+        "section_key": str(item.get("section_key", "")).strip(),
         "score": round(float(item.get("score", 0.0)), 4),
         "overlap": int(item.get("overlap", 0)),
         "match_type": str(item.get("match_type", "hybrid")),
         "strong_match": bool(item.get("strong_match", False)),
+        "added_by_stitching": bool(item.get("added_by_stitching", False)),
+        "stitch_anchor_chunk_id": _safe_chunk_int(item.get("stitch_anchor_chunk_id")),
         "score_components": dict(item.get("score_components", {})),
         "snippet": _normalize_spaces(text)[:220],
     }
@@ -830,7 +1166,12 @@ def retrieve(
     k: int = 4,
     kb_name: str = "",
     min_score: float = 0.0,
+    max_context_chars: int | None = None,
 ) -> list[dict[str, Any]]:
+    try:
+        context_budget_debug = max(0, int(max_context_chars or 0))
+    except (TypeError, ValueError):
+        context_budget_debug = 0
     if not query or not chunks:
         _set_last_kb_debug(
             {
@@ -845,6 +1186,10 @@ def retrieve(
                 "retrieval_method": "hybrid",
                 "min_score": float(min_score),
                 "chunks_final": [],
+                "chunks_added_by_stitching": [],
+                "stitching_added_count": 0,
+                "context_chars_used": 0,
+                "context_chars_budget": context_budget_debug,
                 "top_candidates": [],
             }
         )
@@ -863,6 +1208,10 @@ def retrieve(
                 "retrieval_method": "hybrid",
                 "min_score": float(min_score),
                 "chunks_final": [],
+                "chunks_added_by_stitching": [],
+                "stitching_added_count": 0,
+                "context_chars_used": 0,
+                "context_chars_budget": context_budget_debug,
                 "top_candidates": [],
             }
         )
@@ -888,6 +1237,10 @@ def retrieve(
                 "retrieval_method": "hybrid",
                 "min_score": float(min_score),
                 "chunks_final": [],
+                "chunks_added_by_stitching": [],
+                "stitching_added_count": 0,
+                "context_chars_used": 0,
+                "context_chars_budget": context_budget_debug,
                 "top_candidates": [],
             }
         )
@@ -1025,8 +1378,23 @@ def retrieve(
     elif not results:
         reason = "below_min_score"
 
+    stitched_results = list(results)
+    stitched_added_rows: list[dict[str, Any]] = []
+    context_chars_used = sum(_chunk_text_len(row) for row in stitched_results)
+    context_chars_budget = context_budget_debug
+    if results and context_chars_budget > 0:
+        stitched_results, stitched_added_rows, context_chars_used = _stitch_section_chunks(
+            selected_rows=results,
+            all_chunks=chunks,
+            max_context_chars=context_chars_budget,
+        )
+
     top_candidates = [_debug_chunk_row(item, idx) for idx, item in enumerate(ranked[:8])]
-    chunks_final = [_debug_chunk_row(item, idx) for idx, item in enumerate(results)]
+    chunks_final = [_debug_chunk_row(item, idx) for idx, item in enumerate(stitched_results)]
+    stitched_debug = [
+        _debug_chunk_row(item, idx)
+        for idx, item in enumerate(stitched_added_rows)
+    ]
     _set_last_kb_debug(
         {
             "query": query,
@@ -1035,12 +1403,16 @@ def retrieve(
             "expansion_notes": list(expansion_meta.get("expansion_notes", [])),
             "kb_name": kb_name,
             "chunks_total": len(chunks),
-            "retrieved_count": len(results),
+            "retrieved_count": len(stitched_results),
             "reason": reason,
             "retrieval_method": "hybrid",
             "min_score": threshold,
             "chunks_final": chunks_final,
+            "chunks_added_by_stitching": stitched_debug,
+            "stitching_added_count": len(stitched_added_rows),
+            "context_chars_used": context_chars_used,
+            "context_chars_budget": context_chars_budget,
             "top_candidates": top_candidates,
         }
     )
-    return results
+    return stitched_results

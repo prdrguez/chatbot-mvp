@@ -15,6 +15,10 @@ if root_path_str in sys.path:
 sys.path.insert(0, root_path_str)
 
 from chatbot_mvp.services.submissions_store import read_submissions, summarize
+from chatbot_mvp.services.kb_limits import (
+    KB_MAX_CHARS,
+    apply_kb_limit_to_session,
+)
 from chatbot_mvp.config.settings import get_admin_password, is_demo_mode, get_runtime_ai_provider
 from chatbot_mvp.knowledge import (
     KB_MODE_GENERAL,
@@ -372,6 +376,12 @@ if check_password():
             st.session_state["kb_mode"] = KB_MODE_GENERAL
         if "kb_debug" not in st.session_state:
             st.session_state["kb_debug"] = False
+        if "kb_truncated" not in st.session_state:
+            st.session_state["kb_truncated"] = False
+        if "kb_original_chars" not in st.session_state:
+            st.session_state["kb_original_chars"] = 0
+        if "kb_max_chars" not in st.session_state:
+            st.session_state["kb_max_chars"] = KB_MAX_CHARS
 
         st.session_state["kb_mode"] = normalize_kb_mode(st.session_state.get("kb_mode"))
 
@@ -408,8 +418,13 @@ if check_password():
 
         if uploaded_kb is not None:
             raw_bytes = uploaded_kb.getvalue()
-            uploaded_text = _decode_kb_bytes(raw_bytes)
-            uploaded_text = uploaded_text.strip()
+            decoded_text = _decode_kb_bytes(raw_bytes)
+            limited_text = apply_kb_limit_to_session(
+                st.session_state,
+                decoded_text,
+                max_chars=KB_MAX_CHARS,
+            )
+            uploaded_text = limited_text.strip()
             kb_signature = f"{uploaded_kb.name}:{hashlib.sha256(raw_bytes).hexdigest()}"
             current_signature = st.session_state.get("kb_signature")
             if uploaded_text and kb_signature != current_signature:
@@ -435,6 +450,9 @@ if check_password():
 
         kb_name = st.session_state.get("kb_name", "")
         kb_text = st.session_state.get("kb_text", "")
+        kb_limit = int(st.session_state.get("kb_max_chars", KB_MAX_CHARS))
+        kb_original_chars = int(st.session_state.get("kb_original_chars", len(kb_text or "")))
+        kb_truncated = bool(st.session_state.get("kb_truncated", False))
         if kb_name and kb_text:
             expected_hash = hashlib.sha256(kb_text.strip().encode("utf-8")).hexdigest()
             if st.session_state.get("kb_hash") != expected_hash:
@@ -449,7 +467,15 @@ if check_password():
                 else:
                     _apply_kb_runtime_bundle(kb_bundle)
 
-            st.caption(f"KB cargada: {kb_name} ({len(kb_text)} caracteres)")
+            st.caption(f"KB cargada: {kb_name}")
+            st.caption(f"Tamaño KB: {len(kb_text)} chars | Límite: {kb_limit}")
+            if kb_truncated:
+                st.warning(
+                    "Se truncó el documento para rendimiento. Recomendado: subir versión resumida."
+                )
+                st.caption(
+                    f"KB truncada: se conservaron {len(kb_text)} chars de {kb_original_chars} chars originales."
+                )
             if st.button("Limpiar KB", use_container_width=False):
                 st.session_state.pop("kb_text", None)
                 st.session_state.pop("kb_name", None)
@@ -458,11 +484,15 @@ if check_password():
                 st.session_state.pop("kb_hash", None)
                 st.session_state.pop("kb_chunks", None)
                 st.session_state.pop("kb_index", None)
+                st.session_state.pop("kb_truncated", None)
+                st.session_state.pop("kb_original_chars", None)
+                st.session_state.pop("kb_max_chars", None)
                 st.session_state["admin_kb_uploader"] = None
                 st.toast("KB limpiada", icon="⚠️")
                 st.rerun()
         else:
             st.caption("KB cargada: ninguna.")
+            st.caption(f"Tamaño KB: 0 chars | Límite: {kb_limit}")
         kb_active_label = kb_name if kb_name else "ninguna"
         kb_mode_caption = "Solo KB (estricto)" if st.session_state.get("kb_mode") == KB_MODE_STRICT else "General"
         st.caption(f"KB activa: {kb_active_label}")

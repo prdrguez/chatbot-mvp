@@ -37,6 +37,9 @@ _KB_EMPTY_RESPONSE = (
 _KB_DEFAULT_TOP_K = 4
 _KB_DEFAULT_MIN_SCORE = 0.12
 _KB_DEFAULT_MAX_CONTEXT_CHARS = 3200
+_KB_DEFAULT_MAX_CONTEXT_CHARS_LARGE = 6000
+_KB_LARGE_TEXT_THRESHOLD = 40000
+_GROQ_KB_MAX_TOKENS_DEFAULT = 700
 
 
 class ResponseStrategy(Protocol):
@@ -155,6 +158,34 @@ class AIResponseStrategy(BaseResponseStrategy):
         """
         self.ai_client = ai_client
         self.last_response_time = 0
+
+    def _is_groq_client(self) -> bool:
+        module_name = str(getattr(self.ai_client.__class__, "__module__", "")).lower()
+        class_name = str(getattr(self.ai_client.__class__, "__name__", "")).lower()
+        return "groq" in module_name or "groq" in class_name
+
+    def _resolve_max_tokens(
+        self,
+        user_context: Optional[Dict],
+        streaming: bool = False,
+    ) -> int:
+        default_tokens = 250 if streaming else 150
+        if not isinstance(user_context, dict):
+            return default_tokens
+
+        kb_context_block = str(user_context.get("kb_context_block", "")).strip()
+        if not kb_context_block:
+            return default_tokens
+
+        requested_tokens = user_context.get("kb_response_max_tokens")
+        try:
+            resolved_requested = int(requested_tokens)
+        except (TypeError, ValueError):
+            resolved_requested = _GROQ_KB_MAX_TOKENS_DEFAULT
+
+        if self._is_groq_client():
+            return max(default_tokens, max(400, resolved_requested))
+        return default_tokens
     
     def generate_response(
         self, 
@@ -178,7 +209,7 @@ class AIResponseStrategy(BaseResponseStrategy):
                 message=message,
                 conversation_history=conversation_history,
                 user_context=user_context,
-                max_tokens=150,
+                max_tokens=self._resolve_max_tokens(user_context, streaming=False),
                 temperature=0.7
             )
             self.last_response_time = time.time()
@@ -206,7 +237,7 @@ class AIResponseStrategy(BaseResponseStrategy):
                     message=message,
                     conversation_history=conversation_history,
                     user_context=user_context,
-                    max_tokens=250,
+                    max_tokens=self._resolve_max_tokens(user_context, streaming=True),
                     temperature=0.7
                 )
                 for chunk in stream:
@@ -438,6 +469,10 @@ class ChatService:
                 "query_expanded": message,
                 "expansion_notes": [],
                 "retrieval_method": "hybrid",
+                "context_chars_budget": 0,
+                "context_chars_used": 0,
+                "chunks_added_by_stitching": [],
+                "stitching_added_count": 0,
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -452,6 +487,7 @@ class ChatService:
         kb_top_k = kb_payload["kb_top_k"]
         kb_min_score = kb_payload["kb_min_score"]
         kb_max_context_chars = kb_payload["kb_max_context_chars"]
+        kb_large_default_applied = bool(kb_payload.get("kb_large_default_applied", False))
         strict_mode = kb_mode == KB_MODE_STRICT
         if not kb_text.strip():
             self.last_kb_debug = {
@@ -465,6 +501,10 @@ class ChatService:
                 "query_expanded": message,
                 "expansion_notes": [],
                 "retrieval_method": "hybrid",
+                "context_chars_budget": kb_max_context_chars,
+                "context_chars_used": 0,
+                "chunks_added_by_stitching": [],
+                "stitching_added_count": 0,
                 "chunks": [],
             }
             if strict_mode:
@@ -489,6 +529,10 @@ class ChatService:
                 "query_expanded": message,
                 "expansion_notes": [],
                 "retrieval_method": "hybrid",
+                "context_chars_budget": kb_max_context_chars,
+                "context_chars_used": 0,
+                "chunks_added_by_stitching": [],
+                "stitching_added_count": 0,
                 "chunks": [],
             }
             if strict_mode:
@@ -509,6 +553,7 @@ class ChatService:
             k=kb_top_k,
             kb_name=kb_name,
             min_score=kb_min_score,
+            max_context_chars=kb_max_context_chars,
         )
         self._log_kb_retrieval(kb_name, retrieval_result)
         policy_debug = get_policy_kb_debug()
@@ -518,6 +563,12 @@ class ChatService:
         retrieval_method = str(policy_debug.get("retrieval_method", "hybrid"))
         chunks_final = self._limit_context_chunks(retrieval_result, kb_max_context_chars)
         debug_chunks = self._build_debug_chunks(chunks_final)
+        stitched_debug_chunks = self._normalize_debug_chunks(
+            policy_debug.get("chunks_added_by_stitching", [])
+        )
+        context_chars_used = sum(len(str(chunk.get("text", "")).strip()) for chunk in chunks_final)
+        if context_chars_used <= 0:
+            context_chars_used = int(policy_debug.get("context_chars_used", 0) or 0)
         if not self._has_sufficient_evidence(chunks_final):
             self.last_kb_debug = {
                 "kb_name": kb_name,
@@ -531,6 +582,11 @@ class ChatService:
                 "expansion_notes": expansion_notes,
                 "retrieval_method": retrieval_method,
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "context_chars_budget": kb_max_context_chars,
+                "context_chars_used": context_chars_used,
+                "chunks_added_by_stitching": stitched_debug_chunks,
+                "stitching_added_count": int(policy_debug.get("stitching_added_count", 0) or 0),
+                "kb_large_default_applied": kb_large_default_applied,
                 "chunks": [],
             }
             if strict_mode:
@@ -568,6 +624,9 @@ class ChatService:
         prepared_context["kb_top_k"] = kb_top_k
         prepared_context["kb_min_score"] = kb_min_score
         prepared_context["kb_max_context_chars"] = kb_max_context_chars
+        prepared_context["kb_response_max_tokens"] = _GROQ_KB_MAX_TOKENS_DEFAULT
+        prepared_context["kb_text_len"] = len(kb_text or "")
+        prepared_context["kb_large_default_applied"] = kb_large_default_applied
         self.last_kb_debug = {
             "kb_name": kb_name,
             "kb_mode": kb_mode,
@@ -580,6 +639,11 @@ class ChatService:
             "expansion_notes": expansion_notes,
             "retrieval_method": retrieval_method,
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+            "context_chars_budget": kb_max_context_chars,
+            "context_chars_used": context_chars_used,
+            "chunks_added_by_stitching": stitched_debug_chunks,
+            "stitching_added_count": int(policy_debug.get("stitching_added_count", 0) or 0),
+            "kb_large_default_applied": kb_large_default_applied,
             "chunks": debug_chunks,
         }
         return prepared_message, prepared_context, sources, None, chunks_final
@@ -597,6 +661,7 @@ class ChatService:
         kb_chunks = user_context.get("kb_chunks")
         kb_index = user_context.get("kb_index")
         kb_updated_at = str(user_context.get("kb_updated_at", "")).strip()
+        kb_text_len = len(kb_text or "")
         kb_top_k = self._safe_int(
             user_context.get("kb_top_k", _KB_DEFAULT_TOP_K),
             default=_KB_DEFAULT_TOP_K,
@@ -609,9 +674,18 @@ class ChatService:
             minimum=0.0,
             maximum=5.0,
         )
+        kb_max_context_user_set = (
+            "kb_max_context_chars" in user_context
+            and user_context.get("kb_max_context_chars") not in (None, "")
+        )
+        max_context_default = _KB_DEFAULT_MAX_CONTEXT_CHARS
+        kb_large_default_applied = False
+        if kb_text_len > _KB_LARGE_TEXT_THRESHOLD and not kb_max_context_user_set:
+            max_context_default = _KB_DEFAULT_MAX_CONTEXT_CHARS_LARGE
+            kb_large_default_applied = True
         kb_max_context_chars = self._safe_int(
-            user_context.get("kb_max_context_chars", _KB_DEFAULT_MAX_CONTEXT_CHARS),
-            default=_KB_DEFAULT_MAX_CONTEXT_CHARS,
+            user_context.get("kb_max_context_chars", max_context_default),
+            default=max_context_default,
             minimum=800,
             maximum=20000,
         )
@@ -626,6 +700,8 @@ class ChatService:
             "kb_top_k": kb_top_k,
             "kb_min_score": kb_min_score,
             "kb_max_context_chars": kb_max_context_chars,
+            "kb_text_len": kb_text_len,
+            "kb_large_default_applied": kb_large_default_applied,
         }
 
     def _resolve_kb_index(
@@ -682,9 +758,13 @@ class ChatService:
                     "chunk_id": row.get("chunk_id"),
                     "source": source,
                     "source_label": source,
+                    "section": str(row.get("section", "")).strip(),
                     "score": float(row.get("score", 0.0)),
                     "overlap": int(row.get("overlap", 0)),
                     "match_type": str(row.get("match_type", "")),
+                    "strong_match": bool(row.get("strong_match", False)),
+                    "added_by_stitching": bool(row.get("added_by_stitching", False)),
+                    "stitch_anchor_chunk_id": row.get("stitch_anchor_chunk_id"),
                     "snippet": str(row.get("snippet", "")),
                 }
             )
@@ -705,6 +785,8 @@ class ChatService:
                     "overlap": int(chunk.get("overlap", 0)),
                     "match_type": str(chunk.get("match_type", "")),
                     "strong_match": bool(chunk.get("strong_match", False)),
+                    "added_by_stitching": bool(chunk.get("added_by_stitching", False)),
+                    "stitch_anchor_chunk_id": chunk.get("stitch_anchor_chunk_id"),
                     "score_components": dict(chunk.get("score_components", {})),
                     "snippet": text[:220],
                 }
@@ -738,11 +820,21 @@ class ChatService:
         top_score = float(ranked[0].get("score", 0.0))
         combined_score = sum(float(chunk.get("score", 0.0)) for chunk in ranked[:2])
         has_strong_match = any(bool(chunk.get("strong_match", False)) for chunk in ranked)
-        if has_strong_match and top_score >= 0.22:
+        has_stitched_context = any(bool(chunk.get("added_by_stitching", False)) for chunk in ranked)
+        has_heading_or_exact = any(
+            ("heading" in str(chunk.get("match_type", "")).lower())
+            or ("exact" in str(chunk.get("match_type", "")).lower())
+            for chunk in ranked
+        )
+        if has_heading_or_exact and top_score >= 0.18:
             return True
-        if combined_score >= 0.95:
+        if has_stitched_context and top_score >= 0.16:
             return True
-        return top_score >= 0.60
+        if has_strong_match and top_score >= 0.20:
+            return True
+        if combined_score >= 0.85:
+            return True
+        return top_score >= 0.58
 
     def _log_kb_retrieval(self, kb_name: str, retrieved_chunks: List[Dict[str, Any]]) -> None:
         chunk_refs = []
@@ -846,11 +938,36 @@ class ChatService:
                 limited.append(chunk)
                 used += len(text)
                 continue
-            clipped = dict(chunk)
-            clipped["text"] = text[: max(120, remaining)].rstrip() + "..."
-            limited.append(clipped)
+            if not limited:
+                clipped_text = self._truncate_at_sentence_boundary(text, max(180, remaining))
+                if clipped_text:
+                    clipped = dict(chunk)
+                    clipped["text"] = clipped_text
+                    limited.append(clipped)
             break
         return limited if limited else chunks[:1]
+
+    def _truncate_at_sentence_boundary(self, text: str, limit: int) -> str:
+        content = str(text or "").strip()
+        if not content:
+            return ""
+        if len(content) <= limit:
+            return content
+        snippet = content[:limit]
+        sentence_boundary = max(
+            snippet.rfind(". "),
+            snippet.rfind("! "),
+            snippet.rfind("? "),
+            snippet.rfind(".\n"),
+            snippet.rfind("!\n"),
+            snippet.rfind("?\n"),
+        )
+        if sentence_boundary >= 120:
+            return snippet[: sentence_boundary + 1].strip()
+        word_boundary = snippet.rfind(" ")
+        if word_boundary >= 120:
+            return snippet[:word_boundary].strip()
+        return snippet.strip()
 
     def _safe_int(self, value: Any, default: int, minimum: int, maximum: int) -> int:
         try:

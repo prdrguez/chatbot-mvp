@@ -124,6 +124,13 @@ if kb_debug:
                 f"Chunks recuperados: {debug_payload.get('retrieved_count', 0)} | "
                 f"Contexto usado: {debug_payload.get('used_context', False)}"
             )
+            st.caption(
+                f"Chars de contexto: {debug_payload.get('context_chars_used', 0)} / "
+                f"{debug_payload.get('context_chars_budget', 0)}"
+            )
+            st.caption(
+                f"Chunks añadidos por stitching: {debug_payload.get('stitching_added_count', 0)}"
+            )
             rows = debug_payload.get("chunks", [])
             if not rows:
                 st.caption("0 hits. Revisa query/threshold y chunking.")
@@ -132,9 +139,18 @@ if kb_debug:
                 score = row.get("score", 0.0)
                 match_type = row.get("match_type", "")
                 snippet = row.get("snippet", "")
+                stitch_mark = " | stitched=True" if row.get("added_by_stitching") else ""
                 st.caption(
-                    f"{source} | score={score} | match={match_type} | snippet={snippet}"
+                    f"{source} | score={score} | match={match_type}{stitch_mark} | snippet={snippet}"
                 )
+            stitched_rows = debug_payload.get("chunks_added_by_stitching", [])
+            if stitched_rows:
+                st.caption("Detalle stitching:")
+                for row in stitched_rows:
+                    source = row.get("source") or row.get("source_label", "")
+                    anchor = row.get("stitch_anchor_chunk_id", "")
+                    snippet = row.get("snippet", "")
+                    st.caption(f"+ {source} | anchor={anchor} | snippet={snippet}")
 
 if active_provider == "gemini":
     if not get_env_value("GEMINI_API_KEY") and not get_env_value("GOOGLE_API_KEY"):
