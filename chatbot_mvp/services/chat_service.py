@@ -387,9 +387,7 @@ class ChatService:
             prepared_user_context,
         )
 
-        if not sources:
-            return response
-        return self._append_sources(response, sources)
+        return response
 
     def send_message_stream(
         self, 
@@ -417,13 +415,11 @@ class ChatService:
             prepared_user_context,
         )
 
-        if not sources:
-            return stream
-        return self._stream_with_sources(stream, sources)
+        return stream
 
     def _prepare_kb_prompt(
         self, message: str, user_context: Optional[Dict]
-    ) -> tuple[str, Dict[str, Any], list[str], Optional[str], list[Dict[str, Any]]]:
+    ) -> tuple[str, Dict[str, Any], list[Dict[str, Any]], Optional[str], list[Dict[str, Any]]]:
         base_context: Dict[str, Any] = dict(user_context or {})
         kb_payload = self._extract_kb_payload(user_context)
         if not kb_payload:
@@ -438,6 +434,7 @@ class ChatService:
                 "query_expanded": message,
                 "expansion_notes": [],
                 "retrieval_method": "hybrid",
+                "sources": [],
                 "chunks": [],
             }
             return message, base_context, [], None, []
@@ -465,6 +462,7 @@ class ChatService:
                 "query_expanded": message,
                 "expansion_notes": [],
                 "retrieval_method": "hybrid",
+                "sources": [],
                 "chunks": [],
             }
             if strict_mode:
@@ -489,6 +487,7 @@ class ChatService:
                 "query_expanded": message,
                 "expansion_notes": [],
                 "retrieval_method": "hybrid",
+                "sources": [],
                 "chunks": [],
             }
             if strict_mode:
@@ -531,6 +530,7 @@ class ChatService:
                 "expansion_notes": expansion_notes,
                 "retrieval_method": retrieval_method,
                 "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+                "sources": [],
                 "chunks": [],
             }
             if strict_mode:
@@ -580,6 +580,7 @@ class ChatService:
             "expansion_notes": expansion_notes,
             "retrieval_method": retrieval_method,
             "chunks_total": int(policy_debug.get("chunks_total", len(chunks))),
+            "sources": sources,
             "chunks": debug_chunks,
         }
         return prepared_message, prepared_context, sources, None, chunks_final
@@ -772,32 +773,49 @@ class ChatService:
         self,
         retrieved_chunks: List[Dict[str, Any]],
         max_sources: int = 4,
-    ) -> list[str]:
-        seen = set()
-        ordered_sources: list[str] = []
+    ) -> list[Dict[str, Any]]:
+        ordered_sources: list[Dict[str, Any]] = []
         limit = max(1, int(max_sources))
         for chunk in retrieved_chunks:
-            source = str(chunk.get("source_label", "")).strip()
-            if not source or source in seen:
+            source_label = str(chunk.get("source_label", "")).strip()
+            if not source_label:
                 continue
-            seen.add(source)
-            ordered_sources.append(source)
+            kb_name, section = self._split_source_label(source_label)
+            part = self._extract_source_part(section)
+            score = float(chunk.get("score", 0.0))
+            method = str(chunk.get("match_type", "")).strip() or "hybrid"
+            ordered_sources.append(
+                {
+                    "kb_name": kb_name,
+                    "section": section,
+                    "part": part,
+                    "score": round(score, 4),
+                    "method": method,
+                    "source_label": source_label,
+                    "chunk_id": chunk.get("chunk_id"),
+                }
+            )
             if len(ordered_sources) >= limit:
                 break
         return ordered_sources
 
-    def _append_sources(self, response: str, sources: List[str]) -> str:
-        if not sources:
-            return response
-        lines = response.rstrip().splitlines()
-        if lines and lines[-1].strip().lower().startswith("fuentes:"):
-            lines = lines[:-1]
-        clean_response = "\n".join(lines).rstrip()
-        sources_text = ", ".join(sources)
-        return f"{clean_response}\n\nFuentes: {sources_text}"
+    def _split_source_label(self, source_label: str) -> tuple[str, str]:
+        text = str(source_label or "").strip()
+        if not text:
+            return "", ""
+        if "|" not in text:
+            return "", text
+        kb_name, section = text.split("|", maxsplit=1)
+        return kb_name.strip(), section.strip()
+
+    def _extract_source_part(self, section: str) -> str:
+        match = re.search(r"\(parte\s*([0-9]+\s*/\s*[0-9]+)\)", str(section), flags=re.IGNORECASE)
+        if not match:
+            return ""
+        return match.group(1).replace(" ", "")
 
     def _build_demo_kb_answer(
-        self, retrieved_chunks: List[Dict[str, Any]], sources: List[str]
+        self, retrieved_chunks: List[Dict[str, Any]], sources: List[Dict[str, Any]]
     ) -> str:
         if not retrieved_chunks:
             return _KB_EMPTY_RESPONSE
@@ -808,22 +826,8 @@ class ChatService:
         excerpt = compact_text[:420]
         if len(compact_text) > 420:
             excerpt += "..."
-        response = f"Segun {source}, {excerpt}"
-        return self._append_sources(response, sources)
-
-    def _stream_with_sources(
-        self, stream: Iterator[str], sources: List[str]
-    ) -> Iterator[str]:
-        def generator() -> Iterator[str]:
-            full_response = ""
-            for chunk in stream:
-                full_response += chunk
-                yield chunk
-            if re.search(r"(^|\n)\s*Fuentes\s*:", full_response, flags=re.IGNORECASE):
-                return
-            yield f"\n\nFuentes: {', '.join(sources)}"
-
-        return generator()
+        _ = sources
+        return f"Segun {source}, {excerpt}"
 
     def _limit_context_chunks(
         self,
