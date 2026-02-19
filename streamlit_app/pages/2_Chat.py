@@ -8,6 +8,10 @@ import streamlit as st
 from chatbot_mvp.config.settings import get_env_value, get_runtime_ai_provider
 from chatbot_mvp.knowledge import KB_MODE_GENERAL, KB_MODE_STRICT, normalize_kb_mode
 from chatbot_mvp.services.chat_service import create_chat_service
+from chatbot_mvp.services.kb_sources import (
+    build_compact_sources_view,
+    format_source_detail,
+)
 from streamlit_app.components.sidebar import load_custom_css, sidebar_branding
 
 # Add project root
@@ -22,6 +26,8 @@ logger = logging.getLogger(__name__)
 INITIAL_ASSISTANT_MESSAGE = (
     "Hola. Soy tu asistente de etica en IA. En que puedo ayudarte hoy?"
 )
+KB_SOURCES_MAX = 3
+MAX_ITEM_LEN = 60
 
 st.markdown(
     """
@@ -62,6 +68,33 @@ def render_message_html(role: str, content: str) -> str:
         '<div class="avatar user">🙂</div>'
         "</div>"
     )
+
+
+def render_message_sources(message: dict) -> None:
+    if str(message.get("role", "")) != "assistant":
+        return
+    if not bool(message.get("kb_context_used", False)):
+        return
+
+    raw_sources = message.get("kb_sources", [])
+    if not isinstance(raw_sources, list) or not raw_sources:
+        return
+    sources = [row for row in raw_sources if isinstance(row, dict)]
+    if not sources:
+        return
+
+    compact_view = build_compact_sources_view(
+        sources=sources,
+        max_sources=KB_SOURCES_MAX,
+        max_item_len=MAX_ITEM_LEN,
+    )
+    compact_line = str(compact_view.get("line", "")).strip()
+    if compact_line:
+        st.caption(compact_line)
+
+    with st.expander("Ver fuentes", expanded=False):
+        for index, source in enumerate(sources, start=1):
+            st.caption(format_source_detail(source, index=index))
 
 
 provider_labels = {"gemini": "Gemini", "groq": "Groq"}
@@ -169,6 +202,7 @@ if (
 
 for msg in st.session_state.messages:
     st.markdown(render_message_html(msg["role"], msg["content"]), unsafe_allow_html=True)
+    render_message_sources(msg)
 
 if prompt := st.chat_input("Escribe tu pregunta..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -214,11 +248,18 @@ if prompt := st.chat_input("Escribe tu pregunta..."):
                 unsafe_allow_html=True,
             )
 
-        st.session_state.messages.append(
-            {"role": "assistant", "content": response_text}
-        )
+        assistant_message = {"role": "assistant", "content": response_text}
         if hasattr(service, "get_last_kb_debug"):
-            st.session_state["chat_kb_debug"] = service.get_last_kb_debug()
+            debug_payload = service.get_last_kb_debug()
+            st.session_state["chat_kb_debug"] = debug_payload
+            assistant_message["kb_context_used"] = bool(debug_payload.get("used_context", False))
+            raw_sources = debug_payload.get("sources", [])
+            if isinstance(raw_sources, list):
+                assistant_message["kb_sources"] = [
+                    row for row in raw_sources if isinstance(row, dict)
+                ]
+        st.session_state.messages.append(assistant_message)
+        render_message_sources(assistant_message)
     except Exception as e:
         st.error(f"Error en el servicio de chat: {e}")
 
