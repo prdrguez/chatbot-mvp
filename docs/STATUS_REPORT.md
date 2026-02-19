@@ -9,6 +9,7 @@ Fecha de actualizacion: 2026-02-16
 - Admin permite cambiar provider (Gemini/Groq), cargar KB y activar debug de retrieval.
 - Evaluacion guarda resultados locales en `data/submissions.jsonl`.
 - Grounding KB refactorizado con expansion de query guiada por el propio documento (agnostica al dominio).
+- Fuentes de KB en Chat con vista compacta + detalle expandible para mejorar legibilidad sin perder trazabilidad.
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).
@@ -30,6 +31,10 @@ Fecha de actualizacion: 2026-02-16
   - Criterio generico de evidencia suficiente (sin reglas tematicas hardcodeadas).
   - `Debug KB` en Chat con query original/expandida, expansion notes, metodo y chunks finales usados.
   - Knobs soportados en runtime: `kb_top_k`, `kb_min_score`, `kb_max_context_chars`.
+  - Fuentes en Chat:
+    - linea compacta de hasta 3 referencias (`Fuentes: [1] ...; [2] ...`)
+    - expander `Ver fuentes` con listado completo (score y metodo por fuente)
+    - dedupe en vista compacta conservando mejor score cuando dos fuentes compactan igual
 - Dashboard Admin con KPIs + export CSV/JSON + borrado de submissions en modo mantenimiento.
 
 ## Que NO funciona hoy

@@ -69,6 +69,24 @@ Notas tecnicas vigentes del repo.
 - `kb_max_context_chars`: presupuesto maximo de contexto inyectado.
 - Si no se proveen, se aplican defaults en `ChatService`.
 
+### Fuentes KB en Chat (compact + detalle)
+- `ChatService` ya no concatena `Fuentes:` al texto de respuesta.
+- Las fuentes se mantienen estructuradas en `last_kb_debug["sources"]` y en `kb_sources` de contexto:
+  - `kb_name`
+  - `section`
+  - `part`
+  - `score`
+  - `method`
+- `streamlit_app/pages/2_Chat.py` renderiza:
+  - linea compacta: `Fuentes: [1] ...; [2] ...` (maximo `KB_SOURCES_MAX=3`)
+  - expander `Ver fuentes` con listado completo sin truncar
+- Helper dedicado en `chatbot_mvp/services/kb_sources.py`:
+  - `KB_SOURCES_MAX = 3`
+  - `MAX_ITEM_LEN = 60`
+  - `compact_kb_name` (recorta nombre de archivo conservando extension)
+  - `compact_section_label` (limpia seccion y la reduce, por ejemplo `§4 Matriz riesgos (1/3)`)
+  - `build_compact_sources_view` (dedupe por etiqueta compacta, conserva mejor score y mueve duplicados al detalle)
+
 ## Persistencia de datos
 - Evaluaciones: `data/submissions.jsonl`.
 - Override provider: `chatbot_mvp/data/app_settings.json`.
