@@ -4,10 +4,54 @@ from chatbot_mvp.knowledge.policy_kb import (
     KB_MODE_STRICT,
     build_bm25_index,
     expand_query_with_kb,
+    get_last_kb_debug,
     normalize_kb_mode,
     parse_policy,
     retrieve,
 )
+
+
+def _build_large_brechas_fixture() -> str:
+    intro = (
+        "## La necesidad social y tecnologica que motivo su creacion\n"
+        "Este apartado describe por que se diseña Jano y cuales son los limites actuales del ecosistema."
+    )
+    brecha_1 = (
+        "1. Brecha de acceso: comunidades con conectividad inestable quedan fuera de servicios "
+        "digitales esenciales y no logran sostener acompanamiento continuo."
+    )
+    brecha_2 = (
+        "2. Brecha de alfabetizacion tecnologica: muchas personas usuarias requieren mediacion permanente "
+        "porque los flujos de atencion se presentan con lenguaje tecnico, requisitos cambiantes y tramites "
+        "fragmentados entre distintas instituciones que no comparten criterios de prioridad."
+    )
+    relleno = "\n\n".join(
+        [
+            (
+                "Detalle operativo A: se documentan casos, actores, tiempos y fricciones de implementacion "
+                "para sostener acompanamiento continuo en equipos interdisciplinarios y evitar respuestas "
+                "fragmentadas frente a situaciones de alta vulnerabilidad social."
+            ),
+            (
+                "Detalle operativo B: se consolidan trayectorias de atencion, reglas de priorizacion y "
+                "mecanismos de derivacion entre equipos para reducir perdida de contexto en procesos largos."
+            ),
+            (
+                "Detalle operativo C: se releva informacion historica de intervenciones previas para "
+                "conservar continuidad institucional, evitar duplicaciones y sostener seguimiento "
+                "longitudinal de cada caso."
+            ),
+        ]
+    )
+    brecha_3 = (
+        "3. Brecha de confianza institucional: aparece temor constante ante la falta de trazabilidad, "
+        "sin claridad sobre quien decide, como se corrigen errores y que vias de reclamo existen cuando "
+        "la respuesta automatizada no contempla la situacion real."
+    )
+    cierre = (
+        "Este bloque finaliza proponiendo mejoras de coordinacion para equipos sociales y tecnicos."
+    )
+    return "\n\n".join([intro, brecha_1, brecha_2, relleno, brecha_3, cierre])
 
 
 def test_parse_policy_splits_by_articulo():
@@ -104,4 +148,29 @@ def test_retrieve_indirect_query_hits_expected_section_and_debug():
 
     assert results
     assert any("Teletrabajo" in str(item.get("source_label", "")) for item in results)
+
+
+def test_retrieve_stitches_contiguous_section_chunks_for_large_heading_match():
+    text = _build_large_brechas_fixture()
+    chunks = parse_policy(text)
+    index = build_bm25_index(chunks)
+
+    results = retrieve(
+        "cual es la necesidad social y tecnologica?",
+        index,
+        chunks,
+        k=1,
+        min_score=0.05,
+        max_context_chars=6000,
+    )
+
+    assert results
+    combined_context = "\n".join(str(row.get("text", "")) for row in results)
+    assert "Brecha de acceso" in combined_context
+    assert "Brecha de alfabetizacion tecnologica" in combined_context
+    assert "Brecha de confianza institucional" in combined_context
+
+    debug = get_last_kb_debug()
+    assert int(debug.get("stitching_added_count", 0)) >= 1
+    assert int(debug.get("context_chars_used", 0)) > 0
 

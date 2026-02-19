@@ -24,6 +24,77 @@ class FakeAIClient:
         yield "Respuesta basada en evidencia."
 
 
+class ContextEchoAIClient(FakeAIClient):
+    def generate_chat_response(
+        self, message, conversation_history, user_context=None, **kwargs
+    ):
+        self.call_count += 1
+        self.last_message = message
+        self.last_user_context = user_context or {}
+        text = str(message or "")
+        required = [
+            "Brecha de acceso",
+            "Brecha de alfabetizacion tecnologica",
+            "Brecha de confianza institucional",
+        ]
+        if all(term in text for term in required):
+            return "; ".join(required)
+        return "No encuentro eso en el documento cargado."
+
+    def generate_chat_response_stream(
+        self, message, conversation_history, user_context=None, **kwargs
+    ):
+        yield self.generate_chat_response(
+            message=message,
+            conversation_history=conversation_history,
+            user_context=user_context,
+            **kwargs,
+        )
+
+
+def _build_large_brechas_fixture() -> str:
+    intro = (
+        "## La necesidad social y tecnologica que motivo su creacion\n"
+        "Este apartado describe por que se diseña Jano y cuales son los limites actuales del ecosistema."
+    )
+    brecha_1 = (
+        "1. Brecha de acceso: comunidades con conectividad inestable quedan fuera de servicios "
+        "digitales esenciales y no logran sostener acompanamiento continuo."
+    )
+    brecha_2 = (
+        "2. Brecha de alfabetizacion tecnologica: muchas personas usuarias requieren mediacion permanente "
+        "porque los flujos de atencion se presentan con lenguaje tecnico, requisitos cambiantes y tramites "
+        "fragmentados entre distintas instituciones que no comparten criterios de prioridad."
+    )
+    relleno = "\n\n".join(
+        [
+            (
+                "Detalle operativo A: se documentan casos, actores, tiempos y fricciones de implementacion "
+                "para sostener acompanamiento continuo en equipos interdisciplinarios y evitar respuestas "
+                "fragmentadas frente a situaciones de alta vulnerabilidad social."
+            ),
+            (
+                "Detalle operativo B: se consolidan trayectorias de atencion, reglas de priorizacion y "
+                "mecanismos de derivacion entre equipos para reducir perdida de contexto en procesos largos."
+            ),
+            (
+                "Detalle operativo C: se releva informacion historica de intervenciones previas para "
+                "conservar continuidad institucional, evitar duplicaciones y sostener seguimiento "
+                "longitudinal de cada caso."
+            ),
+        ]
+    )
+    brecha_3 = (
+        "3. Brecha de confianza institucional: aparece temor constante ante la falta de trazabilidad, "
+        "sin claridad sobre quien decide, como se corrigen errores y que vias de reclamo existen cuando "
+        "la respuesta automatizada no contempla la situacion real."
+    )
+    cierre = (
+        "Este bloque finaliza proponiendo mejoras de coordinacion para equipos sociales y tecnicos."
+    )
+    return "\n\n".join([intro, brecha_1, brecha_2, relleno, brecha_3, cierre])
+
+
 def _extract_response_sources(response: str) -> list[str]:
     marker = "Fuentes:"
     if marker not in response:
@@ -266,3 +337,58 @@ def test_kb_debug_chunks_are_coherent_with_sources():
     debug_sources = [str(row.get("source", "")).strip() for row in debug_rows if isinstance(row, dict)]
     assert debug_sources
     assert debug_sources == response_sources
+
+
+def test_kb_strict_large_fixture_uses_stitched_evidence_without_empty_reply():
+    fake = ContextEchoAIClient()
+    service = ChatService(ai_client=fake)
+    kb_text = _build_large_brechas_fixture()
+
+    response = service.send_message(
+        message="cual fue la necesidad social y tecnologica?",
+        conversation_history=[],
+        user_context={
+            "kb_text": kb_text,
+            "kb_name": "jano.md",
+            "kb_mode": "strict",
+            "kb_min_score": 0.05,
+            "kb_top_k": 1,
+        },
+    )
+
+    assert fake.call_count == 1
+    assert "No encuentro eso en el documento cargado." not in response
+    assert "Brecha de confianza institucional" in response
+    assert "Fuentes:" in response
+    debug_payload = service.get_last_kb_debug()
+    assert int(debug_payload.get("stitching_added_count", 0)) >= 1
+
+
+def test_kb_large_text_applies_higher_default_context_budget_when_not_user_set():
+    fake = FakeAIClient()
+    service = ChatService(ai_client=fake)
+    large_body = (
+        "## Necesidad social y tecnologica\n"
+        + "\n\n".join(
+            f"Parrafo {idx}: la necesidad social y tecnologica se aborda con evidencia contextual."
+            for idx in range(1, 900)
+        )
+    )
+
+    response = service.send_message(
+        message="que dice sobre la necesidad social y tecnologica?",
+        conversation_history=[],
+        user_context={
+            "kb_text": large_body,
+            "kb_name": "grande.md",
+            "kb_mode": "strict",
+            "kb_min_score": 0.05,
+            "kb_top_k": 1,
+        },
+    )
+
+    assert fake.call_count == 1
+    assert "Fuentes:" in response
+    debug_payload = service.get_last_kb_debug()
+    assert int(debug_payload.get("context_chars_budget", 0)) == 6000
+    assert bool(debug_payload.get("kb_large_default_applied", False)) is True
