@@ -24,12 +24,12 @@ class FakeAIClient:
         yield "Respuesta basada en evidencia."
 
 
-def _extract_response_sources(response: str) -> list[str]:
-    marker = "Fuentes:"
-    if marker not in response:
-        return []
-    tail = response.split(marker, maxsplit=1)[1]
-    return [item.strip() for item in tail.split(",") if item.strip()]
+def _source_label(source: dict) -> str:
+    kb_name = str(source.get("kb_name", "")).strip()
+    section = str(source.get("section", "")).strip()
+    if kb_name and section:
+        return f"{kb_name} | {section}"
+    return kb_name or section
 
 
 def test_kb_grounding_injects_context_and_sources():
@@ -54,8 +54,12 @@ def test_kb_grounding_injects_context_and_sources():
     assert "Base de Conocimiento: politica.txt" in fake.last_message
     assert "Articulo 3" in fake.last_message
     assert fake.last_user_context.get("kb_strict_mode") is True
-    assert "Fuentes:" in response
-    assert "Articulo 3" in response
+    assert response == "Respuesta basada en evidencia."
+    debug_payload = service.get_last_kb_debug()
+    sources = list(debug_payload.get("sources", []))
+    assert sources
+    assert sources[0].get("kb_name") == "politica.txt"
+    assert "Articulo 3" in str(sources[0].get("section", ""))
 
 
 def test_kb_grounding_returns_strict_message_without_evidence_and_without_sources():
@@ -78,7 +82,8 @@ def test_kb_grounding_returns_strict_message_without_evidence_and_without_source
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
-    assert "Fuentes:" not in response
+    debug_payload = service.get_last_kb_debug()
+    assert not debug_payload.get("sources")
 
 
 def test_kb_grounding_stream_strict_without_evidence_skips_provider():
@@ -102,7 +107,6 @@ def test_kb_grounding_stream_strict_without_evidence_skips_provider():
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
-    assert "Fuentes:" not in response
 
 
 def test_kb_grounding_returns_strict_message_with_empty_kb():
@@ -143,10 +147,11 @@ def test_kb_general_mode_allows_fallback_without_evidence():
 
     assert fake.call_count == 1
     assert response == "Respuesta basada en evidencia."
-    assert "Fuentes:" not in response
+    debug_payload = service.get_last_kb_debug()
+    assert not debug_payload.get("sources")
 
 
-def test_kb_general_mode_with_evidence_adds_sources():
+def test_kb_general_mode_with_evidence_adds_structured_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
@@ -165,7 +170,11 @@ def test_kb_general_mode_with_evidence_adds_sources():
     )
 
     assert fake.call_count == 1
-    assert "Fuentes:" in response
+    assert response == "Respuesta basada en evidencia."
+    debug_payload = service.get_last_kb_debug()
+    sources = list(debug_payload.get("sources", []))
+    assert sources
+    assert all(isinstance(item, dict) for item in sources)
 
 
 def test_kb_mode_legacy_strict_label_normalizes_to_strict():
@@ -188,7 +197,6 @@ def test_kb_mode_legacy_strict_label_normalizes_to_strict():
 
     assert fake.call_count == 0
     assert response.startswith("No encuentro eso en el documento cargado.")
-    assert "Fuentes:" not in response
 
 
 def test_kb_mode_unknown_value_falls_back_to_general():
@@ -210,7 +218,7 @@ def test_kb_mode_unknown_value_falls_back_to_general():
     )
 
     assert fake.call_count == 1
-    assert "Fuentes:" not in response
+    assert response == "Respuesta basada en evidencia."
 
 
 def test_kb_query_with_synonym_like_wording_retrieves_heading():
@@ -234,13 +242,14 @@ def test_kb_query_with_synonym_like_wording_retrieves_heading():
     )
 
     assert fake.call_count == 1
-    assert "Fuentes:" in response
+    assert response == "Respuesta basada en evidencia."
     debug_payload = service.get_last_kb_debug()
     assert "teletrabajo" in str(debug_payload.get("query_expanded", ""))
     assert debug_payload.get("retrieval_method") == "hybrid"
+    assert debug_payload.get("sources")
 
 
-def test_kb_debug_chunks_are_coherent_with_sources():
+def test_kb_debug_chunks_are_coherent_with_structured_sources():
     fake = FakeAIClient()
     service = ChatService(ai_client=fake)
     kb_text = (
@@ -258,11 +267,13 @@ def test_kb_debug_chunks_are_coherent_with_sources():
         },
     )
 
-    response_sources = _extract_response_sources(response)
-    assert response_sources
-
+    assert response == "Respuesta basada en evidencia."
     debug_payload = service.get_last_kb_debug()
     debug_rows = list(debug_payload.get("chunks", []))
     debug_sources = [str(row.get("source", "")).strip() for row in debug_rows if isinstance(row, dict)]
     assert debug_sources
-    assert debug_sources == response_sources
+
+    source_rows = [row for row in debug_payload.get("sources", []) if isinstance(row, dict)]
+    assert source_rows
+    source_labels = [_source_label(row) for row in source_rows]
+    assert source_labels == debug_sources[: len(source_labels)]
