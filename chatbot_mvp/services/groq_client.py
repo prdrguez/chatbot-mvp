@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
 _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+_GROQ_KB_MIN_MAX_TOKENS = 700
 
 
 def get_groq_api_key() -> str:
@@ -64,6 +65,24 @@ class GroqChatClient:
         )
         return self._extract_response_text(response)
 
+    def _resolve_chat_max_tokens(
+        self,
+        max_tokens: int,
+        user_context: Optional[Dict] = None,
+    ) -> int:
+        resolved = max(80, int(max_tokens))
+        if not isinstance(user_context, dict):
+            return resolved
+        kb_context_block = str(user_context.get("kb_context_block", "")).strip()
+        if not kb_context_block:
+            return resolved
+        requested = user_context.get("kb_response_max_tokens", _GROQ_KB_MIN_MAX_TOKENS)
+        try:
+            requested_value = int(requested)
+        except (TypeError, ValueError):
+            requested_value = _GROQ_KB_MIN_MAX_TOKENS
+        return max(resolved, max(_GROQ_KB_MIN_MAX_TOKENS, requested_value))
+
     def generate_chat_response(
         self,
         message: str,
@@ -79,10 +98,14 @@ class GroqChatClient:
             messages = self._build_chat_messages(
                 message, conversation_history, user_context
             )
+            resolved_max_tokens = self._resolve_chat_max_tokens(
+                max_tokens=max_tokens,
+                user_context=user_context,
+            )
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=max_tokens,
+                max_tokens=resolved_max_tokens,
                 temperature=temperature,
             )
             return self._extract_response_text(response)
@@ -102,11 +125,15 @@ class GroqChatClient:
             raise AIClientError("Cliente Groq no inicializado")
 
         messages = self._build_chat_messages(message, conversation_history, user_context)
+        resolved_max_tokens = self._resolve_chat_max_tokens(
+            max_tokens=max_tokens,
+            user_context=user_context,
+        )
         try:
             stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=max_tokens,
+                max_tokens=resolved_max_tokens,
                 temperature=temperature,
                 stream=True,
             )
