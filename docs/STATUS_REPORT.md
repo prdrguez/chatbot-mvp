@@ -1,6 +1,6 @@
 ﻿# STATUS REPORT - Streamlit MVP
 
-Fecha de actualizacion: 2026-02-16
+Fecha de actualizacion: 2026-02-19
 
 ## Resumen ejecutivo
 - App activa en Streamlit multipage con entry point `streamlit_app/Inicio.py`.
@@ -9,6 +9,7 @@ Fecha de actualizacion: 2026-02-16
 - Admin permite cambiar provider (Gemini/Groq), cargar KB y activar debug de retrieval.
 - Evaluacion guarda resultados locales en `data/submissions.jsonl`.
 - Grounding KB refactorizado con expansion de query guiada por el propio documento (agnostica al dominio).
+- KB grandes: chunking por parrafos + stitching por seccion para evitar respuestas con frases cortadas y recuperar bloques completos.
 
 ## Que funciona hoy
 - Navegacion multipage Streamlit (`Inicio.py`, `pages/1_Evaluacion.py`, `pages/2_Chat.py`, `pages/3_Admin.py`).
@@ -22,14 +23,20 @@ Fecha de actualizacion: 2026-02-16
 - Selector de provider en Admin (Gemini/Groq) persistido en `chatbot_mvp/data/app_settings.json`.
 - Base de Conocimiento:
   - Upload de `.txt`/`.md` (un archivo por vez).
-  - Parse por articulos/secciones + chunking por tamano.
+  - Parse por articulos/secciones + chunking por parrafos con overlap semantico.
   - KB index enriquecido con headings, vocab (terminos + bigrams/trigrams) y co-ocurrencia.
   - Query expansion KB-driven sin LLM (heading/fuzzy/vocab/cooc).
-  - Retrieval hibrido unificado (`hybrid`) con score combinado y dedup por seccion/chunk.
+  - Retrieval hibrido unificado (`hybrid`) con score combinado + section stitching (chunks contiguos de la misma seccion cuando hay match fuerte).
   - Modos `General` y `Solo KB (estricto)`.
-  - Criterio generico de evidencia suficiente (sin reglas tematicas hardcodeadas).
-  - `Debug KB` en Chat con query original/expandida, expansion notes, metodo y chunks finales usados.
+  - Criterio generico de evidencia suficiente reforzado para no disparar "No encuentro..." cuando hay evidencia contextual relevante.
+  - `Debug KB` en Chat con query original/expandida, expansion notes, chunks añadidos por stitching y chars de contexto usados.
   - Knobs soportados en runtime: `kb_top_k`, `kb_min_score`, `kb_max_context_chars`.
+  - Default adaptativo de `kb_max_context_chars`: sube a `6000` cuando `kb_text_len > 40000` y el usuario no fijo valor manual.
+  - Groq en modo KB usa default de `max_tokens` mas alto (`700`) cuando hay `kb_context_block`.
+- Admin KB:
+  - Muestra `Tamaño KB: X chars` y `Límite: Y`.
+  - Aplica truncado controlado con `KB_MAX_CHARS=120000`.
+  - Marca `kb_truncated=True` y muestra warning persistente con recomendacion de version resumida.
 - Dashboard Admin con KPIs + export CSV/JSON + borrado de submissions en modo mantenimiento.
 
 ## Que NO funciona hoy

@@ -48,8 +48,20 @@ Notas tecnicas vigentes del repo.
   - `exact_bonus`
   - `heading_bonus`
   - `fuzzy_bonus`
-- Se deduplica por `section_id`/`chunk_id` y se aplica `top_k` + `min_score`.
+- Se deduplica por `chunk_id` y se aplica `top_k` + `min_score`.
 - Debug guarda `chunks_final` con score y breakdown por senal.
+
+### Chunking y stitching para KB grandes
+- El parser prioriza separacion por headings + parrafos (doble salto de linea), evitando cortes duros por caracteres.
+- Los chunks se arman por parrafos con target aproximado de 900-1400 chars (default 1100/1400).
+- Se agrega overlap semantico al chunk siguiente (ultimo parrafo o ultimas oraciones) para evitar frases cortadas.
+- Si un top match tiene senal fuerte (`heading`/`exact`/`strong_match`), se activa section stitching:
+  - se agregan chunks contiguos de la misma seccion antes de construir contexto final,
+  - respetando el presupuesto `kb_max_context_chars`.
+- Debug de retrieval ahora incluye:
+  - `chunks_added_by_stitching`
+  - `stitching_added_count`
+  - `context_chars_used` y `context_chars_budget`
 
 ### Evidencia suficiente (criterio generico)
 - `ChatService` evalua evidencia sin reglas tematicas hardcodeadas:
@@ -68,6 +80,13 @@ Notas tecnicas vigentes del repo.
 - `kb_min_score`: corte minimo de score en retrieval.
 - `kb_max_context_chars`: presupuesto maximo de contexto inyectado.
 - Si no se proveen, se aplican defaults en `ChatService`.
+- Para KB grandes (`kb_text_len > 40000`) se eleva el default de `kb_max_context_chars` a `6000` si el usuario no lo personalizo.
+- En modo KB con Groq se eleva `max_tokens` por defecto a `700` (configurable por contexto interno, sin UI nueva).
+
+### Limite de tamano KB en Admin
+- Se agrega `KB_MAX_CHARS` con default `120000`.
+- Si el archivo supera el limite, se trunca de forma controlada y se marca `kb_truncated=True`.
+- Admin muestra tamaño actual, limite y advertencia persistente recomendando subir una version resumida.
 
 ## Persistencia de datos
 - Evaluaciones: `data/submissions.jsonl`.
